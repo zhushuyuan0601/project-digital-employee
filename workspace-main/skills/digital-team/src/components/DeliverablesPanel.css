@@ -1,0 +1,234 @@
+.deliverables-panel {
+  padding: 20px;
+}
+
+.deliverables-panel .panel-header {
+  text-align: center;
+  margin-bottom: 40px;
+  padding: 30px;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+  border-radius: 20px;
+}
+
+.deliverables-panel .panel-title {
+  font-size: 32px;
+  font-weight: 700;
+  color: #2d3748;
+  margin-bottom: 10px;
+}
+
+.deliverables-panel .panel-subtitle {
+  font-size: 16px;
+  color: #718096;
+}
+
+/* 产出物网格 */
+.deliverables-panel .deliverables-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+  gap: 25px;
+  margin-bottom: 40px;
+}
+
+.deliverables-panel .deliverable-card {
+  background: white;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+}
+
+.deliverables-panel .deliverable-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+/* 卡片头部 */
+.deliverables-panel .card-header {
+  padding: 20px 25px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: white;
+}
+
+.deliverables-panel .header-left {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.deliverables-panel .member-icon {
+  font-size: 40px;
+}
+
+.deliverables-panel .member-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.deliverables-panel .member-name {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.deliverables-panel .member-role {
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.deliverables-panel .status-badge {
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.deliverables-panel .status-badge.completed {
+  background: white;
+  color: #48bb78;
+}
+
+/* 卡片内容 */
+.deliverables-panel .card-body {
+  padding: 25px;
+}
+
+.deliverables-panel .deliverables-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.deliverables-panel .deliverables-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.deliverables-panel .deliverable-item {
+  background: #f7fafc;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.deliverables-panel .item-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 20px;
+  background: #edf2f7;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.deliverables-panel .item-number {
+  width: 28px;
+  height: 28px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.deliverables-panel .item-name {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.deliverables-panel .item-format {
+  font-size: 13px;
+  color: #718096;
+  background: white;
+  padding: 4px 12px;
+  border-radius: 20px;
+}
+
+.deliverables-panel .item-content {
+  padding: 20px;
+}
+
+.deliverables-panel .item-content pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.8;
+  color: #4a5568;
+}
+
+/* 汇总统计 */
+.deliverables-panel .summary-section {
+  background: white;
+  border-radius: 20px;
+  padding: 30px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+
+.deliverables-panel .summary-card {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+.deliverables-panel .summary-item {
+  text-align: center;
+  padding: 25px;
+  background: linear-gradient(135deg, #f7fafc 0%, #edf2f7 100%);
+  border-radius: 16px;
+}
+
+.deliverables-panel .summary-label {
+  display: block;
+  font-size: 14px;
+  color: #718096;
+  margin-bottom: 10px;
+}
+
+.deliverables-panel .summary-value {
+  display: block;
+  font-size: 36px;
+  font-weight: 700;
+  color: #2d3748;
+}
+
+.deliverables-panel .summary-value.success {
+  color: #48bb78;
+}
+
+/* 响应式 */
+@media (max-width: 1200px) {
+  .deliverables-panel .deliverables-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .deliverables-panel .summary-card {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .deliverables-panel .deliverables-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .deliverables-panel .summary-card {
+    grid-template-columns: 1fr;
+  }
+
+  .deliverables-panel .panel-title {
+    font-size: 24px;
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "version": "1.0",
+  "patterns": [
+    {
+      "id": "feature-with-full-context",
+      "name": "功能开发 - 完整上下文",
+      "taskType": "feature",
+      "complexity": "medium",
+      "structure": {
+        "sections": [
+          "背景",
+          "客户信息",
+          "目标",
+          "验收标准",
+          "技术要求",
+          "关键文件",
+          "约束",
+          "参考资料",
+          "历史经验"
+        ],
+        "required": ["背景", "目标", "验收标准", "技术要求"]
+      },
+      "successRate": 0.92,
+      "avgAttempts": 1.1,
+      "bestFor": ["新功能开发", "中等复杂度"],
+      "agent": "codex"
+    },
+    {
+      "id": "bugfix-with-error-log",
+      "name": "Bug修复 - 错误日志驱动",
+      "taskType": "bugfix",
+      "complexity": "simple",
+      "structure": {
+        "sections": [
+          "错误信息",
+          "重现步骤",
+          "根因分析",
+          "修复方案",
+          "验证标准"
+        ],
+        "required": ["错误信息", "重现步骤", "修复方案"]
+      },
+      "successRate": 0.88,
+      "avgAttempts": 1.3,
+      "bestFor": ["已知错误", "简单修复"],
+      "agent": "codex"
+    },
+    {
+      "id": "refactor-focused",
+      "name": "重构 - 聚焦范围",
+      "taskType": "refactor",
+      "complexity": "complex",
+      "structure": {
+        "sections": [
+          "重构目标",
+          "当前问题",
+          "重构范围（限制在3-5个文件）",
+          "分步骤计划",
+          "验证方案"
+        ],
+        "required": ["重构目标", "重构范围", "验证方案"]
+      },
+      "successRate": 0.85,
+      "avgAttempts": 1.5,
+      "bestFor": ["代码重构", "架构调整"],
+      "agent": "codex",
+      "notes": "范围必须明确，避免上下文溢出"
+    },
+    {
+      "id": "frontend-ui-quick",
+      "name": "前端UI - 快速实现",
+      "taskType": "frontend",
+      "complexity": "simple",
+      "structure": {
+        "sections": [
+          "UI需求",
+          "设计稿/参考",
+          "组件位置",
+          "样式要求",
+          "交互行为"
+        ],
+        "required": ["UI需求", "组件位置"]
+      },
+      "successRate": 0.90,
+      "avgAttempts": 1.0,
+      "bestFor": ["UI调整", "样式修改", "简单组件"],
+      "agent": "claude-code",
+      "notes": "Claude Code 前端更快"
+    }
+  ],
+  "metadata": {
+    "lastUpdated": "2026-03-05T10:01:00+08:00",
+    "totalPatterns": 4,
+    "notes": "根据实际执行结果持续更新"
+  }
+}

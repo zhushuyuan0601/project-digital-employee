@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "jobs": [
+    {
+      "id": "937fbcbd-ed6e-4324-8553-da29308e0633",
+      "agentId": "ceo",
+      "name": "每日公司日报",
+      "description": "每天 17:00 生成公司日报并发送给 CEO",
+      "enabled": true,
+      "createdAtMs": 1772636930084,
+      "updatedAtMs": 1772874060148,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 17 * * *",
+        "tz": "Asia/Shanghai"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "请运行 daily-report.sh 生成日报，然后发送到飞书群组和邮箱 793323821@qq.com",
+        "thinking": "low",
+        "timeoutSeconds": 60
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "feishu",
+        "to": "oc_3ad0c001eb921e29e2c23f173a0b177f"
+      },
+      "state": {
+        "nextRunAtMs": 1772960400000,
+        "lastRunAtMs": 1772874000027,
+        "lastRunStatus": "error",
+        "lastStatus": "error",
+        "lastDurationMs": 60121,
+        "lastDeliveryStatus": "unknown",
+        "consecutiveErrors": 3,
+        "lastError": "cron: job execution timed out"
+      }
+    },
+    {
+      "id": "d34e40d9-bfbc-4963-a8f0-08742cb13094",
+      "agentId": "ceo",
+      "name": "每日 AI 情报简报",
+      "description": "每天 6:00 调度情报研究员收集 AI 进展并推送简报",
+      "enabled": true,
+      "createdAtMs": 1772640079315,
+      "updatedAtMs": 1772834942746,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 6 * * *",
+        "tz": "Asia/Shanghai"
+      },
+      "sessionTarget": "isolated",
+      "wakeMode": "now",
+      "payload": {
+        "kind": "agentTurn",
+        "message": "使用 multi-search-engine 技能搜索今日AI热点（关键词：大模型、智能体、Agent、GPT、Claude、AI产品），整理成Top 10简报，发送到飞书群组",
+        "thinking": "medium",
+        "timeoutSeconds": 600
+      },
+      "delivery": {
+        "mode": "announce",
+        "channel": "feishu",
+        "to": "oc_3ad0c001eb921e29e2c23f173a0b177f"
+      },
+      "state": {
+        "nextRunAtMs": 1772920800000,
+        "lastRunAtMs": 1772834400062,
+        "lastRunStatus": "ok",
+        "lastStatus": "ok",
+        "lastDurationMs": 542684,
+        "lastDeliveryStatus": "delivered",
+        "consecutiveErrors": 0,
+        "lastDelivered": true
+      }
+    }
+  ]
+}

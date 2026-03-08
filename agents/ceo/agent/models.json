@@ -1,0 +1,232 @@
+{
+  "providers": {
+    "qwen-portal": {
+      "baseUrl": "https://portal.qwen.ai/v1",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "coder-model",
+          "name": "Qwen Coder",
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "contextWindow": 128000,
+          "maxTokens": 8192
+        },
+        {
+          "id": "vision-model",
+          "name": "Qwen Vision",
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "contextWindow": 128000,
+          "maxTokens": 8192
+        }
+      ],
+      "apiKey": "qwen-oauth"
+    },
+    "alibaba": {
+      "baseUrl": "https://coding.dashscope.aliyuncs.com/v1",
+      "apiKey": "sk-sp-7eeda6dd5dbf467ba8db9454b23d0acf",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "kimi-k2.5",
+          "name": "kimi-k2.5",
+          "api": "openai-completions",
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "contextWindow": 128000,
+          "maxTokens": 8192
+        },
+        {
+          "id": "qwen3.5-plus",
+          "name": "Qwen3.5-Plus",
+          "api": "openai-completions",
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "contextWindow": 1024000,
+          "maxTokens": 32768
+        },
+        {
+          "id": "qwen3-max-2026-01-23",
+          "name": "qwen3-max",
+          "api": "openai-completions",
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "contextWindow": 256000,
+          "maxTokens": 32768
+        },
+        {
+          "id": "qwen3-coder-next",
+          "name": "Qwen3-Coder-Next",
+          "api": "openai-completions",
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "contextWindow": 256000,
+          "maxTokens": 32768
+        },
+        {
+          "id": "qwen3-coder-plus",
+          "name": "Qwen3-Coder-Plus",
+          "api": "openai-completions",
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "contextWindow": 256000,
+          "maxTokens": 32768
+        },
+        {
+          "id": "glm-5",
+          "name": "GLM-5",
+          "api": "openai-completions",
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "contextWindow": 256000,
+          "maxTokens": 32768
+        }
+      ]
+    },
+    "local-qwen": {
+      "baseUrl": "http://192.168.244.201:9091/api/model/b5fbfbc12090/v1",
+      "apiKey": "dkBRJ13pZgHg4HbRQyR5vttdlHEvuG5vlCiISzxQ0hSy5YkHzIgtJUOp9rNB5wWmhqWyOEVpDWe3AUEdLxDsoHx2Nlo6McSIPx50XYzxnf8gGIOaKI6wOcVDFj",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "Qwen3-235B-A22B-Instruct-2507",
+          "name": "Qwen3 235B Instruct (Local)",
+          "api": "openai-completions",
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "contextWindow": 256000,
+          "maxTokens": 32768
+        }
+      ]
+    },
+    "local-qwen2": {
+      "baseUrl": "http://192.168.244.201:9091/api/model/c4fe30f8fefe/qw122/v1",
+      "apiKey": "dkBRJ13pZgHg4HbRQyR5vttdlHEvuG5vlCiISzxQ0hSy5YkHzIgtJUOp9rNB5wWmhqWyOEVpDWe3AUEdLxDsoHx2Nlo6McSIPx50XYzxnf8gGIOaKI6wOcVDFj",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "Qwen3.5-122B-A10B-FP8",
+          "name": "Qwen3.5-122B-A10B-FP8(Local)",
+          "api": "openai-completions",
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "contextWindow": 262144,
+          "maxTokens": 32768
+        }
+      ]
+    },
+    "local-qwen3": {
+      "baseUrl": "http://tong.wo116114.com:28086/api/model/cd8ba750d910/v1",
+      "apiKey": "dkBRJ13pZgHg4HbRQyR5vttdlHEvuG5vlCiISzxQ0hSy5YkHzIgtJUOp9rNB5wWmhqWyOEVpDWe3AUEdLxDsoHx2Nlo6McSIPx50XYzxnf8gGIOaKI6wOcVDFj",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "GLM-4.7-FP8",
+          "name": "GLM-4.7-FP8(Local)",
+          "api": "openai-completions",
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "contextWindow": 262144,
+          "maxTokens": 32768
+        }
+      ]
+    },
+    "github-copilot": {
+      "baseUrl": "https://api.individual.githubcopilot.com",
+      "models": []
+    }
+  }
+}

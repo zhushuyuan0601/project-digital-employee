@@ -1,0 +1,54 @@
+{
+  "version": "1.0",
+  "owner": "Alex (技术总监)",
+  "description": "编排层 Agent 的业务上下文记忆",
+  "context": {
+    "company": {
+      "name": "OpenClaw Company",
+      "type": "AI产品公司",
+      "focus": "技术孵化、产品开发",
+      "github": {
+        "account": "zhushuyuan0601",
+        "mainRepo": "openclawCompany"
+      }
+    },
+    "team": {
+      "ceo": {
+        "name": "Zoe",
+        "agentId": "ceo",
+        "role": "总助理 - 统筹全局、任务调度"
+      },
+      "pm": {
+        "name": "Sarah",
+        "agentId": "pm",
+        "role": "产品经理 - 产品需求、PRD生成"
+      },
+      "researcher": {
+        "name": "情报研究员",
+        "agentId": "researcher",
+        "role": "数据采集、热点发现"
+      },
+      "techLead": {
+        "name": "Alex",
+        "agentId": "tech-lead",
+        "role": "技术总监 - 技术评估、Agent编排"
+      }
+    },
+    "projects": [],
+    "customers": [],
+    "decisions": []
+  },
+  "experience": {
+    "successfulPatterns": [],
+    "failedPatterns": [],
+    "agentPreferences": {
+      "codex": "适合90%的后端任务，边界情况处理最好",
+      "claude-code": "前端更快，Git操作权限问题少",
+      "gemini": "设计感强，先生成设计再实现"
+    }
+  },
+  "metadata": {
+    "createdAt": "2026-03-05T10:01:00+08:00",
+    "lastUpdated": "2026-03-05T10:01:00+08:00"
+  }
+}

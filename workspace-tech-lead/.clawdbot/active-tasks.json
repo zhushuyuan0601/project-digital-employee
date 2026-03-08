@@ -1,0 +1,104 @@
+{
+  "version": "1.0",
+  "description": "AI情报系统 - 24小时持续开发任务",
+  "tasks": [
+    {
+      "id": "task-001-fix-crawler-selectors",
+      "type": "bugfix",
+      "priority": "P0",
+      "status": "done",
+      "completedAt": "2026-03-05T11:12:00+08:00",
+      "result": "36氪爬虫修复成功，成功爬取5篇文章"
+    },
+    {
+      "id": "task-002-fix-other-crawlers",
+      "type": "bugfix",
+      "priority": "P0",
+      "status": "in_progress",
+      "startedAt": "2026-03-05T11:12:00+08:00",
+      "description": "修复机器之心和新智元爬虫"
+    },
+    {
+      "id": "task-003-setup-ollama",
+      "description": "修复爬虫选择器，适配网站结构变化",
+      "details": {
+        "problem": "机器之心、36氪、新智元网站结构变化，选择器无法匹配",
+        "solution": "实际访问网站，使用浏览器开发者工具查看新结构，调整CSS选择器",
+        "files": [
+          "src/crawler/jiqizhixin_crawler.py",
+          "src/crawler/kr36_crawler.py", 
+          "src/crawler/xinzhixing_crawler.py"
+        ]
+      }
+    },
+    {
+      "id": "task-002-setup-ollama",
+      "type": "setup",
+      "priority": "P0",
+      "status": "pending",
+      "description": "安装并启动Ollama LLM服务",
+      "details": {
+        "steps": [
+          "安装Ollama",
+          "启动服务: ollama serve",
+          "拉取模型: ollama pull glm-4"
+        ]
+      }
+    },
+    {
+      "id": "task-003-test-e2e",
+      "type": "test",
+      "priority": "P0",
+      "status": "pending",
+      "description": "端到端测试完整流程",
+      "details": {
+        "steps": [
+          "运行爬虫测试",
+          "运行LLM分类测试",
+          "运行简报生成测试",
+          "验证数据库数据"
+        ]
+      }
+    },
+    {
+      "id": "task-004-email-push",
+      "type": "feature",
+      "priority": "P1",
+      "status": "pending",
+      "description": "邮件推送功能集成",
+      "details": {
+        "config": {
+          "smtp_host": "smtp.qq.com",
+          "smtp_port": 465,
+          "email": "793323821@qq.com",
+          "password": "kcvbkblgkgfcbcci"
+        }
+      }
+    },
+    {
+      "id": "task-005-feishu-push",
+      "type": "feature",
+      "priority": "P1",
+      "status": "pending",
+      "description": "飞书推送功能集成",
+      "details": {
+        "chat_id": "oc_3ad0c001eb921e29e2c23f173a0b177f"
+      }
+    },
+    {
+      "id": "task-006-scheduler",
+      "type": "feature",
+      "priority": "P1",
+      "status": "pending",
+      "description": "定时任务调度集成",
+      "details": {
+        "schedule": {
+          "crawl": "7:30",
+          "classify": "7:35",
+          "report": "7:50",
+          "push": "8:00"
+        }
+      }
+    }
+  ]
+}

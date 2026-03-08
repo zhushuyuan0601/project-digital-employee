@@ -1,0 +1,134 @@
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 头部样式 */
+.app .header {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.app .header-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 20px 30px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.app .logo {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.app .logo-icon {
+  font-size: 48px;
+}
+
+.app .logo h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #2d3748;
+}
+
+.app .subtitle {
+  font-size: 14px;
+  color: #718096;
+  margin-top: 5px;
+}
+
+.app .tabs {
+  display: flex;
+  gap: 10px;
+}
+
+.app .tab {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 12px;
+  background: #e2e8f0;
+  color: #4a5568;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.app .tab:hover {
+  background: #cbd5e0;
+  transform: translateY(-2px);
+}
+
+.app .tab.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+/* 主内容区 */
+.app .main-content {
+  flex: 1;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 30px;
+}
+
+/* 底部状态 */
+.app .footer {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  padding: 15px 30px;
+}
+
+.app .footer-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.app .team-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #4a5568;
+}
+
+.app .status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+.app .status-dot.online {
+  background: #48bb78;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.1);
+  }
+}
+
+.app .system-info {
+  font-size: 13px;
+  color: #718096;
+}

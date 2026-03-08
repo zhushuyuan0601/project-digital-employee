@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "profiles": {
+    "tavily:default": {
+      "type": "apiKey",
+      "provider": "tavily",
+      "apiKey": "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"
+    },
+    "brave:default": {
+      "type": "apiKey",
+      "provider": "brave",
+      "apiKey": ""
+    }
+  },
+  "usageStats": {}
+}

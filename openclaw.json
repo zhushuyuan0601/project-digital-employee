@@ -1,0 +1,832 @@
+{
+  "meta": {
+    "lastTouchedVersion": "2026.3.2",
+    "lastTouchedAt": "2026-03-05T05:37:34.990Z"
+  },
+  "wizard": {
+    "lastRunAt": "2026-03-04T09:03:42.665Z",
+    "lastRunVersion": "2026.3.2",
+    "lastRunCommand": "doctor",
+    "lastRunMode": "local"
+  },
+  "auth": {
+    "profiles": {
+      "qwen-portal:default": {
+        "provider": "qwen-portal",
+        "mode": "oauth"
+      }
+    }
+  },
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "alibaba": {
+        "baseUrl": "https://coding.dashscope.aliyuncs.com/v1",
+        "apiKey": "sk-sp-7eeda6dd5dbf467ba8db9454b23d0acf",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "kimi-k2.5",
+            "name": "kimi-k2.5",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 8192
+          },
+          {
+            "id": "qwen3.5-plus",
+            "name": "Qwen3.5-Plus",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 1024000,
+            "maxTokens": 32768
+          },
+          {
+            "id": "qwen3-max-2026-01-23",
+            "name": "qwen3-max",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 256000,
+            "maxTokens": 32768
+          },
+          {
+            "id": "qwen3-coder-next",
+            "name": "Qwen3-Coder-Next",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 256000,
+            "maxTokens": 32768
+          },
+          {
+            "id": "qwen3-coder-plus",
+            "name": "Qwen3-Coder-Plus",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 256000,
+            "maxTokens": 32768
+          },
+          {
+            "id": "glm-5",
+            "name": "GLM-5",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text",
+              "image"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 256000,
+            "maxTokens": 32768
+          }
+        ]
+      },
+      "local-qwen": {
+        "baseUrl": "http://192.168.244.201:9091/api/model/b5fbfbc12090/v1",
+        "apiKey": "dkBRJ13pZgHg4HbRQyR5vttdlHEvuG5vlCiISzxQ0hSy5YkHzIgtJUOp9rNB5wWmhqWyOEVpDWe3AUEdLxDsoHx2Nlo6McSIPx50XYzxnf8gGIOaKI6wOcVDFj",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "Qwen3-235B-A22B-Instruct-2507",
+            "name": "Qwen3 235B Instruct (Local)",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 256000,
+            "maxTokens": 32768
+          }
+        ]
+      },
+      "local-qwen2": {
+        "baseUrl": "http://192.168.244.201:9091/api/model/c4fe30f8fefe/qw122/v1",
+        "apiKey": "dkBRJ13pZgHg4HbRQyR5vttdlHEvuG5vlCiISzxQ0hSy5YkHzIgtJUOp9rNB5wWmhqWyOEVpDWe3AUEdLxDsoHx2Nlo6McSIPx50XYzxnf8gGIOaKI6wOcVDFj",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "Qwen3.5-122B-A10B-FP8",
+            "name": "Qwen3.5-122B-A10B-FP8(Local)",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 262144,
+            "maxTokens": 32768
+          }
+        ]
+      },
+      "local-qwen3": {
+        "baseUrl": "http://192.168.244.201:9091/api/model/cd8ba750d910/v1",
+        "apiKey": "dkBRJ13pZgHg4HbRQyR5vttdlHEvuG5vlCiISzxQ0hSy5YkHzIgtJUOp9rNB5wWmhqWyOEVpDWe3AUEdLxDsoHx2Nlo6McSIPx50XYzxnf8gGIOaKI6wOcVDFj",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "GLM-4.7-FP8",
+            "name": "GLM-4.7-FP8(Local)",
+            "api": "openai-completions",
+            "reasoning": false,
+            "input": [
+              "text"
+            ],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 262144,
+            "maxTokens": 32768
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "alibaba/glm-5"
+      },
+      "models": {
+        "qwen-portal/coder-model": {
+          "alias": "qwen"
+        },
+        "qwen-portal/vision-model": {},
+        "local-qwen/Qwen3-235B-A22B-Instruct-2507": {
+          "alias": "qwen-local"
+        },
+        "local-qwen3/GLM-4.7-FP8": {
+          "alias": "qwen-local3"
+        },
+        "alibaba/glm-5": {
+          "alias": "glm-5"
+        },
+        "local-qwen2/Qwen3.5-122B-A10B-FP8": {
+          "alias": "qwen-local2"
+        }
+      },
+      "workspace": "/Users/lihzz/.openclaw/workspace",
+      "subagents": {}
+    },
+    "list": [
+      {
+        "id": "main",
+        "model": "alibaba/glm-5",
+        "subagents": {
+          "allowAgents": [
+            "moyan",
+            "weice",
+            "yuanzhan",
+            "lanji",
+            "ceo"
+          ]
+        },
+        "tools": {
+          "profile": "messaging",
+          "alsoAllow": [
+            "web_search",
+            "web_fetch",
+            "browser",
+            "canvas",
+            "message",
+            "gateway",
+            "nodes",
+            "agents_list",
+            "tts",
+            "feishu_app_scopes",
+            "feishu_bitable_create_app",
+            "feishu_bitable_create_field",
+            "feishu_bitable_create_record",
+            "feishu_bitable_get_meta",
+            "feishu_bitable_get_record",
+            "feishu_bitable_list_fields",
+            "feishu_bitable_list_records",
+            "feishu_bitable_update_record",
+            "feishu_chat",
+            "feishu_doc",
+            "feishu_drive",
+            "feishu_wiki",
+            "read",
+            "write",
+            "edit",
+            "apply_patch",
+            "exec",
+            "process",
+            "memory_search",
+            "memory_get",
+            "sessions_spawn",
+            "subagents",
+            "cron",
+            "image"
+          ]
+        }
+      },
+      {
+        "id": "researcher",
+        "name": "小研（竞品分析师）",
+        "workspace": "/Users/lihzz/.openclaw/workspace-researcher",
+        "agentDir": "/Users/lihzz/.openclaw/agents/researcher/agent",
+        "model": "alibaba/glm-5",
+        "tools": {
+          "profile": "coding",
+          "alsoAllow": [
+            "web_search",
+            "web_fetch",
+            "browser",
+            "canvas",
+            "message",
+            "gateway",
+            "nodes",
+            "agents_list",
+            "tts",
+            "feishu_app_scopes",
+            "feishu_bitable_create_app",
+            "feishu_bitable_create_field",
+            "feishu_bitable_create_record",
+            "feishu_bitable_get_meta",
+            "feishu_bitable_get_record",
+            "feishu_bitable_list_fields",
+            "feishu_bitable_list_records",
+            "feishu_bitable_update_record",
+            "feishu_chat",
+            "feishu_doc",
+            "feishu_drive",
+            "feishu_wiki",
+            "read",
+            "write",
+            "edit",
+            "apply_patch",
+            "exec",
+            "process",
+            "memory_search",
+            "memory_get",
+            "sessions_spawn",
+            "subagents",
+            "cron",
+            "image"
+          ]
+        }
+      },
+      {
+        "id": "pm",
+        "name": "小产（产品经理）",
+        "workspace": "/Users/lihzz/.openclaw/workspace-pm",
+        "agentDir": "/Users/lihzz/.openclaw/agents/pm/agent",
+        "model": "alibaba/glm-5",
+        "tools": {
+          "profile": "coding",
+          "alsoAllow": [
+            "web_search",
+            "web_fetch",
+            "browser",
+            "canvas",
+            "message",
+            "gateway",
+            "nodes",
+            "agents_list",
+            "tts",
+            "feishu_app_scopes",
+            "feishu_bitable_create_app",
+            "feishu_bitable_create_field",
+            "feishu_bitable_create_record",
+            "feishu_bitable_get_meta",
+            "feishu_bitable_get_record",
+            "feishu_bitable_list_fields",
+            "feishu_bitable_list_records",
+            "feishu_bitable_update_record",
+            "feishu_chat",
+            "feishu_doc",
+            "feishu_drive",
+            "feishu_wiki",
+            "read",
+            "write",
+            "edit",
+            "apply_patch",
+            "exec",
+            "process",
+            "memory_search",
+            "memory_get",
+            "sessions_spawn",
+            "subagents",
+            "cron",
+            "image"
+          ]
+        }
+      },
+      {
+        "id": "ceo",
+        "default": true,
+        "name": "小 U（任务秘书）",
+        "workspace": "/Users/lihzz/.openclaw/workspace-ceo",
+        "agentDir": "/Users/lihzz/.openclaw/agents/ceo/agent",
+        "model": "alibaba/glm-5",
+        "subagents": {},
+        "tools": {
+          "profile": "coding",
+          "alsoAllow": [
+            "web_search",
+            "web_fetch",
+            "browser",
+            "canvas",
+            "message",
+            "gateway",
+            "nodes",
+            "agents_list",
+            "tts",
+            "sessions_spawn",
+            "subagents",
+            "feishu_app_scopes",
+            "feishu_bitable_create_app",
+            "feishu_bitable_create_field",
+            "feishu_bitable_create_record",
+            "feishu_bitable_get_meta",
+            "feishu_bitable_get_record",
+            "feishu_bitable_list_fields",
+            "feishu_bitable_list_records",
+            "feishu_bitable_update_record",
+            "feishu_chat",
+            "feishu_doc",
+            "feishu_drive",
+            "feishu_wiki",
+            "read",
+            "write",
+            "edit",
+            "apply_patch",
+            "exec",
+            "process",
+            "memory_search",
+            "memory_get",
+            "cron",
+            "image"
+          ]
+        }
+      },
+      {
+        "id": "tech-lead",
+        "name": "小开（研发工程师）",
+        "workspace": "/Users/lihzz/.openclaw/workspace-tech-lead",
+        "agentDir": "/Users/lihzz/.openclaw/agents/tech-lead/agent",
+        "model": "alibaba/glm-5",
+        "tools": {
+          "profile": "coding",
+          "alsoAllow": [
+            "web_search",
+            "web_fetch",
+            "browser",
+            "canvas",
+            "message",
+            "gateway",
+            "nodes",
+            "agents_list",
+            "tts",
+            "feishu_app_scopes",
+            "feishu_bitable_create_app",
+            "feishu_bitable_create_field",
+            "feishu_bitable_create_record",
+            "feishu_bitable_get_meta",
+            "feishu_bitable_get_record",
+            "feishu_bitable_list_fields",
+            "feishu_bitable_list_records",
+            "feishu_bitable_update_record",
+            "feishu_chat",
+            "feishu_doc",
+            "feishu_drive",
+            "feishu_wiki",
+            "read",
+            "write",
+            "edit",
+            "apply_patch",
+            "exec",
+            "process",
+            "memory_search",
+            "memory_get",
+            "sessions_spawn",
+            "subagents",
+            "cron",
+            "image"
+          ]
+        }
+      },
+      {
+        "id": "moyan",
+        "name": "墨言（材料撰写专家）",
+        "workspace": "/Users/lihzz/.openclaw/workspace-moyan",
+        "agentDir": "/Users/lihzz/.openclaw/agents/moyan/agent",
+        "model": "local-qwen2/Qwen3.5-122B-A10B-FP8",
+        "subagents": {
+          "allowAgents": [
+            "lanji",
+            "yuanzhan"
+          ]
+        },
+        "tools": {
+          "profile": "coding",
+          "alsoAllow": [
+            "read",
+            "write",
+            "edit",
+            "apply_patch",
+            "exec",
+            "web_search",
+            "web_fetch",
+            "memory_search",
+            "memory_get",
+            "sessions_spawn",
+            "sessions_send",
+            "sessions_history",
+            "sessions_list",
+            "feishu_chat",
+            "feishu_doc",
+            "feishu_drive",
+            "feishu_wiki"
+          ]
+        }
+      },
+      {
+        "id": "weice",
+        "name": "纬策（解决方案架构师）",
+        "workspace": "/Users/lihzz/.openclaw/workspace-weice",
+        "agentDir": "/Users/lihzz/.openclaw/agents/weice/agent",
+        "model": "local-qwen3/GLM-4.7-FP8",
+        "subagents": {
+          "allowAgents": [
+            "main",
+            "yuanzhan",
+            "lanji"
+          ]
+        },
+        "tools": {
+          "profile": "coding",
+          "alsoAllow": [
+            "read",
+            "write",
+            "edit",
+            "apply_patch",
+            "exec",
+            "web_search",
+            "web_fetch",
+            "memory_search",
+            "memory_get",
+            "sessions_spawn",
+            "sessions_send",
+            "sessions_history",
+            "sessions_list",
+            "feishu_chat",
+            "feishu_doc",
+            "feishu_drive",
+            "feishu_wiki"
+          ]
+        }
+      },
+      {
+        "id": "yuanzhan",
+        "name": "元栈（全栈研发技术总监）",
+        "workspace": "/Users/lihzz/.openclaw/workspace-yuanzhan",
+        "agentDir": "/Users/lihzz/.openclaw/agents/yuanzhan/agent",
+        "model": "local-qwen3/GLM-4.7-FP8",
+        "subagents": {
+          "allowAgents": [
+            "*"
+          ]
+        },
+        "tools": {
+          "profile": "coding",
+          "alsoAllow": [
+            "read",
+            "write",
+            "edit",
+            "apply_patch",
+            "exec",
+            "web_search",
+            "web_fetch",
+            "memory_search",
+            "memory_get",
+            "sessions_spawn",
+            "sessions_send",
+            "sessions_history",
+            "sessions_list",
+            "feishu_chat",
+            "feishu_doc",
+            "feishu_drive",
+            "feishu_wiki"
+          ]
+        }
+      },
+      {
+        "id": "lanji",
+        "name": "览迹（知识库管家）",
+        "workspace": "/Users/lihzz/.openclaw/workspace-lanji",
+        "agentDir": "/Users/lihzz/.openclaw/agents/lanji/agent",
+        "model": "local-qwen2/Qwen3.5-122B-A10B-FP8",
+        "subagents": {
+          "allowAgents": [
+            "main",
+            "moyan",
+            "weice",
+            "yuanzhan"
+          ]
+        },
+        "tools": {
+          "profile": "coding",
+          "alsoAllow": [
+            "read",
+            "write",
+            "edit",
+            "apply_patch",
+            "exec",
+            "web_search",
+            "web_fetch",
+            "memory_search",
+            "memory_get",
+            "sessions_spawn",
+            "sessions_send",
+            "sessions_history",
+            "sessions_list",
+            "feishu_chat",
+            "feishu_doc",
+            "feishu_drive",
+            "feishu_wiki"
+          ]
+        }
+      }
+    ]
+  },
+  "tools": {
+    "profile": "coding",
+    "allow": [
+      "group:fs",
+      "group:runtime",
+      "group:sessions",
+      "group:memory",
+      "web_search",
+      "web_fetch",
+      "message",
+      "cron",
+      "gateway",
+      "agentToAgent"
+    ],
+    "deny": [],
+    "web": {
+      "search": {
+        "enabled": true,
+        "provider": "kimi",
+        "maxResults": 10
+      },
+      "fetch": {
+        "enabled": true
+      }
+    },
+    "agentToAgent": {
+      "enabled": true,
+      "allow": [
+        "main",
+        "ceo",
+        "moyan",
+        "weice",
+        "yuanzhan",
+        "lanji",
+        "researcher",
+        "pm",
+        "tech-lead"
+      ]
+    },
+    "sessions_spawn": {}
+  },
+  "bindings": [
+    {
+      "agentId": "ceo",
+      "match": {
+        "channel": "feishu",
+        "accountId": "main",
+        "peer": {
+          "kind": "group",
+          "id": "oc_3ad0c001eb921e29e2c23f173a0b177f"
+        }
+      }
+    },
+    {
+      "agentId": "ceo",
+      "match": {
+        "channel": "webchat"
+      }
+    },
+    {
+      "agentId": "researcher",
+      "match": {
+        "channel": "feishu",
+        "accountId": "researcher"
+      }
+    },
+    {
+      "agentId": "pm",
+      "match": {
+        "channel": "feishu",
+        "accountId": "pm"
+      }
+    },
+    {
+      "agentId": "tech-lead",
+      "match": {
+        "channel": "feishu",
+        "accountId": "tech-lead"
+      }
+    },
+    {
+      "agentId": "main",
+      "match": {
+        "channel": "webchat"
+      }
+    }
+  ],
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto",
+    "restart": true,
+    "ownerDisplay": "raw"
+  },
+  "session": {
+    "dmScope": "per-channel-peer"
+  },
+  "hooks": {
+    "internal": {
+      "enabled": true,
+      "entries": {
+        "boot-md": {
+          "enabled": true
+        },
+        "bootstrap-extra-files": {
+          "enabled": true
+        },
+        "command-logger": {
+          "enabled": true
+        },
+        "session-memory": {
+          "enabled": true
+        }
+      }
+    }
+  },
+  "channels": {
+    "feishu": {
+      "enabled": true,
+      "connectionMode": "websocket",
+      "domain": "feishu",
+      "accounts": {
+        "main": {
+          "appId": "cli_a92d3b720038dbdb",
+          "appSecret": "fh21958TUtespqBgVwil2ez2jtzEpM3T"
+        },
+        "ceo": {
+          "appId": "cli_a92d3b720038dbdb",
+          "appSecret": "fh21958TUtespqBgVwil2ez2jtzEpM3T"
+        },
+        "researcher": {
+          "appId": "cli_a92d35194bf95bc4",
+          "appSecret": "QQ0yZSgzmNBnoUWcyJEw3dLk0OBqQIS0"
+        },
+        "tech-lead": {
+          "appId": "cli_a92d3681e6381bd3",
+          "appSecret": "MRtv6Y4wrfBPqckrdCHDddYNRiB1j0gl"
+        },
+        "pm": {
+          "appId": "cli_a92d35f842f95bc0",
+          "appSecret": "3dREATprWncNsL8aQdWdFdFroPbR1Ja1"
+        },
+        "default": {
+          "groupPolicy": "allowlist",
+          "groupAllowFrom": [
+            "oc_3ad0c001eb921e29e2c23f173a0b177f"
+          ]
+        }
+      }
+    }
+  },
+  "gateway": {
+    "port": 18789,
+    "mode": "local",
+    "bind": "loopback",
+    "auth": {
+      "mode": "token",
+      "token": "bd0f157b60e41a3d9895ddec846d2d10c8d795bc0a061f70"
+    },
+    "http": {
+      "endpoints": {
+        "chatCompletions": {
+          "enabled": true
+        }
+      }
+    },
+    "tailscale": {
+      "mode": "off",
+      "resetOnExit": false
+    },
+    "nodes": {
+      "denyCommands": [
+        "camera.snap",
+        "camera.clip",
+        "screen.record",
+        "contacts.add",
+        "calendar.add",
+        "reminders.add",
+        "sms.send"
+      ]
+    }
+  },
+  "skills": {
+    "allowBundled": [
+      ""
+    ],
+    "install": {
+      "preferBrew": true
+    }
+  },
+  "plugins": {
+    "entries": {
+      "qwen-portal-auth": {
+        "enabled": true
+      },
+      "feishu": {
+        "enabled": true
+      }
+    },
+    "installs": {
+      "feishu": {
+        "source": "npm",
+        "spec": "@openclaw/feishu",
+        "installPath": "/Users/lihzz/.openclaw/extensions/feishu",
+        "version": "2026.3.2",
+        "resolvedName": "@openclaw/feishu",
+        "resolvedVersion": "2026.3.2",
+        "resolvedSpec": "@openclaw/feishu@2026.3.2",
+        "integrity": "sha512-CpwjmLCS8gpZ5fFCRiEA+1i/L+E73Vhz5//TiwQjWJOtVPZEu44db294g3HUR6nB5L0IEpZgKU/JU69HgYl77w==",
+        "shasum": "ad77e27633b480f5c815e1922252a2f07c1765bd",
+        "resolvedAt": "2026-03-03T13:50:24.623Z",
+        "installedAt": "2026-03-03T13:50:26.453Z"
+      }
+    }
+  }
+}

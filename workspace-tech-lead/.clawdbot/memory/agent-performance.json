@@ -1,0 +1,99 @@
+{
+  "version": "1.0",
+  "agents": {
+    "codex": {
+      "name": "Codex (GPT-5.3-Codex)",
+      "strengths": ["backend", "bugfix", "refactor", "multi-file", "reasoning"],
+      "performance": {
+        "backend": {
+          "totalTasks": 0,
+          "successes": 0,
+          "successRate": 0,
+          "avgDuration": "0min",
+          "avgAttempts": 0
+        },
+        "bugfix": {
+          "totalTasks": 0,
+          "successes": 0,
+          "successRate": 0,
+          "avgDuration": "0min",
+          "avgAttempts": 0
+        },
+        "refactor": {
+          "totalTasks": 0,
+          "successes": 0,
+          "successRate": 0,
+          "avgDuration": "0min",
+          "avgAttempts": 0
+        }
+      },
+      "notes": "主工作马，适合90%的后端任务。边界情况处理最好，误报率低。"
+    },
+    "claude-code": {
+      "name": "Claude Code (Opus 4.5)",
+      "strengths": ["frontend", "fast", "git", "ui", "permissions"],
+      "performance": {
+        "frontend": {
+          "totalTasks": 0,
+          "successes": 0,
+          "successRate": 0,
+          "avgDuration": "0min",
+          "avgAttempts": 0
+        },
+        "ui": {
+          "totalTasks": 0,
+          "successes": 0,
+          "successRate": 0,
+          "avgDuration": "0min",
+          "avgAttempts": 0
+        },
+        "git": {
+          "totalTasks": 0,
+          "successes": 0,
+          "successRate": 0,
+          "avgDuration": "0min",
+          "avgAttempts": 0
+        }
+      },
+      "notes": "前端更快，权限问题少。代码审查过于保守，但适合Git操作。"
+    },
+    "gemini": {
+      "name": "Gemini",
+      "strengths": ["design", "ui-beauty", "html", "css"],
+      "performance": {
+        "design": {
+          "totalTasks": 0,
+          "successes": 0,
+          "successRate": 0,
+          "avgDuration": "0min",
+          "avgAttempts": 0
+        }
+      },
+      "notes": "设计感强。先生成HTML/CSS设计，再交给Claude Code实现。"
+    }
+  },
+  "codeReviewers": {
+    "codex-reviewer": {
+      "name": "Codex Reviewer",
+      "strengths": ["edge-cases", "logic-errors", "error-handling", "race-conditions"],
+      "falsePositiveRate": "low",
+      "notes": "最彻底的审查，边界情况和逻辑错误捕获最好。"
+    },
+    "gemini-reviewer": {
+      "name": "Gemini Code Assist Reviewer",
+      "strengths": ["security", "scalability", "missing-issues"],
+      "cost": "free",
+      "notes": "免费且实用，发现安全和可扩展性问题。"
+    },
+    "claude-reviewer": {
+      "name": "Claude Code Reviewer",
+      "strengths": ["validation"],
+      "weaknesses": ["over-cautious", "over-engineering-suggestions"],
+      "notes": "过度保守，很多'考虑添加...'建议是过度设计。只看关键问题。"
+    }
+  },
+  "metadata": {
+    "lastUpdated": "2026-03-05T10:01:00+08:00",
+    "notes": "根据实际执行结果自动更新统计"
+  }
+}
