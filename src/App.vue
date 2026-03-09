@@ -138,7 +138,7 @@ const sendMessage = async () => {
   await nextTick()
   scrollToBottom()
 
-  // 调用鸿鹄大模型
+  // 调用元景大模型
   loading.value = true
   try {
     const response = await chatWithHonghu(text)
