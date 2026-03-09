@@ -1,0 +1,8 @@
+agents/*/sessions/
+.openclaw/
+node_modules/
+.env
+.env.*
+logs/
+*.log
+.DS_Store
