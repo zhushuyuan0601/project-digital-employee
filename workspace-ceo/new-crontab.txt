@@ -1,0 +1,19 @@
+# AI 公司定时任务 - 自动运行每日工作流
+# 设置方式：crontab setup_cron.sh
+# 更新时间：2026-03-04
+
+# 环境变量
+SHELL=/bin/zsh
+PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
+
+# 定时任务
+# 格式：分钟 小时 日 月 星期 命令
+
+# 00:00 - 系统启动，开始工作
+0 0 * * * cd /Users/lihzz/openclawCompany && ./start.sh daily >> /Users/lihzz/openclawCompany/logs/cron.log 2>&1
+
+# 05:16 - 每日情报简报自动化执行
+16 5 * * * /Users/lihzz/.openclaw/workspace-ceo/daily-intel-cron.sh >> /Users/lihzz/.openclaw/workspace-ceo/logs/daily-intel-cron.log 2>&1
+
+# 07:00 - 发送日报（额外提醒）
+0 7 * * * cd /Users/lihzz/openclawCompany && ./venv/bin/python3 agents/content.py >> /Users/lihzz/openclawCompany/logs/cron.log 2>&1

@@ -1,17 +1,39 @@
-# USER.md - About Your Human
+# USER.md - 领导
 
-_Learn about the person you're helping. Update this as you go._
+- **Name:** 领导
+- **称呼:** 领导
+- **职业:** 数字员工团队领导
+- **时区:** GMT+8
+- **角色:** 团队领导 / 决策者
 
-- **Name:**
-- **What to call them:**
-- **Pronouns:** _(optional)_
-- **Timezone:**
-- **Notes:**
+## 目标与愿景
 
-## Context
+- **长期目标**: 搭建自己的数字员工团队
+- **当前方向**: AI 产品研发，智能彩铃业务
+- **核心业务**:
+  1. AI 智能彩铃产品研发
+  2. 数字员工团队协作演示
 
-_(What do they care about? What projects are they working on? What annoys them? What makes them laugh? Build this over time.)_
+## 数字员工团队
 
----
+| 成员 | 角色 | 职责 |
+|------|------|------|
+| 小 U | 任务秘书 | 接收任务、拆解分配、汇总汇报 |
+| 小研 | 竞品分析师 | 调研产品、分析能力、输出报告 |
+| 小产 | 产品经理 | 设计方案、明确定位、输出需求 |
+| 小开 | 研发工程师 | 设计架构、调度开发、生成 Demo |
 
-The more you know, the better you can help. But remember — you're learning about a person, not building a dossier. Respect the difference.
+## 交流偏好
+
+- 工作场景：简洁高效，直击要点，不要废话
+- 决策汇报：清晰说明理由和评估结果
+- 异常情况：第一时间主动汇报
+
+## 对你的期待
+
+你是任务秘书，应该：
+- 快速理解任务并拆解
+- 协调团队成员执行
+- 主动跟踪进度
+- 及时汇总汇报
+- 成为值得依赖的协调者

@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>新春拜年 🧧</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #c41e3a 0%, #8b0000 50%, #4a0000 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* 背景装饰 */
+        .bg-pattern {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                radial-gradient(circle at 20% 80%, rgba(255,215,0,0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(255,215,0,0.1) 0%, transparent 50%);
+            pointer-events: none;
+        }
+
+        /* 灯笼 */
+        .lantern {
+            position: fixed;
+            width: 60px;
+            height: 80px;
+            animation: swing 3s ease-in-out infinite;
+        }
+
+        .lantern::before {
+            content: '福';
+            position: absolute;
+            width: 60px;
+            height: 70px;
+            background: linear-gradient(180deg, #ff4444 0%, #cc0000 100%);
+            border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #ffd700;
+            font-size: 28px;
+            font-weight: bold;
+            box-shadow: 0 0 20px rgba(255,68,68,0.5);
+        }
+
+        .lantern::after {
+            content: '';
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 30px;
+            height: 15px;
+            background: #ffd700;
+            border-radius: 5px 5px 0 0;
+        }
+
+        .lantern-left {
+            top: 50px;
+            left: 5%;
+            animation-delay: 0s;
+        }
+
+        .lantern-right {
+            top: 50px;
+            right: 5%;
+            animation-delay: 1.5s;
+        }
+
+        @keyframes swing {
+            0%, 100% { transform: rotate(-5deg); }
+            50% { transform: rotate(5deg); }
+        }
+
+        /* 主卡片 */
+        .card {
+            background: linear-gradient(180deg, #fff5e6 0%, #ffe4c4 100%);
+            border-radius: 20px;
+            padding: 40px 50px;
+            text-align: center;
+            box-shadow: 
+                0 20px 60px rgba(0,0,0,0.3),
+                inset 0 2px 0 rgba(255,255,255,0.5);
+            position: relative;
+            z-index: 10;
+            max-width: 90%;
+            animation: cardIn 1s ease-out;
+            border: 3px solid #ffd700;
+        }
+
+        @keyframes cardIn {
+            from {
+                opacity: 0;
+                transform: scale(0.8) translateY(50px);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        /* 装饰角 */
+        .card::before,
+        .card::after {
+            content: '✿';
+            position: absolute;
+            font-size: 24px;
+            color: #c41e3a;
+        }
+
+        .card::before {
+            top: 10px;
+            left: 15px;
+        }
+
+        .card::after {
+            bottom: 10px;
+            right: 15px;
+        }
+
+        .title {
+            font-size: 48px;
+            color: #c41e3a;
+            margin-bottom: 20px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
+            animation: titleBounce 2s ease-in-out infinite;
+        }
+
+        @keyframes titleBounce {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .year-animal {
+            font-size: 80px;
+            margin: 20px 0;
+            animation: shake 0.5s ease-in-out infinite;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: rotate(-3deg); }
+            50% { transform: rotate(3deg); }
+        }
+
+        .greeting {
+            font-size: 24px;
+            color: #8b4513;
+            margin: 20px 0;
+            line-height: 1.8;
+        }
+
+        .wishes {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            margin: 25px 0;
+        }
+
+        .wish-tag {
+            background: linear-gradient(135deg, #c41e3a, #ff4444);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            animation: popIn 0.5s ease-out backwards;
+            cursor: default;
+            transition: transform 0.3s;
+        }
+
+        .wish-tag:hover {
+            transform: scale(1.1);
+        }
+
+        .wish-tag:nth-child(1) { animation-delay: 0.1s; }
+        .wish-tag:nth-child(2) { animation-delay: 0.2s; }
+        .wish-tag:nth-child(3) { animation-delay: 0.3s; }
+        .wish-tag:nth-child(4) { animation-delay: 0.4s; }
+        .wish-tag:nth-child(5) { animation-delay: 0.5s; }
+        .wish-tag:nth-child(6) { animation-delay: 0.6s; }
+
+        @keyframes popIn {
+            from {
+                opacity: 0;
+                transform: scale(0);
+            }
+            to {
+                opacity: 1;
+                transform: scale(1);
+            }
+        }
+
+        .name-input {
+            margin: 20px 0;
+        }
+
+        .name-input input {
+            padding: 12px 20px;
+            font-size: 18px;
+            border: 2px solid #ffd700;
+            border-radius: 25px;
+            text-align: center;
+            width: 200px;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        .name-input input:focus {
+            border-color: #c41e3a;
+            box-shadow: 0 0 10px rgba(196,30,58,0.3);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #ffd700, #ffaa00);
+            color: #8b0000;
+            border: none;
+            padding: 15px 40px;
+            font-size: 20px;
+            border-radius: 30px;
+            cursor: pointer;
+            margin-top: 20px;
+            font-weight: bold;
+            transition: all 0.3s;
+            box-shadow: 0 5px 20px rgba(255,215,0,0.4);
+        }
+
+        .btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(255,215,0,0.5);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        /* 烟花效果 */
+        .firework {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: firework 1.5s ease-out forwards;
+            pointer-events: none;
+        }
+
+        @keyframes firework {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(0);
+                opacity: 0;
+            }
+        }
+
+        .particle {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            animation: particle 1s ease-out forwards;
+        }
+
+        @keyframes particle {
+            0% {
+                transform: translate(0, 0);
+                opacity: 1;
+            }
+            100% {
+                opacity: 0;
+            }
+        }
+
+        /* 飘落的金币/福字 */
+        .falling-item {
+            position: fixed;
+            font-size: 30px;
+            animation: fall linear forwards;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        @keyframes fall {
+            to {
+                transform: translateY(100vh) rotate(360deg);
+            }
+        }
+
+        .footer {
+            margin-top: 30px;
+            color: #a0522d;
+            font-size: 14px;
+        }
+
+        /* 响应式 */
+        @media (max-width: 500px) {
+            .card {
+                padding: 30px 25px;
+            }
+            .title {
+                font-size: 36px;
+            }
+            .year-animal {
+                font-size: 60px;
+            }
+            .greeting {
+                font-size: 18px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-pattern"></div>
+    
+    <!-- 灯笼 -->
+    <div class="lantern lantern-left"></div>
+    <div class="lantern lantern-right"></div>
+
+    <!-- 主卡片 -->
+    <div class="card">
+        <div class="title">新春快乐</div>
+        <div class="year-animal">🐍</div>
+        <div class="greeting" id="greeting">
+            祝您蛇年大吉<br>
+            万事如意 阖家幸福
+        </div>
+        
+        <div class="wishes">
+            <span class="wish-tag">🧧 财源广进</span>
+            <span class="wish-tag">💪 身体健康</span>
+            <span class="wish-tag">🎯 心想事成</span>
+            <span class="wish-tag">⭐ 事业有成</span>
+            <span class="wish-tag">🏠 阖家欢乐</span>
+            <span class="wish-tag">🎉 步步高升</span>
+        </div>
+
+        <div class="name-input">
+            <input type="text" id="nameInput" placeholder="输入您的名字" maxlength="10">
+        </div>
+
+        <button class="btn" onclick="generateGreeting()">🧨 生成专属祝福</button>
+
+        <div class="footer">
+            恭贺新禧 · 蛇年大吉
+        </div>
+    </div>
+
+    <script>
+        // 烟花效果
+        function createFirework(x, y) {
+            const colors = ['#ff4444', '#ffd700', '#ff69b4', '#00ff00', '#ff8c00', '#ff1493'];
+            const firework = document.createElement('div');
+            firework.className = 'firework';
+            firework.style.left = x + 'px';
+            firework.style.top = y + 'px';
+            firework.style.background = colors[Math.floor(Math.random() * colors.length)];
+            
+            for (let i = 0; i < 12; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.background = colors[Math.floor(Math.random() * colors.length)];
+                
+                const angle = (i / 12) * Math.PI * 2;
+                const distance = 50 + Math.random() * 50;
+                const tx = Math.cos(angle) * distance;
+                const ty = Math.sin(angle) * distance;
+                
+                particle.style.setProperty('--tx', tx + 'px');
+                particle.style.setProperty('--ty', ty + 'px');
+                particle.style.animation = `particle 1s ease-out forwards`;
+                particle.style.transform = `translate(${tx}px, ${ty}px)`;
+                
+                firework.appendChild(particle);
+            }
+            
+            document.body.appendChild(firework);
+            setTimeout(() => firework.remove(), 1500);
+        }
+
+        // 飘落效果
+        function createFallingItem() {
+            const items = ['🧧', '💰', '福', '🎊', '✨', '🎁'];
+            const item = document.createElement('div');
+            item.className = 'falling-item';
+            item.textContent = items[Math.floor(Math.random() * items.length)];
+            item.style.left = Math.random() * 100 + 'vw';
+            item.style.top = '-50px';
+            item.style.animationDuration = (3 + Math.random() * 4) + 's';
+            document.body.appendChild(item);
+            setTimeout(() => item.remove(), 7000);
+        }
+
+        // 随机烟花
+        function randomFirework() {
+            const x = Math.random() * window.innerWidth;
+            const y = Math.random() * window.innerHeight * 0.6;
+            createFirework(x, y);
+        }
+
+        // 生成专属祝福
+        function generateGreeting() {
+            const name = document.getElementById('nameInput').value || '您';
+            const greetings = [
+                `祝 ${name} 蛇年行大运<br>财源滚滚 幸福美满`,
+                `${name} 新年好<br>祝您蛇年吉祥 万事如意`,
+                `亲爱的 ${name}<br>蛇年祝您心想事成 前程似锦`,
+                `${name} 新春快乐<br>祝您蛇年大吉 阖家幸福`,
+                `恭喜发财 ${name}<br>祝您蛇年财运亨通 事业有成`
+            ];
+            
+            const greetingEl = document.getElementById('greeting');
+            greetingEl.innerHTML = greetings[Math.floor(Math.random() * greetings.length)];
+            
+            // 放烟花庆祝
+            for (let i = 0; i < 5; i++) {
+                setTimeout(randomFirework, i * 200);
+            }
+        }
+
+        // 点击页面放烟花
+        document.addEventListener('click', (e) => {
+            createFirework(e.clientX, e.clientY);
+        });
+
+        // 定期随机烟花和飘落物
+        setInterval(randomFirework, 2000);
+        setInterval(createFallingItem, 500);
+
+        // 初始烟花
+        setTimeout(() => {
+            for (let i = 0; i < 3; i++) {
+                setTimeout(randomFirework, i * 300);
+            }
+        }, 500);
+    </script>
+</body>
+</html>

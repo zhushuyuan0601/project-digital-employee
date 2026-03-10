@@ -1,0 +1,82 @@
+{
+  "project": "智能健康手表市场调研",
+  "startTime": "2026-03-08T01:57:00+08:00",
+  "deadline": "2026-03-10T01:57:00+08:00",
+  "tasks": [
+    {
+      "id": "T001",
+      "name": "竞品情报采集",
+      "assignee": "研究Agent",
+      "sessionKey": "agent:main:subagent:36798807-cedf-4cc2-bf22-3371717b3278",
+      "status": "in_progress",
+      "startTime": "2026-03-08T01:58:00+08:00",
+      "expectedDuration": "4h",
+      "deliverable": "memory/project-smartwatch/research-competitors.md"
+    },
+    {
+      "id": "T002",
+      "name": "用户需求分析",
+      "assignee": "分析Agent",
+      "sessionKey": "agent:main:subagent:21479d69-8999-432e-9c2d-25f40a519d43",
+      "status": "in_progress",
+      "startTime": "2026-03-08T01:58:00+08:00",
+      "expectedDuration": "3h",
+      "deliverable": "memory/project-smartwatch/research-user-needs.md"
+    },
+    {
+      "id": "T003",
+      "name": "价格策略研究",
+      "assignee": "分析Agent",
+      "status": "blocked",
+      "blockedBy": ["T001"],
+      "expectedDuration": "3h"
+    },
+    {
+      "id": "T004",
+      "name": "市场机会评估",
+      "assignee": "研究Agent",
+      "status": "blocked",
+      "blockedBy": ["T001", "T002"],
+      "expectedDuration": "4h"
+    },
+    {
+      "id": "T005",
+      "name": "报告整合与输出",
+      "assignee": "内容Agent",
+      "status": "pending",
+      "blockedBy": ["T003", "T004"],
+      "expectedDuration": "2h"
+    },
+    {
+      "id": "T006",
+      "name": "质量审核",
+      "assignee": "质量Agent",
+      "status": "pending",
+      "blockedBy": ["T005"],
+      "expectedDuration": "1h"
+    }
+  ],
+  "risks": [
+    {
+      "id": "R001",
+      "description": "竞品信息可能不完整",
+      "probability": "medium",
+      "impact": "high",
+      "mitigation": "启动备用数据源（行业报告、新闻稿）"
+    },
+    {
+      "id": "R002", 
+      "description": "用户需求分析可能缺乏代表性",
+      "probability": "medium",
+      "impact": "medium",
+      "mitigation": "交叉验证多个平台数据"
+    }
+  ],
+  "communications": [
+    {
+      "time": "2026-03-08T01:58:00+08:00",
+      "type": "kickoff",
+      "message": "项目启动，并行任务T001、T002已分发"
+    }
+  ]
+}
