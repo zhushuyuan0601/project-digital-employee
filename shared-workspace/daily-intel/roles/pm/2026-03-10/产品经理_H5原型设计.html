@@ -1,0 +1,1623 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>联通AI彩铃·智能版 - H5原型</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    :root {
+      --primary: #E60012;
+      --primary-light: #FF4D4D;
+      --secondary: #FF9500;
+      --success: #34C759;
+      --bg: #F5F5F7;
+      --card: #FFFFFF;
+      --text: #1D1D1F;
+      --text-secondary: #86868B;
+      --border: #E5E5EA;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      overflow-x: hidden;
+    }
+    
+    /* App Container */
+    .app {
+      max-width: 430px;
+      margin: 0 auto;
+      background: var(--bg);
+      min-height: 100vh;
+      position: relative;
+    }
+    
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      color: white;
+      padding: 16px 20px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .header-title {
+      font-size: 18px;
+      font-weight: 600;
+    }
+    
+    .header-icon {
+      width: 24px;
+      height: 24px;
+      background: rgba(255,255,255,0.2);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+    
+    /* Tab Navigation */
+    .tab-nav {
+      display: flex;
+      background: white;
+      border-bottom: 1px solid var(--border);
+    }
+    
+    .tab-item {
+      flex: 1;
+      padding: 12px;
+      text-align: center;
+      font-size: 14px;
+      color: var(--text-secondary);
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    .tab-item.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+      font-weight: 600;
+    }
+    
+    /* Page Content */
+    .page {
+      padding: 16px;
+      display: none;
+    }
+    
+    .page.active {
+      display: block;
+    }
+    
+    /* Agent Chat Section */
+    .agent-hero {
+      background: linear-gradient(135deg, #FFF5F5 0%, #FFF0E5 100%);
+      border-radius: 16px;
+      padding: 24px 20px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    
+    .agent-avatar {
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      border-radius: 50%;
+      margin: 0 auto 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 40px;
+      box-shadow: 0 8px 24px rgba(230, 0, 18, 0.3);
+    }
+    
+    .agent-title {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    
+    .agent-subtitle {
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+    
+    /* Chat Input */
+    .chat-input-wrapper {
+      background: white;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    
+    .chat-input {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .chat-input input {
+      flex: 1;
+      border: none;
+      outline: none;
+      font-size: 15px;
+      padding: 10px 0;
+    }
+    
+    .chat-input input::placeholder {
+      color: var(--text-secondary);
+    }
+    
+    .voice-btn, .send-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+    
+    .voice-btn {
+      background: var(--bg);
+      color: var(--text-secondary);
+    }
+    
+    .send-btn {
+      background: var(--primary);
+      color: white;
+    }
+    
+    /* Quick Suggestions */
+    .quick-suggestions {
+      margin-bottom: 24px;
+    }
+    
+    .section-title {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .suggestion-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    
+    .suggestion-item {
+      background: white;
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s;
+      border: 1px solid var(--border);
+    }
+    
+    .suggestion-item:hover {
+      border-color: var(--primary);
+      background: #FFF5F5;
+    }
+    
+    .suggestion-item .icon {
+      margin-right: 8px;
+    }
+    
+    /* Quick Actions */
+    .quick-actions {
+      margin-bottom: 24px;
+    }
+    
+    .action-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+    
+    .action-item {
+      background: white;
+      border-radius: 12px;
+      padding: 16px 8px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      border: 1px solid var(--border);
+    }
+    
+    .action-item:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .action-icon {
+      font-size: 28px;
+      margin-bottom: 8px;
+    }
+    
+    .action-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    
+    /* Hot Templates */
+    .hot-templates {
+      margin-bottom: 20px;
+    }
+    
+    .template-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    
+    .template-item {
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: all 0.3s;
+      border: 1px solid var(--border);
+    }
+    
+    .template-item:hover {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .template-preview {
+      height: 120px;
+      background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 40px;
+    }
+    
+    .template-info {
+      padding: 12px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .template-name {
+      font-size: 14px;
+      font-weight: 500;
+    }
+    
+    .template-users {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    
+    /* Chat Page */
+    .chat-page {
+      height: calc(100vh - 120px);
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+    }
+    
+    .message {
+      margin-bottom: 16px;
+      animation: fadeIn 0.3s ease;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .message-agent {
+      display: flex;
+      gap: 12px;
+    }
+    
+    .message-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    
+    .message-content {
+      background: white;
+      border-radius: 16px;
+      padding: 14px 16px;
+      max-width: 80%;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    
+    .message-text {
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    
+    .message-user {
+      display: flex;
+      justify-content: flex-end;
+    }
+    
+    .message-user .message-content {
+      background: var(--primary);
+      color: white;
+    }
+    
+    /* Options Grid */
+    .options-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-top: 12px;
+    }
+    
+    .option-btn {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s;
+      text-align: left;
+    }
+    
+    .option-btn:hover {
+      border-color: var(--primary);
+      background: #FFF5F5;
+    }
+    
+    .option-btn .emoji {
+      font-size: 20px;
+      margin-right: 6px;
+    }
+    
+    /* Element Selection */
+    .element-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    
+    .element-chip {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 8px 16px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    .element-chip:hover,
+    .element-chip.selected {
+      border-color: var(--primary);
+      background: #FFF5F5;
+    }
+    
+    /* Upload Button */
+    .upload-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 12px 20px;
+      font-size: 14px;
+      cursor: pointer;
+      margin-top: 12px;
+      transition: all 0.3s;
+    }
+    
+    .upload-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(230, 0, 18, 0.3);
+    }
+    
+    /* Progress Section */
+    .progress-section {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+    
+    .progress-title {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    
+    .progress-video {
+      height: 200px;
+      background: linear-gradient(135deg, #2C3E50 0%, #3498DB 100%);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      margin-bottom: 20px;
+    }
+    
+    .progress-spinner {
+      width: 60px;
+      height: 60px;
+      border: 3px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 16px;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    .progress-percent {
+      font-size: 28px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    
+    .progress-bar-wrapper {
+      margin-bottom: 16px;
+    }
+    
+    .progress-bar {
+      height: 8px;
+      background: var(--bg);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary) 0%, var(--secondary) 100%);
+      border-radius: 4px;
+      transition: width 0.5s ease;
+    }
+    
+    .progress-steps {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 8px;
+    }
+    
+    .progress-step {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    
+    .progress-step.done {
+      color: var(--success);
+    }
+    
+    .progress-step.active {
+      color: var(--primary);
+      font-weight: 600;
+    }
+    
+    /* Result Section */
+    .result-section {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      text-align: center;
+    }
+    
+    .result-video {
+      height: 220px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      margin-bottom: 20px;
+      font-size: 60px;
+    }
+    
+    .result-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+    }
+    
+    .result-btn {
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: all 0.3s;
+    }
+    
+    .result-btn.primary {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      color: white;
+    }
+    
+    .result-btn.secondary {
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    
+    .result-btn:hover {
+      transform: translateY(-2px);
+    }
+    
+    /* IP Library Page */
+    .ip-categories {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+    
+    .ip-category {
+      padding: 8px 16px;
+      background: white;
+      border-radius: 20px;
+      font-size: 13px;
+      white-space: nowrap;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      transition: all 0.3s;
+    }
+    
+    .ip-category.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+    
+    .ip-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    
+    .ip-item {
+      background: white;
+      border-radius: 12px;
+      padding: 12px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      border: 1px solid var(--border);
+    }
+    
+    .ip-item:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .ip-avatar {
+      width: 60px;
+      height: 60px;
+      border-radius: 12px;
+      margin: 0 auto 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 30px;
+    }
+    
+    .ip-name {
+      font-size: 12px;
+      font-weight: 500;
+    }
+    
+    /* My Works Page */
+    .works-tabs {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    
+    .works-tab {
+      padding: 10px 20px;
+      background: white;
+      border-radius: 20px;
+      font-size: 14px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      transition: all 0.3s;
+    }
+    
+    .works-tab.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+    
+    .works-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    
+    .work-item {
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      transition: all 0.3s;
+    }
+    
+    .work-item:hover {
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .work-thumb {
+      width: 100px;
+      height: 80px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 30px;
+    }
+    
+    .work-info {
+      flex: 1;
+      padding: 12px;
+    }
+    
+    .work-title {
+      font-size: 14px;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+    
+    .work-date {
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    
+    .work-status {
+      font-size: 12px;
+      color: var(--success);
+      margin-top: 4px;
+    }
+    
+    /* Bottom Navigation */
+    .bottom-nav {
+      position: fixed;
+      bottom: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100%;
+      max-width: 430px;
+      background: white;
+      border-top: 1px solid var(--border);
+      display: flex;
+      z-index: 100;
+    }
+    
+    .nav-item {
+      flex: 1;
+      padding: 10px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    .nav-icon {
+      font-size: 22px;
+      margin-bottom: 2px;
+    }
+    
+    .nav-label {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+    
+    .nav-item.active .nav-label {
+      color: var(--primary);
+    }
+    
+    .nav-item.active .nav-icon {
+      color: var(--primary);
+    }
+    
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+    }
+    
+    .empty-icon {
+      font-size: 60px;
+      margin-bottom: 16px;
+    }
+    
+    .empty-text {
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+    
+    /* Bottom Chat Input */
+    .chat-bottom-input {
+      position: sticky;
+      bottom: 60px;
+      background: white;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+    }
+    
+    /* Floating Button */
+    .fab {
+      position: fixed;
+      bottom: 80px;
+      right: 20px;
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+      color: white;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      box-shadow: 0 4px 16px rgba(230, 0, 18, 0.4);
+      transition: all 0.3s;
+      display: none;
+    }
+    
+    .fab:hover {
+      transform: scale(1.1);
+    }
+    
+    .page-chat .fab {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    /* Creation Details Card */
+    .creation-details {
+      background: var(--bg);
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 16px;
+    }
+    
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      font-size: 14px;
+    }
+    
+    .detail-label {
+      color: var(--text-secondary);
+    }
+    
+    .detail-value {
+      font-weight: 500;
+    }
+    
+    /* Tips */
+    .tips-card {
+      background: linear-gradient(135deg, #FFF9E6 0%, #FFFBF0 100%);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-top: 16px;
+      border-left: 3px solid var(--secondary);
+    }
+    
+    .tips-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--secondary);
+      margin-bottom: 4px;
+    }
+    
+    .tips-text {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+  </style>
+</head>
+<body>
+  <div class="app" id="app">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-top">
+        <div class="header-title">联通AI彩铃</div>
+        <div class="header-icon">👤</div>
+      </div>
+    </div>
+    
+    <!-- Tab Navigation -->
+    <div class="tab-nav">
+      <div class="tab-item active" data-page="home">首页</div>
+      <div class="tab-item" data-page="ip">IP库</div>
+      <div class="tab-item" data-page="works">我的作品</div>
+    </div>
+    
+    <!-- Home Page -->
+    <div class="page active" id="page-home">
+      <!-- Agent Hero -->
+      <div class="agent-hero">
+        <div class="agent-avatar">🤖</div>
+        <div class="agent-title">小鸿创作助手</div>
+        <div class="agent-subtitle">告诉我您的想法，我帮您创作专属视频彩铃</div>
+      </div>
+      
+      <!-- Chat Input -->
+      <div class="chat-input-wrapper">
+        <div class="chat-input">
+          <input type="text" placeholder="请输入您的创作想法..." id="main-input">
+          <button class="voice-btn">🎤</button>
+          <button class="send-btn" onclick="startChat()">➤</button>
+        </div>
+      </div>
+      
+      <!-- Quick Suggestions -->
+      <div class="quick-suggestions">
+        <div class="section-title">💡 试试说</div>
+        <div class="suggestion-list">
+          <div class="suggestion-item" onclick="quickStart('拜年彩铃')">
+            <span class="icon">🎊</span>帮我做一个拜年视频
+          </div>
+          <div class="suggestion-item" onclick="quickStart('AI写真')">
+            <span class="icon">📸</span>把照片变成动漫风格
+          </div>
+          <div class="suggestion-item" onclick="quickStart('IP创作')">
+            <span class="icon">🎮</span>生成王者荣耀英雄视频
+          </div>
+        </div>
+      </div>
+      
+      <!-- Quick Actions -->
+      <div class="quick-actions">
+        <div class="section-title">🎨 快捷创作</div>
+        <div class="action-grid">
+          <div class="action-item" onclick="showPage('chat'); startChatFlow('ai-photo')">
+            <div class="action-icon">📸</div>
+            <div class="action-label">AI写真</div>
+          </div>
+          <div class="action-item" onclick="showPage('chat'); startChatFlow('digital-human')">
+            <div class="action-icon">🎬</div>
+            <div class="action-label">数字人</div>
+          </div>
+          <div class="action-item" onclick="showPage('chat'); startChatFlow('ip-create')">
+            <div class="action-icon">🎮</div>
+            <div class="action-label">IP创作</div>
+          </div>
+          <div class="action-item" onclick="showPage('chat'); startChatFlow('enterprise')">
+            <div class="action-icon">🏢</div>
+            <div class="action-label">企业版</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Hot Templates -->
+      <div class="hot-templates">
+        <div class="section-title">📰 热门创作</div>
+        <div class="template-list">
+          <div class="template-item" onclick="quickStart('新春拜年')">
+            <div class="template-preview">🏮</div>
+            <div class="template-info">
+              <div class="template-name">新春拜年模板</div>
+              <div class="template-users">12.8万人已使用</div>
+            </div>
+          </div>
+          <div class="template-item" onclick="quickStart('王者荣耀')">
+            <div class="template-preview">⚔️</div>
+            <div class="template-info">
+              <div class="template-name">王者荣耀英雄创作</div>
+              <div class="template-users">8.5万人已使用</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Chat Page -->
+    <div class="page" id="page-chat">
+      <div class="chat-page">
+        <div class="chat-messages" id="chat-messages">
+          <!-- Messages will be inserted here -->
+        </div>
+        
+        <div class="chat-bottom-input">
+          <div class="chat-input">
+            <input type="text" placeholder="请输入或选择..." id="chat-input">
+            <button class="voice-btn">🎤</button>
+            <button class="send-btn" onclick="sendUserMessage()">➤</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- IP Library Page -->
+    <div class="page" id="page-ip">
+      <div class="ip-categories">
+        <div class="ip-category active">全部</div>
+        <div class="ip-category">动漫IP</div>
+        <div class="ip-category">游戏IP</div>
+        <div class="ip-category">影视IP</div>
+        <div class="ip-category">体育IP</div>
+      </div>
+      
+      <div class="ip-grid">
+        <div class="ip-item" onclick="selectIP('小猪佩奇')">
+          <div class="ip-avatar" style="background: #FFB6C1;">🐷</div>
+          <div class="ip-name">小猪佩奇</div>
+        </div>
+        <div class="ip-item" onclick="selectIP('熊出没')">
+          <div class="ip-avatar" style="background: #8B4513;">🐻</div>
+          <div class="ip-name">熊出没</div>
+        </div>
+        <div class="ip-item" onclick="selectIP('喜羊羊')">
+          <div class="ip-avatar" style="background: #87CEEB;">🐑</div>
+          <div class="ip-name">喜羊羊</div>
+        </div>
+        <div class="ip-item" onclick="selectIP('王者荣耀-李白')">
+          <div class="ip-avatar" style="background: #4169E1;">⚔️</div>
+          <div class="ip-name">李白</div>
+        </div>
+        <div class="ip-item" onclick="selectIP('王者荣耀-貂蝉')">
+          <div class="ip-avatar" style="background: #FF69B4;">💃</div>
+          <div class="ip-name">貂蝉</div>
+        </div>
+        <div class="ip-item" onclick="selectIP('王者荣耀-韩信')">
+          <div class="ip-avatar" style="background: #DC143C;">🗡️</div>
+          <div class="ip-name">韩信</div>
+        </div>
+        <div class="ip-item" onclick="selectIP('功夫熊猫')">
+          <div class="ip-avatar" style="background: #228B22;">🐼</div>
+          <div class="ip-name">功夫熊猫</div>
+        </div>
+        <div class="ip-item" onclick="selectIP('变形金刚')">
+          <div class="ip-avatar" style="background: #FF6347;">🤖</div>
+          <div class="ip-name">变形金刚</div>
+        </div>
+        <div class="ip-item" onclick="selectIP('奥特曼')">
+          <div class="ip-avatar" style="background: #FFD700;">🦸</div>
+          <div class="ip-name">奥特曼</div>
+        </div>
+        <div class="ip-item" onclick="selectIP('CBA球星')">
+          <div class="ip-avatar" style="background: #FF8C00;">🏀</div>
+          <div class="ip-name">CBA球星</div>
+        </div>
+        <div class="ip-item" onclick="selectIP('哆啦A梦')">
+          <div class="ip-avatar" style="background: #00BFFF;">🤖</div>
+          <div class="ip-name">哆啦A梦</div>
+        </div>
+        <div class="ip-item" onclick="selectIP('海绵宝宝')">
+          <div class="ip-avatar" style="background: #FFFF00;">🧽</div>
+          <div class="ip-name">海绵宝宝</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- My Works Page -->
+    <div class="page" id="page-works">
+      <div class="works-tabs">
+        <div class="works-tab active">全部</div>
+        <div class="works-tab">我的彩铃</div>
+        <div class="works-tab">创作历史</div>
+      </div>
+      
+      <div class="works-list">
+        <div class="work-item">
+          <div class="work-thumb">🎊</div>
+          <div class="work-info">
+            <div class="work-title">新春拜年视频</div>
+            <div class="work-date">2026-03-10 创建</div>
+            <div class="work-status">✅ 已设为彩铃</div>
+          </div>
+        </div>
+        <div class="work-item">
+          <div class="work-thumb">⚔️</div>
+          <div class="work-info">
+            <div class="work-title">王者荣耀-李白主题</div>
+            <div class="work-date">2026-03-08 创建</div>
+            <div class="work-status">✅ 已设为彩铃</div>
+          </div>
+        </div>
+        <div class="work-item">
+          <div class="work-thumb">📸</div>
+          <div class="work-info">
+            <div class="work-title">AI写真-职业形象</div>
+            <div class="work-date">2026-03-05 创建</div>
+            <div class="work-status">⏳ 草稿</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Bottom Navigation -->
+    <div class="bottom-nav">
+      <div class="nav-item active" data-page="home">
+        <div class="nav-icon">🏠</div>
+        <div class="nav-label">首页</div>
+      </div>
+      <div class="nav-item" data-page="ip">
+        <div class="nav-icon">🎭</div>
+        <div class="nav-label">IP库</div>
+      </div>
+      <div class="nav-item" data-page="works">
+        <div class="nav-icon">📁</div>
+        <div class="nav-label">我的</div>
+      </div>
+    </div>
+    
+    <!-- Floating Action Button -->
+    <button class="fab" onclick="showPage('home')">✚</button>
+  </div>
+  
+  <script>
+    // State
+    let currentPage = 'home';
+    let chatStep = 0;
+    let chatData = {};
+    
+    // Page Navigation
+    function showPage(page) {
+      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      
+      document.getElementById('page-' + page).classList.add('active');
+      document.querySelector(`.tab-item[data-page="${page}"]`)?.classList.add('active');
+      document.querySelector(`.nav-item[data-page="${page}"]`)?.classList.add('active');
+      
+      currentPage = page;
+      
+      // Show/hide FAB
+      document.querySelector('.fab').style.display = page === 'chat' ? 'flex' : 'none';
+    }
+    
+    // Tab Navigation
+    document.querySelectorAll('.tab-item, .nav-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const page = item.dataset.page;
+        if (page) showPage(page);
+      });
+    });
+    
+    // Quick Start
+    function quickStart(type) {
+      showPage('chat');
+      initChat(type);
+    }
+    
+    // Start Chat from Main Input
+    function startChat() {
+      const input = document.getElementById('main-input');
+      const text = input.value.trim();
+      if (text) {
+        showPage('chat');
+        initChat(text);
+        input.value = '';
+      }
+    }
+    
+    // Initialize Chat
+    function initChat(type) {
+      chatStep = 0;
+      chatData = { type };
+      
+      const messagesContainer = document.getElementById('chat-messages');
+      messagesContainer.innerHTML = '';
+      
+      // First agent message
+      setTimeout(() => {
+        addAgentMessage(
+          `您好！我是小鸿，联通AI彩铃创作助手。我可以帮您创作专属视频彩铃～`,
+          []
+        );
+        
+        setTimeout(() => {
+          addAgentMessage(
+            `请问您想做什么类型的创作呢？`,
+            [
+              { emoji: '🎊', text: '拜年彩铃' },
+              { emoji: '🎂', text: '生日祝福' },
+              { emoji: '📸', text: 'AI写真' },
+              { emoji: '🎮', text: 'IP创作' }
+            ]
+          );
+        }, 800);
+      }, 300);
+    }
+    
+    // Start Chat Flow
+    function startChatFlow(flowType) {
+      initChat(flowType);
+    }
+    
+    // Add Agent Message
+    function addAgentMessage(text, options = []) {
+      const messagesContainer = document.getElementById('chat-messages');
+      
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'message';
+      
+      let optionsHtml = '';
+      if (options.length > 0) {
+        optionsHtml = `<div class="options-grid">
+          ${options.map(opt => `
+            <button class="option-btn" onclick="selectOption('${opt.text}')">
+              <span class="emoji">${opt.emoji}</span>${opt.text}
+            </button>
+          `).join('')}
+        </div>`;
+      }
+      
+      messageDiv.innerHTML = `
+        <div class="message-agent">
+          <div class="message-avatar">🤖</div>
+          <div class="message-content">
+            <div class="message-text">${text}</div>
+            ${optionsHtml}
+          </div>
+        </div>
+      `;
+      
+      messagesContainer.appendChild(messageDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+    
+    // Add User Message
+    function addUserMessage(text) {
+      const messagesContainer = document.getElementById('chat-messages');
+      
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'message message-user';
+      messageDiv.innerHTML = `
+        <div class="message-content">
+          <div class="message-text">${text}</div>
+        </div>
+      `;
+      
+      messagesContainer.appendChild(messageDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+    
+    // Select Option
+    function selectOption(option) {
+      addUserMessage(option);
+      chatStep++;
+      
+      setTimeout(() => {
+        processChatStep(option);
+      }, 500);
+    }
+    
+    // Process Chat Step
+    function processChatStep(userSelection) {
+      switch(chatStep) {
+        case 1:
+          // Step 2: Ask style
+          chatData.category = userSelection;
+          addAgentMessage(
+            `好的！我可以帮您创建一个温馨的${userSelection}～ 请问您希望是什么风格呢？`,
+            [
+              { emoji: '🎊', text: '传统中国风' },
+              { emoji: '🎸', text: '现代潮流风' },
+              { emoji: '👨‍👩‍👧‍👦', text: '温馨家庭风' },
+              { emoji: '😄', text: '趣味搞怪风' }
+            ]
+          );
+          break;
+          
+        case 2:
+          // Step 3: Ask elements
+          chatData.style = userSelection;
+          addAgentMessage(
+            `好的，${userSelection}！您希望包含哪些元素？`,
+            []
+          );
+          
+          setTimeout(() => {
+            addElementChips(['🏮 灯笼', '🧨 鞭炮', '🧧 红包', '🐍 蛇年吉祥', '🎊 福字', '💰 金元宝']);
+          }, 500);
+          break;
+          
+        case 3:
+          // Step 4: Ask for photo
+          chatData.elements = userSelection;
+          addAgentMessage(
+            `收到！您选择的元素：${userSelection}`,
+            []
+          );
+          
+          setTimeout(() => {
+            addAgentMessage(
+              `您也可以上传照片，我帮您生成专属视频～`,
+              []
+            );
+            
+            setTimeout(() => {
+              addUploadButton();
+            }, 500);
+          }, 500);
+          break;
+          
+        case 4:
+          // Step 5: Show progress
+          addAgentMessage(
+            `好的！我正在为您创作，请稍候...`,
+            []
+          );
+          
+          setTimeout(() => {
+            showProgress();
+          }, 500);
+          break;
+      }
+    }
+    
+    // Add Element Chips
+    function addElementChips(elements) {
+      const messagesContainer = document.getElementById('chat-messages');
+      
+      const chipsDiv = document.createElement('div');
+      chipsDiv.className = 'message';
+      chipsDiv.innerHTML = `
+        <div class="message-agent">
+          <div class="message-avatar">🤖</div>
+          <div class="message-content">
+            <div class="element-chips">
+              ${elements.map(el => `
+                <div class="element-chip" onclick="selectElement('${el}')">${el}</div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+      
+      messagesContainer.appendChild(chipsDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+    
+    // Select Element
+    function selectElement(element) {
+      // Toggle selection
+      event.target.classList.toggle('selected');
+      
+      // Get all selected elements
+      const selected = document.querySelectorAll('.element-chip.selected');
+      if (selected.length > 0) {
+        const selectedText = Array.from(selected).map(el => el.textContent).join('、');
+        
+        // Show confirm button
+        setTimeout(() => {
+          const messagesContainer = document.getElementById('chat-messages');
+          const existingConfirm = document.getElementById('confirm-elements');
+          if (!existingConfirm) {
+            const confirmDiv = document.createElement('div');
+            confirmDiv.id = 'confirm-elements';
+            confirmDiv.className = 'message';
+            confirmDiv.innerHTML = `
+              <div class="message-agent">
+                <div class="message-avatar">🤖</div>
+                <div class="message-content">
+                  <button class="upload-btn" onclick="confirmElements('${selectedText}')">
+                    ✅ 确认选择
+                  </button>
+                </div>
+              </div>
+            `;
+            messagesContainer.appendChild(confirmDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+          }
+        }, 300);
+      }
+    }
+    
+    // Confirm Elements
+    function confirmElements(elements) {
+      addUserMessage(`选择元素：${elements}`);
+      chatStep = 3;
+      processChatStep(elements);
+    }
+    
+    // Add Upload Button
+    function addUploadButton() {
+      const messagesContainer = document.getElementById('chat-messages');
+      
+      const buttonDiv = document.createElement('div');
+      buttonDiv.className = 'message';
+      buttonDiv.innerHTML = `
+        <div class="message-agent">
+          <div class="message-avatar">🤖</div>
+          <div class="message-content">
+            <button class="upload-btn" onclick="startGeneration()">
+              📷 上传照片开始创作
+            </button>
+          </div>
+        </div>
+      `;
+      
+      messagesContainer.appendChild(buttonDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+    
+    // Start Generation
+    function startGeneration() {
+      addUserMessage('已上传照片，开始创作');
+      chatStep = 4;
+      processChatStep('');
+    }
+    
+    // Show Progress
+    function showProgress() {
+      const messagesContainer = document.getElementById('chat-messages');
+      
+      const progressDiv = document.createElement('div');
+      progressDiv.className = 'message';
+      progressDiv.innerHTML = `
+        <div class="progress-section">
+          <div class="progress-title">
+            <div style="font-size: 16px; font-weight: 600;">🎬 小鸿正在为您创作...</div>
+          </div>
+          
+          <div class="progress-video">
+            <div class="progress-spinner"></div>
+            <div class="progress-percent" id="progress-percent">0%</div>
+            <div style="font-size: 14px;">预计剩余时间：30秒</div>
+          </div>
+          
+          <div class="progress-bar-wrapper">
+            <div class="progress-bar">
+              <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+            </div>
+          </div>
+          
+          <div class="progress-steps">
+            <div class="progress-step done" id="step-1">✅ 需求分析</div>
+            <div class="progress-step active" id="step-2">🔄 画面生成</div>
+            <div class="progress-step" id="step-3">⏳ 配乐合成</div>
+          </div>
+          
+          <div class="creation-details">
+            <div class="detail-row">
+              <span class="detail-label">创作类型</span>
+              <span class="detail-value">${chatData.category || '拜年彩铃'}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">风格</span>
+              <span class="detail-value">${chatData.style || '传统中国风'}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">时长</span>
+              <span class="detail-value">15秒</span>
+            </div>
+          </div>
+          
+          <div class="tips-card">
+            <div class="tips-title">💡 创作提示</div>
+            <div class="tips-text">您可以随时调整创作内容，小鸿会根据您的反馈优化</div>
+          </div>
+        </div>
+      `;
+      
+      messagesContainer.appendChild(progressDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      
+      // Simulate progress
+      simulateProgress();
+    }
+    
+    // Simulate Progress
+    function simulateProgress() {
+      let progress = 0;
+      const interval = setInterval(() => {
+        progress += Math.random() * 15;
+        if (progress >= 100) {
+          progress = 100;
+          clearInterval(interval);
+          
+          setTimeout(() => {
+            showResult();
+          }, 500);
+        }
+        
+        document.getElementById('progress-percent').textContent = Math.round(progress) + '%';
+        document.getElementById('progress-fill').style.width = progress + '%';
+        
+        // Update steps
+        if (progress > 30) {
+          document.getElementById('step-1').className = 'progress-step done';
+          document.getElementById('step-2').className = 'progress-step done';
+          document.getElementById('step-3').className = 'progress-step active';
+        }
+        if (progress > 60) {
+          document.getElementById('step-3').className = 'progress-step done';
+        }
+      }, 500);
+    }
+    
+    // Show Result
+    function showResult() {
+      const messagesContainer = document.getElementById('chat-messages');
+      
+      const resultDiv = document.createElement('div');
+      resultDiv.className = 'message';
+      resultDiv.innerHTML = `
+        <div class="result-section">
+          <div style="margin-bottom: 16px;">
+            <div style="font-size: 18px; font-weight: 600;">✨ 创作完成！</div>
+          </div>
+          
+          <div class="result-video">
+            🎊
+          </div>
+          
+          <div style="font-size: 14px; color: var(--text-secondary); margin-bottom: 20px;">
+            您的${chatData.category || '拜年彩铃'}已生成
+          </div>
+          
+          <div class="result-actions">
+            <button class="result-btn primary" onclick="setAsRingtone()">✅ 设为彩铃</button>
+            <button class="result-btn secondary" onclick="regenerate()">🔄 重新生成</button>
+          </div>
+          
+          <div style="margin-top: 16px;">
+            <button class="result-btn secondary" style="width: 100%;">📤 分享给好友</button>
+          </div>
+        </div>
+      `;
+      
+      messagesContainer.appendChild(resultDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+    
+    // Set as Ringtone
+    function setAsRingtone() {
+      const messagesContainer = document.getElementById('chat-messages');
+      
+      const successDiv = document.createElement('div');
+      successDiv.className = 'message';
+      successDiv.innerHTML = `
+        <div class="message-agent">
+          <div class="message-avatar">🤖</div>
+          <div class="message-content">
+            <div class="message-text">
+              ✅ 设置成功！<br><br>
+              您的视频彩铃已生效<br>
+              朋友来电时将看到您的专属视频<br><br>
+              ${chatData.category === '拜年彩铃' ? '春节快乐！🎊' : '感谢使用联通AI彩铃！'}
+            </div>
+          </div>
+        </div>
+      `;
+      
+      messagesContainer.appendChild(successDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+    
+    // Regenerate
+    function regenerate() {
+      chatStep = 1;
+      const messagesContainer = document.getElementById('chat-messages');
+      messagesContainer.innerHTML = '';
+      initChat(chatData.type);
+    }
+    
+    // Send User Message
+    function sendUserMessage() {
+      const input = document.getElementById('chat-input');
+      const text = input.value.trim();
+      if (text) {
+        addUserMessage(text);
+        input.value = '';
+        
+        // Simple response
+        setTimeout(() => {
+          addAgentMessage(
+            `好的，我理解您想要"${text}"。让我来帮您创作～`,
+            [
+              { emoji: '🎊', text: '继续创作' },
+              { emoji: '🔄', text: '换个想法' }
+            ]
+          );
+        }, 500);
+      }
+    }
+    
+    // Enter key to send
+    document.getElementById('main-input').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') startChat();
+    });
+    
+    document.getElementById('chat-input').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') sendUserMessage();
+    });
+    
+    // Select IP
+    function selectIP(ipName) {
+      showPage('chat');
+      chatData.type = 'IP创作';
+      chatData.ipName = ipName;
+      
+      initChat('IP创作');
+      
+      setTimeout(() => {
+        addAgentMessage(
+          `您选择了【${ipName}】！我可以帮您创作${ipName}主题的视频彩铃～`,
+          []
+        );
+        
+        setTimeout(() => {
+          addAgentMessage(
+            `请问您想做什么类型的创作？`,
+            [
+              { emoji: '🎊', text: '拜年祝福' },
+              { emoji: '🎂', text: '生日祝福' },
+              { emoji: '💪', text: '励志视频' },
+              { emoji: '😄', text: '趣味搞怪' }
+            ]
+          );
+        }, 800);
+      }, 1000);
+    }
+    
+    // IP Category Filter
+    document.querySelectorAll('.ip-category').forEach(cat => {
+      cat.addEventListener('click', () => {
+        document.querySelectorAll('.ip-category').forEach(c => c.classList.remove('active'));
+        cat.classList.add('active');
+      });
+    });
+    
+    // Works Tab
+    document.querySelectorAll('.works-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.works-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>
