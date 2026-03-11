@@ -1,9 +1,9 @@
 {
   "agent:researcher:main": {
-    "sessionId": "71d9bbdd-de04-47a5-8528-62762c92d6cb",
-    "updatedAt": 1772841441465,
+    "sessionId": "7e596dba-36ce-421d-b530-6fc06fde010b",
+    "updatedAt": 1773243529801,
     "skillsSnapshot": {
-      "prompt": "\n\nThe following skills provide specialized instructions for specific tasks.\nUse the read tool to load a skill's file when the task matches its description.\nWhen a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.\n\n<available_skills>\n  <skill>\n    <name>feishu-doc</name>\n    <description>Feishu document read/write operations. Activate when user mentions Feishu docs, cloud docs, or docx links.\n</description>\n    <location>~/.openclaw/extensions/feishu/skills/feishu-doc/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>feishu-drive</name>\n    <description>Feishu cloud storage file management. Activate when user mentions cloud space, folders, drive.\n</description>\n    <location>~/.openclaw/extensions/feishu/skills/feishu-drive/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>feishu-perm</name>\n    <description>Feishu permission management for documents and files. Activate when user mentions sharing, permissions, collaborators.\n</description>\n    <location>~/.openclaw/extensions/feishu/skills/feishu-perm/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>feishu-wiki</name>\n    <description>Feishu knowledge base navigation. Activate when user mentions knowledge base, wiki, or wiki links.\n</description>\n    <location>~/.openclaw/extensions/feishu/skills/feishu-wiki/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>1password</name>\n    <description>Set up and use 1Password CLI (op). Use when installing the CLI, enabling desktop app integration, signing in (single or multi-account), or reading/injecting/running secrets via op.</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/1password/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>clawhub</name>\n    <description>Use the ClawHub CLI to search, install, update, and publish agent skills from clawhub.com. Use when you need to fetch new skills on the fly, sync installed skills to latest or a specific version, or publish new/updated skill folders with the npm-installed clawhub CLI.</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/clawhub/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>coding-agent</name>\n    <description>Delegate coding tasks to Codex, Claude Code, or Pi agents via background process. Use when: (1) building/creating new features or apps, (2) reviewing PRs (spawn in temp dir), (3) refactoring large codebases, (4) iterative coding that needs file exploration. NOT for: simple one-liner fixes (just edit), reading code (use read tool), thread-bound ACP harness requests in chat (for example spawn/run Codex or Claude Code in a Discord thread; use sessions_spawn with runtime:&quot;acp&quot;), or any work in ~/clawd workspace (never spawn agents here). Requires a bash tool that supports pty:true.</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/coding-agent/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>gemini</name>\n    <description>Gemini CLI for one-shot Q&amp;A, summaries, and generation.</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/gemini/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>gh-issues</name>\n    <description>Fetch GitHub issues, spawn sub-agents to implement fixes and open PRs, then monitor and address PR review comments. Usage: /gh-issues [owner/repo] [--label bug] [--limit 5] [--milestone v1.0] [--assignee @me] [--fork user/repo] [--watch] [--interval 5] [--reviews-only] [--cron] [--dry-run] [--model glm-5] [--notify-channel -1002381931352]</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/gh-issues/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>github</name>\n    <description>Interact with GitHub using the `gh` CLI. Use `gh issue`, `gh pr`, `gh run`, and `gh api` for issues, PRs, CI runs, and advanced queries.</description>\n    <location>~/.openclaw/workspace-researcher/skills/github/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>gog</name>\n    <description>Google Workspace CLI for Gmail, Calendar, Drive, Contacts, Sheets, and Docs.</description>\n    <location>~/.openclaw/workspace-researcher/skills/gog/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>healthcheck</name>\n    <description>Host security hardening and risk-tolerance configuration for OpenClaw deployments. Use when a user asks for security audits, firewall/SSH/update hardening, risk posture, exposure review, OpenClaw cron scheduling for periodic checks, or version status checks on a machine running OpenClaw (laptop, workstation, Pi, VPS).</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/healthcheck/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>himalaya</name>\n    <description>CLI to manage emails via IMAP/SMTP. Use `himalaya` to list, read, write, reply, forward, search, and organize emails from the terminal. Supports multiple accounts and message composition with MML (MIME Meta Language).</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/himalaya/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>mcporter</name>\n    <description>Use the mcporter CLI to list, configure, auth, and call MCP servers/tools directly (HTTP or stdio), including ad-hoc servers, config edits, and CLI/type generation.</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/mcporter/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>nano-pdf</name>\n    <description>Edit PDFs with natural-language instructions using the nano-pdf CLI.</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/nano-pdf/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>openai-whisper</name>\n    <description>Local speech-to-text with the Whisper CLI (no API key).</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/openai-whisper/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>skill-creator</name>\n    <description>Create or update AgentSkills. Use when designing, structuring, or packaging skills with scripts, references, and assets.</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/skill-creator/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>video-frames</name>\n    <description>Extract frames or short clips from videos using ffmpeg.</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/video-frames/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>weather</name>\n    <description>Get current weather and forecasts via wttr.in or Open-Meteo. Use when: user asks about weather, temperature, or forecasts for any location. NOT for: historical weather data, severe weather alerts, or detailed meteorological analysis. No API key needed.</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/weather/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>apify-competitor-intelligence</name>\n    <description>Analyze competitor strategies, content, pricing, ads, and market positioning across Google Maps, Booking.com, Facebook, Instagram, YouTube, and TikTok.</description>\n    <location>~/.agents/skills/apify-competitor-intelligence/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>apify-market-research</name>\n    <description>Analyze market conditions, geographic opportunities, pricing, consumer behavior, and product validation across Google Maps, Facebook, Instagram, Booking.com, and TripAdvisor.</description>\n    <location>~/.agents/skills/apify-market-research/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>ddg-search</name>\n    <description>DuckDuckGo HTML search scraper CLI with JSON, CSV, OpenSearch, markdown, and compact outputs.</description>\n    <location>~/.openclaw/workspace-researcher/skills/ddg-search-cli/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>research</name>\n    <description>Comprehensive research grounded in web data with explicit citations. Use when you need multi-source synthesis—comparisons, current events, market analysis, detailed reports. </description>\n    <location>~/.agents/skills/research/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>academic-deep-research</name>\n    <description>Transparent, rigorous research with full methodology — not a black-box API wrapper. Conducts exhaustive investigation through mandated 2-cycle research per theme, APA 7th citations, evidence hierarchy, and 3 user checkpoints. Self-contained using native OpenClaw tools (web_search, web_fetch, sessions_spawn). Use for literature reviews, competitive intelligence, or any research requiring academic rigor and reproducibility.</description>\n    <location>~/.openclaw/workspace-researcher/skills/academic-deep-research/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>ai-agent-helper</name>\n    <description>AI Agent 設定同優化助手 - Prompt Engineering、Task Decomposition、Agent Loop設計</description>\n    <location>~/.openclaw/workspace-researcher/skills/ai-agent-helper/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>automation-workflows</name>\n    <description>Design and implement automation workflows to save time and scale operations as a solopreneur. Use when identifying repetitive tasks to automate, building workflows across tools, setting up triggers and actions, or optimizing existing automations. Covers automation opportunity identification, workflow design, tool selection (Zapier, Make, n8n), testing, and maintenance. Trigger on &quot;automate&quot;, &quot;automation&quot;, &quot;workflow automation&quot;, &quot;save time&quot;, &quot;reduce manual work&quot;, &quot;automate my business&quot;, &quot;no-code automation&quot;.</description>\n    <location>~/.openclaw/workspace-researcher/skills/automation-workflows/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>capability-evolver</name>\n    <description>A self-evolution engine for AI agents. Analyzes runtime history to identify improvements and applies protocol-constrained evolution.</description>\n    <location>~/.openclaw/workspace-researcher/skills/capability-evolver/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>deep-research-pro</name>\n    <description>Multi-source deep research agent. Searches the web, synthesizes findings, and delivers cited reports. No API keys required.</description>\n    <location>~/.openclaw/workspace-researcher/skills/deep-research-pro/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>find-skills</name>\n    <description>Helps users discover and install agent skills when they ask questions like &quot;how do I do X&quot;, &quot;find a skill for X&quot;, &quot;is there a skill that can...&quot;, or express interest in extending capabilities. This skill should be used when the user is looking for functionality that might exist as an installable skill.</description>\n    <location>~/.openclaw/workspace-researcher/skills/find-skills/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>multi-search-engine</name>\n    <description>Multi search engine integration with 17 engines (8 CN + 9 Global). Supports advanced search operators, time filters, site search, privacy engines, and WolframAlpha knowledge queries. No API keys required.</description>\n    <location>~/.openclaw/workspace-researcher/skills/multi-search-engine/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>proactive-agent</name>\n    <description>Transform AI agents from task-followers into proactive partners that anticipate needs and continuously improve. Now with WAL Protocol, Working Buffer, Autonomous Crons, and battle-tested patterns. Part of the Hal Stack 🦞</description>\n    <location>~/.openclaw/workspace-researcher/skills/proactive-agent/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>self-improvement</name>\n    <description>Captures learnings, errors, and corrections to enable continuous improvement. Use when: (1) A command or operation fails unexpectedly, (2) User corrects Claude (&apos;No, that&apos;s wrong...&apos;, &apos;Actually...&apos;), (3) User requests a capability that doesn&apos;t exist, (4) An external API or tool fails, (5) Claude realizes its knowledge is outdated or incorrect, (6) A better approach is discovered for a recurring task. Also review learnings before major tasks.</description>\n    <location>~/.openclaw/workspace-researcher/skills/self-improving-agent/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>skill-vetter</name>\n    <description>Security-first skill vetting for AI agents. Use before installing any skill from ClawdHub, GitHub, or other sources. Checks for red flags, permission scope, and suspicious patterns.</description>\n    <location>~/.openclaw/workspace-researcher/skills/skill-vetter/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>tavily</name>\n    <description>AI-optimized web search via Tavily API. Returns concise, relevant results for AI agents.</description>\n    <location>~/.openclaw/workspace-researcher/skills/tavily-search/SKILL.md</location>\n  </skill>\n</available_skills>",
+      "prompt": "\n\nThe following skills provide specialized instructions for specific tasks.\nUse the read tool to load a skill's file when the task matches its description.\nWhen a skill file references a relative path, resolve it against the skill directory (parent of SKILL.md / dirname of the path) and use that absolute path in tool commands.\n\n<available_skills>\n  <skill>\n    <name>feishu-doc</name>\n    <description>Feishu document read/write operations. Activate when user mentions Feishu docs, cloud docs, or docx links.\n</description>\n    <location>~/.openclaw/extensions/feishu/skills/feishu-doc/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>feishu-drive</name>\n    <description>Feishu cloud storage file management. Activate when user mentions cloud space, folders, drive.\n</description>\n    <location>~/.openclaw/extensions/feishu/skills/feishu-drive/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>feishu-perm</name>\n    <description>Feishu permission management for documents and files. Activate when user mentions sharing, permissions, collaborators.\n</description>\n    <location>~/.openclaw/extensions/feishu/skills/feishu-perm/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>feishu-wiki</name>\n    <description>Feishu knowledge base navigation. Activate when user mentions knowledge base, wiki, or wiki links.\n</description>\n    <location>~/.openclaw/extensions/feishu/skills/feishu-wiki/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>feishu-bitable</name>\n    <description>飞书多维表格（Bitable）的创建、查询、编辑和管理工具。包含 27 种字段类型支持、高级筛选、批量操作和视图管理。\n\n**当以下情况时使用此 Skill**：\n(1) 需要创建或管理飞书多维表格 App\n(2) 需要在多维表格中新增、查询、修改、删除记录（行数据）\n(3) 需要管理字段（列）、视图、数据表\n(4) 用户提到&quot;多维表格&quot;、&quot;bitable&quot;、&quot;数据表&quot;、&quot;记录&quot;、&quot;字段&quot;\n(5) 需要批量导入数据或批量更新多维表格\n</description>\n    <location>~/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-bitable/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>feishu-calendar</name>\n    <description>飞书日历与日程管理工具集。包含日历管理、日程管理、参会人管理、忙闲查询。\n</description>\n    <location>~/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-calendar/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>feishu-channel-rules</name>\n    <description>Lark/Feishu channel output rules. Always active in Lark conversations.\n</description>\n    <location>~/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-channel-rules/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>feishu-create-doc</name>\n    <description>创建飞书云文档。从 Lark-flavored Markdown 内容创建新的飞书云文档，支持指定创建位置（文件夹/知识库/知识空间）。\n</description>\n    <location>~/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-create-doc/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>feishu-fetch-doc</name>\n    <description>获取飞书云文档内容。返回文档的 Markdown 内容，支持处理文档中的图片、文件和画板（需配合 feishu_doc_media 工具）。\n</description>\n    <location>~/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-fetch-doc/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>feishu-im-read</name>\n    <description>飞书 IM 消息读取工具使用指南，覆盖会话消息获取、话题回复读取、跨会话消息搜索、图片/文件资源下载。\n\n**当以下情况时使用此 Skill**:\n(1) 需要获取群聊或单聊的历史消息\n(2) 需要读取话题（thread）内的回复消息\n(3) 需要跨会话搜索消息（按关键词、发送者、时间等条件）\n(4) 消息中包含图片、文件、音频、视频，需要下载\n(5) 用户提到&quot;聊天记录&quot;、&quot;消息&quot;、&quot;群里说了什么&quot;、&quot;话题回复&quot;、&quot;搜索消息&quot;、&quot;图片&quot;、&quot;文件下载&quot;\n(6) 需要按时间范围过滤消息、分页获取更多消息\n</description>\n    <location>~/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-im-read/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>feishu-task</name>\n    <description>飞书任务管理工具,用于创建、查询、更新任务和清单。\n\n**当以下情况时使用此 Skill**:\n(1) 需要创建、查询、更新、删除任务\n(2) 需要创建、管理任务清单\n(3) 需要查看任务列表或清单内的任务\n(4) 用户提到&quot;任务&quot;、&quot;待办&quot;、&quot;to-do&quot;、&quot;清单&quot;、&quot;task&quot;\n(5) 需要设置任务负责人、关注人、截止时间\n</description>\n    <location>~/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-task/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>feishu-troubleshoot</name>\n    <description>飞书插件问题排查工具。包含常见问题 FAQ 和深度诊断命令（/feishu_doctor）。\n\n常见问题可随时查阅。诊断命令用于排查复杂问题（多次授权仍失败、自动授权无法解决等），\n会检查账户配置、API 连通性、应用权限、用户授权状态，并生成详细的诊断报告和解决方案。\n</description>\n    <location>~/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-troubleshoot/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>feishu-update-doc</name>\n    <description>更新飞书云文档。支持 7 种更新模式：追加、覆盖、定位替换、全文替换、前/后插入、删除。\n</description>\n    <location>~/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-update-doc/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>1password</name>\n    <description>Set up and use 1Password CLI (op). Use when installing the CLI, enabling desktop app integration, signing in (single or multi-account), or reading/injecting/running secrets via op.</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/1password/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>clawhub</name>\n    <description>Use the ClawHub CLI to search, install, update, and publish agent skills from clawhub.com. Use when you need to fetch new skills on the fly, sync installed skills to latest or a specific version, or publish new/updated skill folders with the npm-installed clawhub CLI.</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/clawhub/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>coding-agent</name>\n    <description>Delegate coding tasks to Codex, Claude Code, or Pi agents via background process. Use when: (1) building/creating new features or apps, (2) reviewing PRs (spawn in temp dir), (3) refactoring large codebases, (4) iterative coding that needs file exploration. NOT for: simple one-liner fixes (just edit), reading code (use read tool), thread-bound ACP harness requests in chat (for example spawn/run Codex or Claude Code in a Discord thread; use sessions_spawn with runtime:&quot;acp&quot;), or any work in ~/clawd workspace (never spawn agents here). Claude Code: use --print --permission-mode bypassPermissions (no PTY). Codex/Pi/OpenCode: pty:true required.</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/coding-agent/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>gemini</name>\n    <description>Gemini CLI for one-shot Q&amp;A, summaries, and generation.</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/gemini/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>gh-issues</name>\n    <description>Fetch GitHub issues, spawn sub-agents to implement fixes and open PRs, then monitor and address PR review comments. Usage: /gh-issues [owner/repo] [--label bug] [--limit 5] [--milestone v1.0] [--assignee @me] [--fork user/repo] [--watch] [--interval 5] [--reviews-only] [--cron] [--dry-run] [--model glm-5] [--notify-channel -1002381931352]</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/gh-issues/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>github</name>\n    <description>Interact with GitHub using the `gh` CLI. Use `gh issue`, `gh pr`, `gh run`, and `gh api` for issues, PRs, CI runs, and advanced queries.</description>\n    <location>~/.openclaw/workspace-researcher/skills/github/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>gog</name>\n    <description>Google Workspace CLI for Gmail, Calendar, Drive, Contacts, Sheets, and Docs.</description>\n    <location>~/.openclaw/workspace-researcher/skills/gog/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>healthcheck</name>\n    <description>Host security hardening and risk-tolerance configuration for OpenClaw deployments. Use when a user asks for security audits, firewall/SSH/update hardening, risk posture, exposure review, OpenClaw cron scheduling for periodic checks, or version status checks on a machine running OpenClaw (laptop, workstation, Pi, VPS).</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/healthcheck/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>himalaya</name>\n    <description>CLI to manage emails via IMAP/SMTP. Use `himalaya` to list, read, write, reply, forward, search, and organize emails from the terminal. Supports multiple accounts and message composition with MML (MIME Meta Language).</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/himalaya/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>mcporter</name>\n    <description>Use the mcporter CLI to list, configure, auth, and call MCP servers/tools directly (HTTP or stdio), including ad-hoc servers, config edits, and CLI/type generation.</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/mcporter/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>nano-pdf</name>\n    <description>Edit PDFs with natural-language instructions using the nano-pdf CLI.</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/nano-pdf/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>openai-whisper</name>\n    <description>Local speech-to-text with the Whisper CLI (no API key).</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/openai-whisper/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>skill-creator</name>\n    <description>Create, edit, improve, or audit AgentSkills. Use when creating a new skill from scratch or when asked to improve, review, audit, tidy up, or clean up an existing skill or SKILL.md file. Also use when editing or restructuring a skill directory (moving files to references/ or scripts/, removing stale content, validating against the AgentSkills spec). Triggers on phrases like &quot;create a skill&quot;, &quot;author a skill&quot;, &quot;tidy up a skill&quot;, &quot;improve this skill&quot;, &quot;review the skill&quot;, &quot;clean up the skill&quot;, &quot;audit the skill&quot;.</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/skill-creator/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>video-frames</name>\n    <description>Extract frames or short clips from videos using ffmpeg.</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/video-frames/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>weather</name>\n    <description>Get current weather and forecasts via wttr.in or Open-Meteo. Use when: user asks about weather, temperature, or forecasts for any location. NOT for: historical weather data, severe weather alerts, or detailed meteorological analysis. No API key needed.</description>\n    <location>/opt/homebrew/lib/node_modules/openclaw/skills/weather/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>ddg-search</name>\n    <description>DuckDuckGo HTML search scraper CLI with JSON, CSV, OpenSearch, markdown, and compact outputs.</description>\n    <location>~/.openclaw/workspace-researcher/skills/ddg-search-cli/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>apify-competitor-intelligence</name>\n    <description>Analyze competitor strategies, content, pricing, ads, and market positioning across Google Maps, Booking.com, Facebook, Instagram, YouTube, and TikTok.</description>\n    <location>~/.agents/skills/apify-competitor-intelligence/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>apify-market-research</name>\n    <description>Analyze market conditions, geographic opportunities, pricing, consumer behavior, and product validation across Google Maps, Facebook, Instagram, Booking.com, and TripAdvisor.</description>\n    <location>~/.agents/skills/apify-market-research/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>research</name>\n    <description>Comprehensive research grounded in web data with explicit citations. Use when you need multi-source synthesis—comparisons, current events, market analysis, detailed reports. </description>\n    <location>~/.agents/skills/research/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>academic-deep-research</name>\n    <description>Transparent, rigorous research with full methodology — not a black-box API wrapper. Conducts exhaustive investigation through mandated 2-cycle research per theme, APA 7th citations, evidence hierarchy, and 3 user checkpoints. Self-contained using native OpenClaw tools (web_search, web_fetch, sessions_spawn). Use for literature reviews, competitive intelligence, or any research requiring academic rigor and reproducibility.</description>\n    <location>~/.openclaw/workspace-researcher/skills/academic-deep-research/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>ai-agent-helper</name>\n    <description>AI Agent 設定同優化助手 - Prompt Engineering、Task Decomposition、Agent Loop設計</description>\n    <location>~/.openclaw/workspace-researcher/skills/ai-agent-helper/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>automation-workflows</name>\n    <description>Design and implement automation workflows to save time and scale operations as a solopreneur. Use when identifying repetitive tasks to automate, building workflows across tools, setting up triggers and actions, or optimizing existing automations. Covers automation opportunity identification, workflow design, tool selection (Zapier, Make, n8n), testing, and maintenance. Trigger on &quot;automate&quot;, &quot;automation&quot;, &quot;workflow automation&quot;, &quot;save time&quot;, &quot;reduce manual work&quot;, &quot;automate my business&quot;, &quot;no-code automation&quot;.</description>\n    <location>~/.openclaw/workspace-researcher/skills/automation-workflows/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>capability-evolver</name>\n    <description>A self-evolution engine for AI agents. Analyzes runtime history to identify improvements and applies protocol-constrained evolution.</description>\n    <location>~/.openclaw/workspace-researcher/skills/capability-evolver/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>deep-research-pro</name>\n    <description>Multi-source deep research agent. Searches the web, synthesizes findings, and delivers cited reports. No API keys required.</description>\n    <location>~/.openclaw/workspace-researcher/skills/deep-research-pro/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>find-skills</name>\n    <description>Helps users discover and install agent skills when they ask questions like &quot;how do I do X&quot;, &quot;find a skill for X&quot;, &quot;is there a skill that can...&quot;, or express interest in extending capabilities. This skill should be used when the user is looking for functionality that might exist as an installable skill.</description>\n    <location>~/.openclaw/workspace-researcher/skills/find-skills/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>multi-search-engine</name>\n    <description>Multi search engine integration with 17 engines (8 CN + 9 Global). Supports advanced search operators, time filters, site search, privacy engines, and WolframAlpha knowledge queries. No API keys required.</description>\n    <location>~/.openclaw/workspace-researcher/skills/multi-search-engine/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>proactive-agent</name>\n    <description>Transform AI agents from task-followers into proactive partners that anticipate needs and continuously improve. Now with WAL Protocol, Working Buffer, Autonomous Crons, and battle-tested patterns. Part of the Hal Stack 🦞</description>\n    <location>~/.openclaw/workspace-researcher/skills/proactive-agent/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>self-improvement</name>\n    <description>Captures learnings, errors, and corrections to enable continuous improvement. Use when: (1) A command or operation fails unexpectedly, (2) User corrects Claude (&apos;No, that&apos;s wrong...&apos;, &apos;Actually...&apos;), (3) User requests a capability that doesn&apos;t exist, (4) An external API or tool fails, (5) Claude realizes its knowledge is outdated or incorrect, (6) A better approach is discovered for a recurring task. Also review learnings before major tasks.</description>\n    <location>~/.openclaw/workspace-researcher/skills/self-improving-agent/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>skill-vetter</name>\n    <description>Security-first skill vetting for AI agents. Use before installing any skill from ClawdHub, GitHub, or other sources. Checks for red flags, permission scope, and suspicious patterns.</description>\n    <location>~/.openclaw/workspace-researcher/skills/skill-vetter/SKILL.md</location>\n  </skill>\n  <skill>\n    <name>tavily</name>\n    <description>AI-optimized web search via Tavily API. Returns concise, relevant results for AI agents.</description>\n    <location>~/.openclaw/workspace-researcher/skills/tavily-search/SKILL.md</location>\n  </skill>\n</available_skills>",
       "skills": [
         {
           "name": "feishu-doc"
@@ -16,6 +16,33 @@
         },
         {
           "name": "feishu-wiki"
+        },
+        {
+          "name": "feishu-bitable"
+        },
+        {
+          "name": "feishu-calendar"
+        },
+        {
+          "name": "feishu-channel-rules"
+        },
+        {
+          "name": "feishu-create-doc"
+        },
+        {
+          "name": "feishu-fetch-doc"
+        },
+        {
+          "name": "feishu-im-read"
+        },
+        {
+          "name": "feishu-task"
+        },
+        {
+          "name": "feishu-troubleshoot"
+        },
+        {
+          "name": "feishu-update-doc"
         },
         {
           "name": "1password",
@@ -75,14 +102,14 @@
           "requiredEnv": []
         },
         {
+          "name": "ddg-search",
+          "requiredEnv": []
+        },
+        {
           "name": "apify-competitor-intelligence"
         },
         {
           "name": "apify-market-research"
-        },
-        {
-          "name": "ddg-search",
-          "requiredEnv": []
         },
         {
           "name": "research"
@@ -155,6 +182,78 @@
           "disableModelInvocation": false
         },
         {
+          "name": "feishu-bitable",
+          "description": "飞书多维表格（Bitable）的创建、查询、编辑和管理工具。包含 27 种字段类型支持、高级筛选、批量操作和视图管理。\n\n**当以下情况时使用此 Skill**：\n(1) 需要创建或管理飞书多维表格 App\n(2) 需要在多维表格中新增、查询、修改、删除记录（行数据）\n(3) 需要管理字段（列）、视图、数据表\n(4) 用户提到\"多维表格\"、\"bitable\"、\"数据表\"、\"记录\"、\"字段\"\n(5) 需要批量导入数据或批量更新多维表格\n",
+          "filePath": "/Users/lihzz/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-bitable/SKILL.md",
+          "baseDir": "/Users/lihzz/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-bitable",
+          "source": "openclaw-extra",
+          "disableModelInvocation": false
+        },
+        {
+          "name": "feishu-calendar",
+          "description": "飞书日历与日程管理工具集。包含日历管理、日程管理、参会人管理、忙闲查询。\n",
+          "filePath": "/Users/lihzz/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-calendar/SKILL.md",
+          "baseDir": "/Users/lihzz/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-calendar",
+          "source": "openclaw-extra",
+          "disableModelInvocation": false
+        },
+        {
+          "name": "feishu-channel-rules",
+          "description": "Lark/Feishu channel output rules. Always active in Lark conversations.\n",
+          "filePath": "/Users/lihzz/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-channel-rules/SKILL.md",
+          "baseDir": "/Users/lihzz/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-channel-rules",
+          "source": "openclaw-extra",
+          "disableModelInvocation": false
+        },
+        {
+          "name": "feishu-create-doc",
+          "description": "创建飞书云文档。从 Lark-flavored Markdown 内容创建新的飞书云文档，支持指定创建位置（文件夹/知识库/知识空间）。\n",
+          "filePath": "/Users/lihzz/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-create-doc/SKILL.md",
+          "baseDir": "/Users/lihzz/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-create-doc",
+          "source": "openclaw-extra",
+          "disableModelInvocation": false
+        },
+        {
+          "name": "feishu-fetch-doc",
+          "description": "获取飞书云文档内容。返回文档的 Markdown 内容，支持处理文档中的图片、文件和画板（需配合 feishu_doc_media 工具）。\n",
+          "filePath": "/Users/lihzz/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-fetch-doc/SKILL.md",
+          "baseDir": "/Users/lihzz/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-fetch-doc",
+          "source": "openclaw-extra",
+          "disableModelInvocation": false
+        },
+        {
+          "name": "feishu-im-read",
+          "description": "飞书 IM 消息读取工具使用指南，覆盖会话消息获取、话题回复读取、跨会话消息搜索、图片/文件资源下载。\n\n**当以下情况时使用此 Skill**:\n(1) 需要获取群聊或单聊的历史消息\n(2) 需要读取话题（thread）内的回复消息\n(3) 需要跨会话搜索消息（按关键词、发送者、时间等条件）\n(4) 消息中包含图片、文件、音频、视频，需要下载\n(5) 用户提到\"聊天记录\"、\"消息\"、\"群里说了什么\"、\"话题回复\"、\"搜索消息\"、\"图片\"、\"文件下载\"\n(6) 需要按时间范围过滤消息、分页获取更多消息\n",
+          "filePath": "/Users/lihzz/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-im-read/SKILL.md",
+          "baseDir": "/Users/lihzz/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-im-read",
+          "source": "openclaw-extra",
+          "disableModelInvocation": false
+        },
+        {
+          "name": "feishu-task",
+          "description": "飞书任务管理工具,用于创建、查询、更新任务和清单。\n\n**当以下情况时使用此 Skill**:\n(1) 需要创建、查询、更新、删除任务\n(2) 需要创建、管理任务清单\n(3) 需要查看任务列表或清单内的任务\n(4) 用户提到\"任务\"、\"待办\"、\"to-do\"、\"清单\"、\"task\"\n(5) 需要设置任务负责人、关注人、截止时间\n",
+          "filePath": "/Users/lihzz/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-task/SKILL.md",
+          "baseDir": "/Users/lihzz/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-task",
+          "source": "openclaw-extra",
+          "disableModelInvocation": false
+        },
+        {
+          "name": "feishu-troubleshoot",
+          "description": "飞书插件问题排查工具。包含常见问题 FAQ 和深度诊断命令（/feishu_doctor）。\n\n常见问题可随时查阅。诊断命令用于排查复杂问题（多次授权仍失败、自动授权无法解决等），\n会检查账户配置、API 连通性、应用权限、用户授权状态，并生成详细的诊断报告和解决方案。\n",
+          "filePath": "/Users/lihzz/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-troubleshoot/SKILL.md",
+          "baseDir": "/Users/lihzz/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-troubleshoot",
+          "source": "openclaw-extra",
+          "disableModelInvocation": false
+        },
+        {
+          "name": "feishu-update-doc",
+          "description": "更新飞书云文档。支持 7 种更新模式：追加、覆盖、定位替换、全文替换、前/后插入、删除。\n",
+          "filePath": "/Users/lihzz/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-update-doc/SKILL.md",
+          "baseDir": "/Users/lihzz/.openclaw/extensions/feishu-openclaw-plugin/skills/feishu-update-doc",
+          "source": "openclaw-extra",
+          "disableModelInvocation": false
+        },
+        {
           "name": "1password",
           "description": "Set up and use 1Password CLI (op). Use when installing the CLI, enabling desktop app integration, signing in (single or multi-account), or reading/injecting/running secrets via op.",
           "filePath": "/opt/homebrew/lib/node_modules/openclaw/skills/1password/SKILL.md",
@@ -172,7 +271,7 @@
         },
         {
           "name": "coding-agent",
-          "description": "Delegate coding tasks to Codex, Claude Code, or Pi agents via background process. Use when: (1) building/creating new features or apps, (2) reviewing PRs (spawn in temp dir), (3) refactoring large codebases, (4) iterative coding that needs file exploration. NOT for: simple one-liner fixes (just edit), reading code (use read tool), thread-bound ACP harness requests in chat (for example spawn/run Codex or Claude Code in a Discord thread; use sessions_spawn with runtime:\"acp\"), or any work in ~/clawd workspace (never spawn agents here). Requires a bash tool that supports pty:true.",
+          "description": "Delegate coding tasks to Codex, Claude Code, or Pi agents via background process. Use when: (1) building/creating new features or apps, (2) reviewing PRs (spawn in temp dir), (3) refactoring large codebases, (4) iterative coding that needs file exploration. NOT for: simple one-liner fixes (just edit), reading code (use read tool), thread-bound ACP harness requests in chat (for example spawn/run Codex or Claude Code in a Discord thread; use sessions_spawn with runtime:\"acp\"), or any work in ~/clawd workspace (never spawn agents here). Claude Code: use --print --permission-mode bypassPermissions (no PTY). Codex/Pi/OpenCode: pty:true required.",
           "filePath": "/opt/homebrew/lib/node_modules/openclaw/skills/coding-agent/SKILL.md",
           "baseDir": "/opt/homebrew/lib/node_modules/openclaw/skills/coding-agent",
           "source": "openclaw-bundled",
@@ -252,7 +351,7 @@
         },
         {
           "name": "skill-creator",
-          "description": "Create or update AgentSkills. Use when designing, structuring, or packaging skills with scripts, references, and assets.",
+          "description": "Create, edit, improve, or audit AgentSkills. Use when creating a new skill from scratch or when asked to improve, review, audit, tidy up, or clean up an existing skill or SKILL.md file. Also use when editing or restructuring a skill directory (moving files to references/ or scripts/, removing stale content, validating against the AgentSkills spec). Triggers on phrases like \"create a skill\", \"author a skill\", \"tidy up a skill\", \"improve this skill\", \"review the skill\", \"clean up the skill\", \"audit the skill\".",
           "filePath": "/opt/homebrew/lib/node_modules/openclaw/skills/skill-creator/SKILL.md",
           "baseDir": "/opt/homebrew/lib/node_modules/openclaw/skills/skill-creator",
           "source": "openclaw-bundled",
@@ -275,6 +374,14 @@
           "disableModelInvocation": false
         },
         {
+          "name": "ddg-search",
+          "description": "DuckDuckGo HTML search scraper CLI with JSON, CSV, OpenSearch, markdown, and compact outputs.",
+          "filePath": "/Users/lihzz/.openclaw/workspace-researcher/skills/ddg-search-cli/SKILL.md",
+          "baseDir": "/Users/lihzz/.openclaw/workspace-researcher/skills/ddg-search-cli",
+          "source": "openclaw-workspace",
+          "disableModelInvocation": false
+        },
+        {
           "name": "apify-competitor-intelligence",
           "description": "Analyze competitor strategies, content, pricing, ads, and market positioning across Google Maps, Booking.com, Facebook, Instagram, YouTube, and TikTok.",
           "filePath": "/Users/lihzz/.agents/skills/apify-competitor-intelligence/SKILL.md",
@@ -288,14 +395,6 @@
           "filePath": "/Users/lihzz/.agents/skills/apify-market-research/SKILL.md",
           "baseDir": "/Users/lihzz/.agents/skills/apify-market-research",
           "source": "agents-skills-personal",
-          "disableModelInvocation": false
-        },
-        {
-          "name": "ddg-search",
-          "description": "DuckDuckGo HTML search scraper CLI with JSON, CSV, OpenSearch, markdown, and compact outputs.",
-          "filePath": "/Users/lihzz/.openclaw/workspace-researcher/skills/ddg-search-cli/SKILL.md",
-          "baseDir": "/Users/lihzz/.openclaw/workspace-researcher/skills/ddg-search-cli",
-          "source": "openclaw-workspace",
           "disableModelInvocation": false
         },
         {
@@ -397,12 +496,12 @@
       ],
       "version": 0
     },
-    "thinkingLevel": "medium",
-    "sessionFile": "/Users/lihzz/.openclaw/agents/researcher/sessions/71d9bbdd-de04-47a5-8528-62762c92d6cb.jsonl",
-    "modelProvider": "alibaba",
-    "model": "glm-5",
+    "thinkingLevel": "low",
+    "sessionFile": "/Users/lihzz/.openclaw/agents/researcher/sessions/7e596dba-36ce-421d-b530-6fc06fde010b.jsonl",
+    "modelProvider": "local-qwen3",
+    "model": "GLM-4.7-FP8",
     "abortedLastRun": false,
-    "totalTokensFresh": true,
+    "totalTokensFresh": false,
     "cacheRead": 171903,
     "cacheWrite": 0,
     "systemSent": true,
@@ -412,44 +511,52 @@
     },
     "lastChannel": "webchat",
     "origin": {
+      "label": "研究员",
       "provider": "webchat",
       "surface": "webchat",
       "chatType": "direct"
     },
     "systemPromptReport": {
       "source": "run",
-      "generatedAt": 1772841005188,
-      "sessionId": "71d9bbdd-de04-47a5-8528-62762c92d6cb",
+      "generatedAt": 1773243525964,
+      "sessionId": "7e596dba-36ce-421d-b530-6fc06fde010b",
       "sessionKey": "agent:researcher:main",
-      "provider": "alibaba",
-      "model": "glm-5",
+      "provider": "local-qwen3",
+      "model": "GLM-4.7-FP8",
       "workspaceDir": "/Users/lihzz/.openclaw/workspace-researcher",
       "bootstrapMaxChars": 20000,
       "bootstrapTotalMaxChars": 150000,
+      "bootstrapTruncation": {
+        "warningMode": "once",
+        "warningShown": false,
+        "truncatedFiles": 0,
+        "nearLimitFiles": 0,
+        "totalNearLimit": false
+      },
       "sandbox": {
         "mode": "off",
         "sandboxed": false
       },
       "systemPrompt": {
-        "chars": 32477,
-        "projectContextChars": 10020,
-        "nonProjectContextChars": 22457
+        "chars": 36803,
+        "projectContextChars": 10161,
+        "nonProjectContextChars": 26642
       },
       "injectedWorkspaceFiles": [
         {
           "name": "AGENTS.md",
           "path": "/Users/lihzz/.openclaw/workspace-researcher/AGENTS.md",
           "missing": false,
-          "rawChars": 1569,
-          "injectedChars": 1569,
+          "rawChars": 1557,
+          "injectedChars": 1557,
           "truncated": false
         },
         {
           "name": "SOUL.md",
           "path": "/Users/lihzz/.openclaw/workspace-researcher/SOUL.md",
           "missing": false,
-          "rawChars": 2490,
-          "injectedChars": 2490,
+          "rawChars": 2643,
+          "injectedChars": 2643,
           "truncated": false
         },
         {
@@ -494,7 +601,7 @@
         }
       ],
       "skills": {
-        "promptChars": 12935,
+        "promptChars": 16416,
         "entries": [
           {
             "name": "feishu-doc",
@@ -513,6 +620,42 @@
             "blockChars": 261
           },
           {
+            "name": "feishu-bitable",
+            "blockChars": 453
+          },
+          {
+            "name": "feishu-calendar",
+            "blockChars": 223
+          },
+          {
+            "name": "feishu-channel-rules",
+            "blockChars": 267
+          },
+          {
+            "name": "feishu-create-doc",
+            "blockChars": 259
+          },
+          {
+            "name": "feishu-fetch-doc",
+            "blockChars": 259
+          },
+          {
+            "name": "feishu-im-read",
+            "blockChars": 508
+          },
+          {
+            "name": "feishu-task",
+            "blockChars": 393
+          },
+          {
+            "name": "feishu-troubleshoot",
+            "blockChars": 330
+          },
+          {
+            "name": "feishu-update-doc",
+            "blockChars": 235
+          },
+          {
             "name": "1password",
             "blockChars": 348
           },
@@ -522,7 +665,7 @@
           },
           {
             "name": "coding-agent",
-            "blockChars": 768
+            "blockChars": 832
           },
           {
             "name": "gemini",
@@ -562,7 +705,7 @@
           },
           {
             "name": "skill-creator",
-            "blockChars": 296
+            "blockChars": 759
           },
           {
             "name": "video-frames",
@@ -573,16 +716,16 @@
             "blockChars": 416
           },
           {
+            "name": "ddg-search",
+            "blockChars": 260
+          },
+          {
             "name": "apify-competitor-intelligence",
             "blockChars": 329
           },
           {
             "name": "apify-market-research",
             "blockChars": 336
-          },
-          {
-            "name": "ddg-search",
-            "blockChars": 260
           },
           {
             "name": "research",
@@ -635,8 +778,8 @@
         ]
       },
       "tools": {
-        "listChars": 1531,
-        "schemaChars": 10910,
+        "listChars": 1931,
+        "schemaChars": 12646,
         "entries": [
           {
             "name": "read",
@@ -669,10 +812,22 @@
             "propertiesCount": 12
           },
           {
+            "name": "cron",
+            "summaryChars": 2689,
+            "schemaChars": 690,
+            "propertiesCount": 13
+          },
+          {
             "name": "message",
             "summaryChars": 89,
-            "schemaChars": 4210,
-            "propertiesCount": 86
+            "schemaChars": 4860,
+            "propertiesCount": 91
+          },
+          {
+            "name": "gateway",
+            "summaryChars": 464,
+            "schemaChars": 497,
+            "propertiesCount": 12
           },
           {
             "name": "sessions_list",
@@ -694,9 +849,9 @@
           },
           {
             "name": "sessions_spawn",
-            "summaryChars": 134,
-            "schemaChars": 895,
-            "propertiesCount": 15
+            "summaryChars": 198,
+            "schemaChars": 922,
+            "propertiesCount": 16
           },
           {
             "name": "subagents",
@@ -713,8 +868,8 @@
           {
             "name": "web_search",
             "summaryChars": 109,
-            "schemaChars": 895,
-            "propertiesCount": 6
+            "schemaChars": 767,
+            "propertiesCount": 7
           },
           {
             "name": "web_fetch",
@@ -739,10 +894,7 @@
     },
     "label": "情报研究员",
     "compactionCount": 0,
-    "contextTokens": 256000,
-    "inputTokens": 317668,
-    "outputTokens": 7129,
-    "totalTokens": 172626
+    "contextTokens": 262144
   },
   "agent:researcher:feishu:direct:ou_27c4c0d47e7da89e8c3b945555bf8f41": {
     "sessionId": "7692f517-54f7-4154-aefc-ad2b614b5057",

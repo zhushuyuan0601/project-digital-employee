@@ -153,7 +153,7 @@
       ]
     },
     "local-qwen": {
-      "baseUrl": "http://192.168.244.201:9091/api/model/495f5ac4132a/v1",
+      "baseUrl": "http://192.168.244.201:9091/api/model/b5fbfbc12090/v1",
       "apiKey": "dkBRJ13pZgHg4HbRQyR5vttdlHEvuG5vlCiISzxQ0hSy5YkHzIgtJUOp9rNB5wWmhqWyOEVpDWe3AUEdLxDsoHx2Nlo6McSIPx50XYzxnf8gGIOaKI6wOcVDFj",
       "api": "openai-completions",
       "models": [

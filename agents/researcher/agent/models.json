@@ -201,7 +201,7 @@
       ]
     },
     "local-qwen3": {
-      "baseUrl": "http://tong.wo116114.com:28086/api/model/cd8ba750d910/v1",
+      "baseUrl": "http://192.168.244.201:9091/api/model/cd8ba750d910/v1",
       "apiKey": "dkBRJ13pZgHg4HbRQyR5vttdlHEvuG5vlCiISzxQ0hSy5YkHzIgtJUOp9rNB5wWmhqWyOEVpDWe3AUEdLxDsoHx2Nlo6McSIPx50XYzxnf8gGIOaKI6wOcVDFj",
       "api": "openai-completions",
       "models": [
