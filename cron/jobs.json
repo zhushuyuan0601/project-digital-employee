@@ -8,7 +8,7 @@
       "description": "每天 17:00 生成公司日报并发送给 CEO",
       "enabled": true,
       "createdAtMs": 1772636930084,
-      "updatedAtMs": 1772874060148,
+      "updatedAtMs": 1773219659998,
       "schedule": {
         "kind": "cron",
         "expr": "0 17 * * *",
@@ -28,13 +28,13 @@
         "to": "oc_3ad0c001eb921e29e2c23f173a0b177f"
       },
       "state": {
-        "nextRunAtMs": 1772960400000,
-        "lastRunAtMs": 1772874000027,
+        "nextRunAtMs": 1773306000000,
+        "lastRunAtMs": 1773219600022,
         "lastRunStatus": "error",
         "lastStatus": "error",
-        "lastDurationMs": 60121,
+        "lastDurationMs": 59976,
         "lastDeliveryStatus": "unknown",
-        "consecutiveErrors": 3,
+        "consecutiveErrors": 5,
         "lastError": "cron: job execution timed out"
       }
     },
@@ -45,7 +45,7 @@
       "description": "每天 6:00 调度情报研究员收集 AI 进展并推送简报",
       "enabled": true,
       "createdAtMs": 1772640079315,
-      "updatedAtMs": 1772834942746,
+      "updatedAtMs": 1773180245733,
       "schedule": {
         "kind": "cron",
         "expr": "0 6 * * *",
@@ -65,11 +65,11 @@
         "to": "oc_3ad0c001eb921e29e2c23f173a0b177f"
       },
       "state": {
-        "nextRunAtMs": 1772920800000,
-        "lastRunAtMs": 1772834400062,
+        "nextRunAtMs": 1773266400000,
+        "lastRunAtMs": 1773180000020,
         "lastRunStatus": "ok",
         "lastStatus": "ok",
-        "lastDurationMs": 542684,
+        "lastDurationMs": 245713,
         "lastDeliveryStatus": "delivered",
         "consecutiveErrors": 0,
         "lastDelivered": true

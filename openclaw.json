@@ -1,7 +1,7 @@
 {
   "meta": {
-    "lastTouchedVersion": "2026.3.2",
-    "lastTouchedAt": "2026-03-05T05:37:34.990Z"
+    "lastTouchedVersion": "2026.3.8",
+    "lastTouchedAt": "2026-03-11T14:15:31.826Z"
   },
   "wizard": {
     "lastRunAt": "2026-03-04T09:03:42.665Z",
@@ -290,7 +290,7 @@
         "name": "小研（竞品分析师）",
         "workspace": "/Users/lihzz/.openclaw/workspace-researcher",
         "agentDir": "/Users/lihzz/.openclaw/agents/researcher/agent",
-        "model": "alibaba/glm-5",
+        "model": "local-qwen3/GLM-4.7-FP8",
         "tools": {
           "profile": "coding",
           "alsoAllow": [
@@ -336,7 +336,7 @@
         "name": "小产（产品经理）",
         "workspace": "/Users/lihzz/.openclaw/workspace-pm",
         "agentDir": "/Users/lihzz/.openclaw/agents/pm/agent",
-        "model": "alibaba/glm-5",
+        "model": "local-qwen3/GLM-4.7-FP8",
         "tools": {
           "profile": "coding",
           "alsoAllow": [
@@ -383,7 +383,7 @@
         "name": "小 U（任务秘书）",
         "workspace": "/Users/lihzz/.openclaw/workspace-ceo",
         "agentDir": "/Users/lihzz/.openclaw/agents/ceo/agent",
-        "model": "alibaba/glm-5",
+        "model": "local-qwen3/GLM-4.7-FP8",
         "subagents": {},
         "tools": {
           "profile": "coding",
@@ -430,7 +430,7 @@
         "name": "小开（研发工程师）",
         "workspace": "/Users/lihzz/.openclaw/workspace-tech-lead",
         "agentDir": "/Users/lihzz/.openclaw/agents/tech-lead/agent",
-        "model": "alibaba/glm-5",
+        "model": "local-qwen3/GLM-4.7-FP8",
         "tools": {
           "profile": "coding",
           "alsoAllow": [
@@ -773,16 +773,16 @@
       "mode": "token",
       "token": "bd0f157b60e41a3d9895ddec846d2d10c8d795bc0a061f70"
     },
+    "tailscale": {
+      "mode": "off",
+      "resetOnExit": false
+    },
     "http": {
       "endpoints": {
         "chatCompletions": {
           "enabled": true
         }
       }
-    },
-    "tailscale": {
-      "mode": "off",
-      "resetOnExit": false
     },
     "nodes": {
       "denyCommands": [
