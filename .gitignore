@@ -8,6 +8,10 @@ credentials/
 .env
 .env.*
 
+# Node.js
+node_modules/
+dist/
+
 # 缓存和临时文件
 *.log
 logs/
@@ -18,6 +22,9 @@ cache/
 # 运行时数据
 delivery-queue/
 completions/
+
+# 会话文件 - 不提交
+agents/*/sessions/
 
 # 系统文件
 .DS_Store
@@ -42,12 +49,9 @@ canvas/
 
 # 测试文件
 TEST-*.md
-# 备份文件
-*.bak
-*.bak.*
-
-# 共享工作区（可选，看用户需求）
-# shared-workspace/
 
 # 更新检查
 update-check.json
+
+# 共享工作区（可选，看用户需求）
+# shared-workspace/

@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>联通AI智能客服 - H5原型设计</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: #f0f2f5;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .phone-frame {
+            width: 375px;
+            height: 812px;
+            background: #fff;
+            border-radius: 40px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+            position: relative;
+        }
+
+        .phone-screen {
+            width: 100%;
+            height: 100%;
+            background: #f5f5f5;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 顶部导航 */
+        .header {
+            height: 88px;
+            background: linear-gradient(135deg, #e60012 0%, #ff4757 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            padding: 0 16px 12px;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-title {
+            color: white;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .header-btn {
+            width: 32px;
+            height: 32px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        /* 对话区域 */
+        .chat-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            background: #f5f5f5;
+        }
+
+        /* 消息气泡 */
+        .message {
+            margin-bottom: 16px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .message-time {
+            text-align: center;
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 8px;
+        }
+
+        .message-content {
+            display: flex;
+            gap: 8px;
+        }
+
+        .message-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        .message-avatar.ai {
+            background: linear-gradient(135deg, #e60012 0%, #ff4757 100%);
+        }
+
+        .message-avatar.user {
+            background: #1890ff;
+        }
+
+        .message-bubble {
+            max-width: 260px;
+            padding: 12px 16px;
+            border-radius: 16px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .message-bubble.ai {
+            background: white;
+            color: #333;
+            border-bottom-left-radius: 4px;
+        }
+
+        .message-bubble.user {
+            background: #e60012;
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        /* 卡片消息 */
+        .card-message {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 8px;
+        }
+
+        .card-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 12px;
+        }
+
+        .card-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .card-row:last-child {
+            border-bottom: none;
+        }
+
+        .card-label {
+            color: #666;
+            font-size: 13px;
+        }
+
+        .card-value {
+            color: #333;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .card-value.highlight {
+            color: #e60012;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        /* 快捷入口 */
+        .quick-actions {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .quick-btn {
+            padding: 10px 8px;
+            background: #fff5f5;
+            border: 1px solid #ffe0e0;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #e60012;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .quick-btn:hover {
+            background: #ffe0e0;
+        }
+
+        /* 热门问题 */
+        .hot-questions {
+            margin-bottom: 16px;
+        }
+
+        .hot-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 12px;
+        }
+
+        .hot-item {
+            background: white;
+            padding: 14px 16px;
+            border-radius: 12px;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #333;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .hot-item:hover {
+            background: #fff5f5;
+            border: 1px solid #ffe0e0;
+        }
+
+        .hot-icon {
+            font-size: 18px;
+        }
+
+        /* 底部输入区 */
+        .input-area {
+            background: white;
+            padding: 12px 16px;
+            border-top: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .input-box {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            background: #f5f5f5;
+            border-radius: 20px;
+            padding: 0 16px;
+            height: 40px;
+        }
+
+        .input-box input {
+            flex: 1;
+            border: none;
+            background: transparent;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .input-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .input-btn.voice {
+            background: #f5f5f5;
+            color: #666;
+        }
+
+        .input-btn.send {
+            background: linear-gradient(135deg, #e60012 0%, #ff4757 100%);
+            color: white;
+        }
+
+        .input-btn:hover {
+            transform: scale(1.05);
+        }
+
+        /* 菜单弹窗 */
+        .menu-modal {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 100;
+        }
+
+        .menu-modal.show {
+            display: flex;
+            align-items: flex-end;
+        }
+
+        .menu-content {
+            background: white;
+            width: 100%;
+            border-radius: 20px 20px 0 0;
+            padding: 20px;
+        }
+
+        .menu-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px;
+            font-size: 15px;
+            color: #333;
+            cursor: pointer;
+            border-radius: 12px;
+            transition: background 0.2s;
+        }
+
+        .menu-item:hover {
+            background: #f5f5f5;
+        }
+
+        .menu-icon {
+            font-size: 20px;
+        }
+
+        /* 成功提示 */
+        .success-modal {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .success-modal.show {
+            display: flex;
+        }
+
+        .success-content {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .success-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+        }
+
+        .success-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        .success-desc {
+            font-size: 14px;
+            color: #666;
+        }
+
+        /* 页面切换按钮 */
+        .page-switch {
+            position: absolute;
+            bottom: 100px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 50;
+        }
+
+        .switch-btn {
+            padding: 8px 16px;
+            background: rgba(230, 0, 18, 0.9);
+            color: white;
+            border-radius: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="phone-frame">
+        <div class="phone-screen">
+            <!-- 顶部导航 -->
+            <div class="header">
+                <div class="header-content">
+                    <span class="header-title">🤖 联通AI智能客服</span>
+                    <div class="header-btn" onclick="showMenu()">☰</div>
+                </div>
+            </div>
+
+            <!-- 对话区域 -->
+            <div class="chat-area" id="chatArea">
+                <!-- 欢迎消息 -->
+                <div class="message">
+                    <div class="message-time">今天 10:30</div>
+                    <div class="message-content">
+                        <div class="message-avatar ai">🤖</div>
+                        <div class="message-bubble ai">
+                            您好！我是联通AI智能客服<br><br>
+                            我可以帮您：<br>
+                            • 查询话费、流量、套餐<br>
+                            • 办理业务、充值缴费<br>
+                            • 故障报修、投诉建议<br>
+                            • 防诈骗咨询、安全防护
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 热门问题 -->
+                <div class="hot-questions">
+                    <div class="hot-title">🔥 热门问题</div>
+                    <div class="hot-item" onclick="askQuestion('查话费')">
+                        <span class="hot-icon">💰</span>
+                        如何查询话费余额？
+                    </div>
+                    <div class="hot-item" onclick="askQuestion('办套餐')">
+                        <span class="hot-icon">📱</span>
+                        如何办理5G套餐？
+                    </div>
+                    <div class="hot-item" onclick="askQuestion('报修')">
+                        <span class="hot-icon">🔧</span>
+                        网络故障如何报修？
+                    </div>
+                </div>
+
+                <!-- 快捷入口 -->
+                <div class="message">
+                    <div class="message-content">
+                        <div class="message-avatar ai">🤖</div>
+                        <div style="flex: 1;">
+                            <div class="quick-actions">
+                                <div class="quick-btn" onclick="askQuestion('话费查询')">话费查询</div>
+                                <div class="quick-btn" onclick="askQuestion('流量查询')">流量查询</div>
+                                <div class="quick-btn" onclick="askQuestion('套餐办理')">套餐办理</div>
+                                <div class="quick-btn" onclick="askQuestion('充值缴费')">充值缴费</div>
+                                <div class="quick-btn" onclick="askQuestion('故障报修')">故障报修</div>
+                                <div class="quick-btn" onclick="askQuestion('骚扰拦截')">骚扰拦截</div>
+                                <div class="quick-btn" onclick="askQuestion('诈骗防护')">诈骗防护</div>
+                                <div class="quick-btn" onclick="askQuestion('人工客服')">人工客服</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 底部输入区 -->
+            <div class="input-area">
+                <div class="input-box">
+                    <input type="text" placeholder="请输入您的问题..." id="inputText">
+                </div>
+                <div class="input-btn voice">🎤</div>
+                <div class="input-btn send" onclick="sendMessage()">➤</div>
+            </div>
+
+            <!-- 菜单弹窗 -->
+            <div class="menu-modal" id="menuModal">
+                <div class="menu-content">
+                    <div class="menu-item">
+                        <span class="menu-icon">📜</span>
+                        对话历史
+                    </div>
+                    <div class="menu-item">
+                        <span class="menu-icon">👤</span>
+                        个人中心
+                    </div>
+                    <div class="menu-item">
+                        <span class="menu-icon">⚙️</span>
+                        设置
+                    </div>
+                    <div class="menu-item" onclick="askQuestion('人工客服')">
+                        <span class="menu-icon">📞</span>
+                        转人工客服
+                    </div>
+                    <div class="menu-item">
+                        <span class="menu-icon">🛡️</span>
+                        安全中心
+                    </div>
+                    <div class="menu-item">
+                        <span class="menu-icon">❓</span>
+                        帮助与反馈
+                    </div>
+                    <div style="text-align: center; padding: 16px; color: #999; font-size: 14px;" onclick="hideMenu()">
+                        取消
+                    </div>
+                </div>
+            </div>
+
+            <!-- 成功提示 -->
+            <div class="success-modal" id="successModal">
+                <div class="success-content">
+                    <div class="success-icon">✅</div>
+                    <div class="success-title">操作成功！</div>
+                    <div class="success-desc">您的请求已处理完成</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 显示菜单
+        function showMenu() {
+            document.getElementById('menuModal').classList.add('show');
+        }
+
+        // 隐藏菜单
+        function hideMenu() {
+            document.getElementById('menuModal').classList.remove('show');
+        }
+
+        // 显示成功提示
+        function showSuccess(title, desc) {
+            document.querySelector('.success-title').textContent = title;
+            document.querySelector('.success-desc').textContent = desc;
+            document.getElementById('successModal').classList.add('show');
+            setTimeout(() => {
+                document.getElementById('successModal').classList.remove('show');
+            }, 2000);
+        }
+
+        // 发送消息
+        function sendMessage() {
+            const input = document.getElementById('inputText');
+            const text = input.value.trim();
+            if (!text) return;
+            
+            addUserMessage(text);
+            input.value = '';
+            
+            // 模拟AI回复
+            setTimeout(() => {
+                handleAIResponse(text);
+            }, 500);
+        }
+
+        // 添加用户消息
+        function addUserMessage(text) {
+            const chatArea = document.getElementById('chatArea');
+            const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+            
+            const html = `
+                <div class="message">
+                    <div class="message-time">${time}</div>
+                    <div class="message-content" style="justify-content: flex-end;">
+                        <div class="message-bubble user">${text}</div>
+                        <div class="message-avatar user">👤</div>
+                    </div>
+                </div>
+            `;
+            
+            chatArea.insertAdjacentHTML('beforeend', html);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        // 添加AI消息
+        function addAIMessage(text, card = null) {
+            const chatArea = document.getElementById('chatArea');
+            const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+            
+            let cardHtml = '';
+            if (card) {
+                cardHtml = `
+                    <div class="card-message">
+                        <div class="card-title">${card.title}</div>
+                        ${card.rows.map(row => `
+                            <div class="card-row">
+                                <span class="card-label">${row.label}</span>
+                                <span class="card-value ${row.highlight ? 'highlight' : ''}">${row.value}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
+            const html = `
+                <div class="message">
+                    <div class="message-time">${time}</div>
+                    <div class="message-content">
+                        <div class="message-avatar ai">🤖</div>
+                        <div>
+                            <div class="message-bubble ai">${text}</div>
+                            ${cardHtml}
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            chatArea.insertAdjacentHTML('beforeend', html);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        // 处理AI响应
+        function handleAIResponse(text) {
+            if (text.includes('话费') || text.includes('余额')) {
+                addAIMessage('好的，正在为您查询...', {
+                    title: '📊 您的话费信息',
+                    rows: [
+                        { label: '当前余额', value: '¥58.60', highlight: true },
+                        { label: '本月已用', value: '¥41.40' },
+                        { label: '流量剩余', value: '8.2GB' },
+                        { label: '语音剩余', value: '320分钟' }
+                    ]
+                });
+            } else if (text.includes('套餐')) {
+                addAIMessage('为您推荐以下套餐：\n\n1️⃣ 99元/月 - 20GB流量\n2️⃣ 129元/月 - 40GB流量\n3️⃣ 199元/月 - 100GB流量\n\n请问您想办理哪个？');
+            } else if (text.includes('故障') || text.includes('报修')) {
+                addAIMessage('很抱歉给您带来不便。\n\n请告诉我具体情况：\n1️⃣ 是完全无法连接还是速度慢？\n2️⃣ 是WiFi问题还是有线网络？\n3️⃣ 大概从什么时候开始的？');
+            } else if (text.includes('骚扰') || text.includes('拦截')) {
+                addAIMessage('骚扰拦截功能已为您开启。\n\n您可以在安全中心查看拦截记录，或添加黑名单号码。');
+            } else if (text.includes('人工')) {
+                addAIMessage('正在为您转接人工客服...\n\n预计等待时间：2分钟\n请您稍候，人工客服将尽快为您服务。');
+            } else {
+                addAIMessage('收到您的问题，我来为您解答。\n\n您可以通过以下方式获取帮助：\n• 点击上方快捷入口\n• 输入具体问题\n• 说"转人工"联系客服');
+            }
+        }
+
+        // 点击热门问题
+        function askQuestion(text) {
+            addUserMessage(text);
+            setTimeout(() => {
+                handleAIResponse(text);
+            }, 500);
+        }
+
+        // 回车发送
+        document.getElementById('inputText').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // 点击菜单外部关闭
+        document.getElementById('menuModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                hideMenu();
+            }
+        });
+    </script>
+</body>
+</html>
