@@ -54,4 +54,5 @@ TEST-*.md
 update-check.json
 
 # 共享工作区（可选，看用户需求）
-# shared-workspace/
+# shared-workspace/# Nested git repositories
+shared-workspace/projects/**/.git/
