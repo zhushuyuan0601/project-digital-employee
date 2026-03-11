@@ -1,7 +1,7 @@
 {
   "agent:ceo:main": {
     "sessionId": "cba345e0-f3b6-4ae9-8c05-36c3a4935101",
-    "updatedAt": 1773243551778,
+    "updatedAt": 1773247032170,
     "systemSent": true,
     "abortedLastRun": false,
     "chatType": "direct",
@@ -12,7 +12,9 @@
       "label": "小呦",
       "provider": "webchat",
       "surface": "webchat",
-      "chatType": "direct"
+      "chatType": "direct",
+      "from": "heartbeat",
+      "to": "heartbeat"
     },
     "sessionFile": "/Users/lihzz/.openclaw/agents/ceo/sessions/cba345e0-f3b6-4ae9-8c05-36c3a4935101.jsonl",
     "compactionCount": 0,
@@ -512,7 +514,7 @@
     },
     "systemPromptReport": {
       "source": "run",
-      "generatedAt": 1773243517154,
+      "generatedAt": 1773246961444,
       "sessionId": "cba345e0-f3b6-4ae9-8c05-36c3a4935101",
       "sessionKey": "agent:ceo:main",
       "provider": "local-qwen3",
