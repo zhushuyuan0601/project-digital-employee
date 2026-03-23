@@ -105,8 +105,7 @@
               @click="startExecution"
               :disabled="simStore.isExecuting || !taskDescription.trim()"
             >
-              <span class="btn-icon">⟳</span>
-              🚀 下发
+              下发
             </button>
           </div>
 
@@ -1293,31 +1292,27 @@ onMounted(() => {
   color: var(--text-secondary);
 }
 
-.scenario-label {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  margin-left: auto;
-}
-
 /* 场景选择行 */
 .scenario-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   margin-bottom: 12px;
-  padding: 10px 12px;
+  padding: 10px 14px;
   background: rgba(0, 240, 255, 0.05);
   border: 1px solid rgba(0, 240, 255, 0.15);
   border-radius: 8px;
   flex-wrap: nowrap;
+  justify-content: flex-start;
 }
 
 .scenario-row .scenario-label {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
   font-weight: 500;
   white-space: nowrap;
   flex-shrink: 0;
+  min-width: 72px;
 }
 
 .scenario-row .scenario-select {
@@ -1330,12 +1325,12 @@ onMounted(() => {
 }
 
 .scenario-row .dispatch-btn {
-  padding: 3px 8px;
-  font-size: 11px;
+  padding: 3px 12px;
+  font-size: 12px;
   font-weight: 600;
-  height: 26px;
-  width: 56px;
+  height: 28px;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* 任务描述行 */
