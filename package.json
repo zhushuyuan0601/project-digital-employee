@@ -1,6 +1,7 @@
 {
-  "name": "unicom-ai-customer-service",
+  "name": "project-digital-employee",
   "version": "1.0.0",
+  "description": "数字员工项目 - AI多Agent协作管理平台",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -18,5 +19,11 @@
     "vite": "^5.0.0",
     "unplugin-vue-components": "^0.26.0",
     "@vant/auto-import-resolver": "^1.2.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:zhushuyuan0601/project-digital-employee.git"
+  },
+  "author": "小开（研发工程师）💻",
+  "license": "MIT"
 }

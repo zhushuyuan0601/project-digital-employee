@@ -1,14 +1,22 @@
-# 联通智能客服
+# 数字员工项目（Digital Employee） 🐾
 
-> 基于 Vue 3 + Vant UI + 元景大模型的智能客服 H5 应用
+AI 多 Agent 协作管理平台，集成 Mission Control 看板系统和 Star Office UI 像素办公室，实现智能体协作可视化。
 
 [![Vue](https://img.shields.io/badge/Vue-3.4-green.svg)](https://vuejs.org/)
 [![Vite](https://img.shields.io/badge/Vite-5.0-purple.svg)](https://vitejs.dev/)
 [![Vant](https://img.shields.io/badge/Vant-4.8-blue.svg)](https://vant-contrib.gitee.io/vant/)
 
+---
+
 ## 📖 项目简介
 
-联通智能客服是一款面向移动端用户的智能问答应用，基于元景大模型（Honghu LLM）提供专业、友好的客服对话体验。用户可通过聊天界面咨询联通业务相关问题，包括套餐查询、话费充值、流量查询、业务办理、故障报修等。
+数字员工项目是一个智能体协作可视化平台，通过 3 个核心模块实现 AI 智能体的实时状态监控和协作管理：
+
+- **数字员工主界面**: 3 个 Tab（对话、开发监控、像素办公室）
+- **Mission Control 看板**: 智能体自动化协作系统 + 终端日志
+- **Star Office UI**: 像素风格办公室状态可视化
+
+---
 
 ## 🚀 快速开始
 
@@ -16,240 +24,200 @@
 
 - Node.js >= 18.0
 - npm >= 9.0
+- Python >= 3.8（Star Office UI 需要）
 
-### 1. 安装依赖
-
-```bash
-cd ~/.openclaw/shared-workspace/projects/unicom-ai-customer-service/tech/联通智能客服
-npm install
-```
-
-### 2. 配置元景大模型
-
-编辑 `src/api/honghu.js`，配置您的 API 凭证：
-
-```javascript
-const HONGHU_CONFIG = {
-  baseURL: 'https://api.honghu.com/v1',  // 元景 API 地址
-  apiKey: 'your-api-key',                // 您的 API Key
-  model: 'honghu'
-}
-```
-
-> **提示**: 未配置 API Key 时，系统会自动启用模拟回复模式用于开发测试。
-
-### 3. 启动开发服务器
+### 一键启动所有服务
 
 ```bash
-npm run dev
+cd ~/.openclaw/shared-workspace/project-digital-employee
+./start-all-services.sh
 ```
 
-启动后访问：http://localhost:5173
+### 访问应用
 
-### 4. 构建生产版本
+- **数字员工主界面**: http://localhost:5173/
+- **Mission Control 看板**: http://localhost:3000/
+- **Star Office UI**: http://127.0.0.1:19000/
+
+### 测试智能体状态同步
 
 ```bash
-npm run build
+./agent-status-sync-v2.sh tech-lead executing
 ```
-
-构建产物输出至 `dist/` 目录。
-
-## 📱 功能特性
-
-### 核心功能
-
-| 功能 | 说明 |
-|------|------|
-| **智能对话** | 基于元景大模型的多轮对话，支持上下文理解 |
-| **快捷入口** | 6 个常用业务快捷按钮，一键提问 |
-| **历史记录** | 本地存储对话历史，支持快速加载 |
-| **响应式设计** | 适配各种移动端屏幕尺寸 |
-
-### 快捷入口
-
-| 入口 | 功能描述 |
-|------|----------|
-| 📱 套餐查询 | 查询当前套餐详情及资费 |
-| 💰 话费充值 | 获取话费充值方式指引 |
-| 📶 流量查询 | 查询流量使用情况及剩余 |
-| 📋 办理业务 | 业务办理指南 |
-| 🔧 故障报修 | 网络/通话故障排查 |
-| 👥 人工客服 | 转接人工客服通道 |
-
-## 🏗️ 技术架构
-
-### 整体架构
-
-```
-┌─────────────────────────────────────────────────┐
-│                   前端展示层                     │
-│  ┌──────────────┐ ┌──────────────┐             │
-│  │  对话界面    │ │  快捷入口    │  历史记录   │
-│  └──────────────┘ └──────────────┘             │
-│              Vue 3 + Vant UI                    │
-└─────────────────────────────────────────────────┘
-                        │
-                        ▼
-┌─────────────────────────────────────────────────┐
-│                    API 服务层                     │
-│  ┌──────────────┐ ┌──────────────┐             │
-│  │  文本对话    │ │  多轮交互    │  意图识别   │
-│  └──────────────┘ └──────────────┘             │
-│              元景大模型 API                      │
-└─────────────────────────────────────────────────┘
-                        │
-                        ▼
-┌─────────────────────────────────────────────────┐
-│                   本地存储层                     │
-│  ┌──────────────┐ ┌──────────────┐             │
-│  │  对话历史    │ │  用户配置    │  缓存数据   │
-│  └──────────────┘ └──────────────┘             │
-│         localStorage / sessionStorage           │
-└─────────────────────────────────────────────────┘
-```
-
-### 技术选型
-
-| 层级 | 技术选型 | 版本 | 说明 |
-|------|---------|------|------|
-| **前端框架** | Vue 3 | 3.4+ | Composition API |
-| **构建工具** | Vite | 5.0+ | 快速开发构建 |
-| **UI 组件库** | Vant | 4.8+ | 移动端 UI 组件 |
-| **HTTP 请求** | Axios | 1.6+ | API 调用 |
-| **AI 能力** | 元景大模型 | honghu | OpenAI 兼容接口 |
-
-## 📁 项目结构
-
-```
-联通智能客服/
-├── src/
-│   ├── api/
-│   │   └── honghu.js      # 元景大模型 API 封装
-│   ├── App.vue            # 主应用组件
-│   ├── main.js            # 应用入口
-│   └── style.css          # 全局样式
-├── index.html             # HTML 模板
-├── package.json           # 依赖配置
-├── vite.config.js         # Vite 配置
-└── README.md              # 项目文档
-```
-
-## 🔌 API 集成
-
-### 元景大模型接口
-
-采用 OpenAI 兼容的 REST API 格式：
-
-**请求示例**
-
-```http
-POST /v1/chat/completions
-Host: api.honghu.com
-Authorization: Bearer {your-api-key}
-Content-Type: application/json
-
-{
-  "model": "honghu",
-  "messages": [
-    { "role": "system", "content": "你是联通智能客服小通..." },
-    { "role": "user", "content": "帮我查询套餐" }
-  ],
-  "temperature": 0.7,
-  "max_tokens": 500
-}
-```
-
-**响应示例**
-
-```json
-{
-  "choices": [
-    {
-      "message": {
-        "role": "assistant",
-        "content": "您当前使用的是联通 5G 套餐..."
-      }
-    }
-  ]
-}
-```
-
-## 📝 开发指南
-
-### 模拟回复模式
-
-开发环境下（未配置 API Key），系统内置模拟回复逻辑，支持以下关键词匹配：
-
-- `套餐` - 返回套餐详情
-- `充值` - 返回充值方式
-- `流量` - 返回流量使用情况
-- `办理` - 返回可办理业务列表
-- `故障` - 返回故障排查选项
-- `人工` - 返回人工客服联系方式
-
-### 自定义快捷入口
-
-编辑 `src/App.vue` 中的 `quickActions` 数组：
-
-```javascript
-const quickActions = [
-  { text: '新功能', icon: '🆕', prompt: '我想了解新功能' },
-  // 添加更多快捷入口...
-]
-```
-
-### 自定义客服人设
-
-编辑 `src/api/honghu.js` 中的 system prompt：
-
-```javascript
-{
-  role: 'system',
-  content: `你是联通智能客服小通，专业、友好、简洁。...`
-}
-```
-
-## 📊 界面预览
-
-```
-┌─────────────────────────────────┐
-│  联通智能客服             [···] │  <- 顶部导航
-├─────────────────────────────────┤
-│                                 │
-│  🤖 您好！我是联通智能客服     │  <- AI 欢迎语
-│     小通，很高兴为您服务！      │
-│                                 │
-│  👤 帮我查询套餐               │  <- 用户消息
-│                                 │
-│  🤖 您当前使用的是联通 5G 套餐  │  <- AI 回复
-│     月费 99 元，包含...          │
-│                                 │
-├─────────────────────────────────┤
-│  [📱套餐][💰充值][📶流量]      │  <- 快捷入口
-│  [📋办理][🔧报修][👥人工]      │
-├─────────────────────────────────┤
-│  [  请输入您的问题...    ][发送]│  <- 输入区域
-└─────────────────────────────────┘
-```
-
-## ✅ 功能验证清单
-
-| 功能 | 状态 | 验收标准 |
-|------|------|----------|
-| 对话界面 | ✅ | 消息气泡、头像、时间戳正常显示 |
-| 智能问答 | ✅ | 元景大模型集成，回复准确 |
-| 快捷入口 | ✅ | 6 个快捷按钮点击有效 |
-| 历史记录 | ✅ | 本地存储、加载、删除正常 |
-| 响应式 | ✅ | 主流移动端屏幕适配 |
-| 加载状态 | ✅ | AI 回复中显示加载动画 |
-| 错误处理 | ✅ | API 失败时降级到模拟回复 |
-
-## 📄 许可证
-
-本项目仅供内部开发和原型演示使用。
 
 ---
 
-**创建时间**: 2026-03-09
-**技术负责人**: 小开
-**项目状态**: 原型开发阶段
+## 📂 项目结构
+
+```
+project-digital-employee/
+├── src/                           ✅ 数字员工主界面
+│   ├── App.vue                    3个Tab（对话/开发监控/像素办公室）
+│   ├── api/                       API 接口
+│   ├── main.js                    入口文件
+│   └── style.css                  全局样式
+├── Star-Office-UI/                ✅ 像素办公室完整代码
+│   ├── frontend/                  像素风格前端
+│   ├── backend/                   Flask 后端
+│   └── state.json                 状态文件
+├── kanban-full-managed/           ✅ 看板系统完整代码
+│   ├── packages/frontend/         前端（Vite + React）
+│   ├── packages/backend/          后端（Express + Socket.io）
+│   └── prisma/                    数据库配置
+├── logs/                          项目日志
+├── package.json                   项目配置
+├── vite.config.js                 Vite 配置
+├── start-all-services.sh          一键启动脚本 ⭐
+├── stop-all-services.sh           一键停止脚本
+└── agent-status-sync-v2.sh        智能体状态同步脚本 ⭐
+```
+
+---
+
+## 🤖 智能体角色
+
+| 角色 | Agent ID | Emoji | 负责人 | 功能 |
+|------|----------|-------|--------|------|
+| 小研 | researcher | 🔍 | 小研（竞品分析师） | 调研、分析、热点发现 |
+| 小产 | pm | 📊 | 小产（产品经理） | 需求、PRD、产品验收 |
+| 小开 | tech-lead | 💻 | 小开（研发工程师） | 技术评估、架构设计、开发 |
+| 小测 | team-qa | 🛡️ | 小测（质量检查员） | 代码审查、测试验证 |
+
+---
+
+## 🎯 核心功能
+
+### 1. 数字员工主界面（3 个 Tab）
+
+#### Tab 1: 对话 💬
+- AI 智能体多轮对话
+- 支持文本输入和语音输入
+- 历史对话记录
+
+#### Tab 2: 开发监控 📊
+- Mission Control 看板（iframe 集成）
+- 左侧：智能体状态看板（小研🔍、小产📊、小开💻、小测🛡️）
+- 右侧：实时终端日志
+
+#### Tab 3: 像素办公室 ⭐
+- Star Office UI（iframe 集成）
+- 像素风格办公室
+- 实时状态可视化（idle/writing/researching/executing/syncing/error）
+
+---
+
+### 2. 智能体状态同步
+
+```bash
+# 更新智能体状态
+./agent-status-sync-v2.sh <agent-id> <state>
+
+# 示例
+./agent-status-sync-v2.sh tech-lead executing      # 小开正在开发
+./agent-status-sync-v2.sh researcher researching   # 小研正在调研
+```
+
+**状态说明**:
+- `idle` - 待命中
+- `writing` - 正在编写代码/文档
+- `researching` - 正在调研分析
+- `executing` - 正在执行任务
+- `syncing` - 正在同步数据
+- `error` - 发现问题，排查中
+
+---
+
+## 🛠️ 开发指南
+
+### 启动开发服务器
+
+```bash
+# 启动数字员工主界面
+npm run dev
+
+# 访问 http://localhost:5173/
+```
+
+### 构建生产版本
+
+```bash
+npm run build
+
+# 输出到 dist/
+```
+
+### 预览生产版本
+
+```bash
+npm run preview
+```
+
+---
+
+## 🔄 技术栈
+
+### 数字员工主界面
+- **前端**: Vue 3 + Vant UI + Vite
+- **状态管理**: Vue 3 Composition API
+- **API**: Axios
+
+### Mission Control 看板
+- **前端**: Vite + React + TypeScript
+- **后端**: Node.js + Express + Socket.io
+- **数据库**: PostgreSQL + Prisma
+
+### Star Office UI
+- **前端**: Phaser.js (2D 游戏引擎)
+- **后端**: Flask (Python)
+- **状态存储**: JSON
+
+---
+
+## 📊 项目进度
+
+| 阶段 | 进度 | 状态 |
+|------|------|------|
+| Phase 1: 数据库 + API | ✅ 100% | 完成 |
+| Phase 2: 智能体编排 | ✅ 100% | 完成 |
+| Phase 3: 前端开发 | ✅ 100% | 完成 |
+| Phase 4: 前后端联调 | 🔄 80% | 进行中 |
+| Phase 5: 部署上线 | ⏳ 60% | 待完成 |
+
+**总进度**: 85%
+
+---
+
+## 📚 文档
+
+- [项目整合文档](./PROJECT_INTEGRATION.md)
+- [项目状态文档](./PROJECT_STATUS.md)
+- [Star Office UI 文档](./Star-Office-UI/README.md)
+- [Kanban 系统文档](./kanban-full-managed/README.md)
+
+---
+
+## 🔗 相关链接
+
+- **GitHub**: https://github.com/zhushuyuan0601/project-digital-employee
+- **项目看板**: ~/.openclaw/shared-workspace/projects/PROJECT_BOARD.md
+- **团队文档**: ~/.openclaw/workspace-ceo/AGENTS.md
+
+---
+
+## 👥 团队
+
+- **任务协调**: 小U（任务秘书）🐾
+- **产品经理**: 小产（产品经理）📊
+- **研发工程师**: 小开（研发工程师）💻
+- **质量检查员**: 小测（质量检查员）🛡️
+
+---
+
+## 📄 License
+
+MIT License
+
+---
+
+**最后更新**: 2026-03-24
+**维护人**: 小开（研发工程师）💻
