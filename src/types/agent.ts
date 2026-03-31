@@ -1,5 +1,5 @@
 // Agent 角色类型
-export type AgentRole = 'assistant' | 'developer' | 'product' | 'analyst';
+export type AgentRole = 'assistant' | 'developer' | 'product' | 'analyst' | 'tester';
 
 // Agent 状态
 export type AgentStatus = 'idle' | 'busy' | 'offline';
@@ -58,5 +58,15 @@ export const AGENT_ROLES: Record<AgentRole, Agent> = {
     completedTasks: 0,
     description: '调研分析 - 市场调研',
     gatewayAgentId: 'researcher'
+  },
+  tester: {
+    id: 'xiaoce',
+    name: '测试员',
+    role: 'tester',
+    icon: '/avatars/avatar-xiaoce.jpeg',
+    status: 'idle',
+    completedTasks: 0,
+    description: '质量检查 - 测试验证&质量保障',
+    gatewayAgentId: 'team-qa'
   }
 };

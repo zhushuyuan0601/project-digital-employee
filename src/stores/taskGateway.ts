@@ -170,18 +170,20 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
       return false
     }
 
+    // 使用 'agent' 方法创建新 session 并发送消息（与 Mission-control 一致）
     const msg = {
       type: 'req',
       id: `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      method: 'chat.send',
+      method: 'agent',
       params: {
-        sessionKey: conn.sessionKey,
+        agentId: conn.gatewayAgentId,
         message: content,
         idempotencyKey: `ik-${Date.now()}`,
+        deliver: false,
       },
     }
     conn.ws.send(JSON.stringify(msg))
-    console.log(`[TaskGateway:${agentId}] 发送消息：${content.substring(0, 50)}...`)
+    console.log(`[TaskGateway:${agentId}] 发送 agent 请求: ${conn.gatewayAgentId}`)
     return true
   }
 

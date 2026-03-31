@@ -313,29 +313,46 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
     }
 
     if (msg.type === 'event') {
-      // 检查消息中的 sessionKey 或 agentId，判断是否属于当前 Agent
+      // 使用 agent 名称匹配，而不是严格的 sessionKey 匹配
+      // 因为使用 'agent' 方法发送消息时，Gateway 会创建新的 session
       const payloadSessionKey = extractSessionKeyFromPayload(msg.payload)
       const payloadAgentId = extractAgentIdFromPayload(msg.payload)
 
-      if (payloadSessionKey || payloadAgentId) {
-        const currentAgent = agents.value[agentId]
-        const mySessionKey = currentAgent?.config.sessionKey
-        const myAgentId = currentAgent?.config.gatewayAgentId
+      // 从 sessionKey 中提取 agent 名称
+      const sessionAgentName = extractAgentNameFromKey(payloadSessionKey || '')
+      const currentAgent = agents.value[agentId]
+      const myAgentName = extractAgentNameFromKey(currentAgent?.config.sessionKey || '')
+      const myGatewayAgentId = currentAgent?.config.gatewayAgentId?.split(':')[1] || ''
 
-        // 如果 payload 中有 sessionKey，检查是否匹配
-        if (payloadSessionKey && payloadSessionKey !== mySessionKey) {
-          console.log(`[WebSocket] [${agentId}] Ignoring message - sessionKey mismatch: ${payloadSessionKey} vs ${mySessionKey}`)
-          return
-        }
+      // 检查是否匹配：通过 agent 名称或 gatewayAgentId
+      const isMatch = !payloadSessionKey ||
+                      sessionAgentName === myAgentName ||
+                      sessionAgentName === myGatewayAgentId ||
+                      payloadAgentId === myGatewayAgentId ||
+                      payloadAgentId === agentId
 
-        // 如果 payload 中有 agentId，检查是否匹配
-        if (payloadAgentId && payloadAgentId !== myAgentId && payloadAgentId !== agentId) {
-          console.log(`[WebSocket] [${agentId}] Ignoring message - agentId mismatch: ${payloadAgentId} vs ${myAgentId} or ${agentId}`)
-          return
-        }
+      if (!isMatch) {
+        console.log(`[WebSocket] [${agentId}] Ignoring message - agent mismatch: sessionAgent=${sessionAgentName}, myAgent=${myAgentName}, myGatewayId=${myGatewayAgentId}`)
+        return
       }
+
       handleEvent(agentId, msg.event, msg.payload)
     }
+  }
+
+  // 从 sessionKey 中提取 agent 名称
+  // 例如: "agent:ceo:main" -> "ceo", "agent:researcher:main" -> "researcher"
+  function extractAgentNameFromKey(key: string): string {
+    if (!key) return ''
+    const parts = key.split(':')
+    // 格式可能是 "agent:ceo:main" 或 "ceo:main" 或直接 "ceo"
+    if (parts.length >= 2 && parts[0] === 'agent') {
+      return parts[1].toLowerCase()
+    }
+    if (parts.length >= 1) {
+      return parts[0].toLowerCase().replace(/main$/, '').replace(/_main$/, '')
+    }
+    return key.toLowerCase()
   }
 
   // 从 payload 中提取 sessionKey
@@ -616,16 +633,22 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
     agent.messages.push(userMessage)
     saveMessages(agentId)
 
+    // 使用 'agent' 方法创建新 session 并发送消息（与 Mission-control 一致）
+    // 从 gatewayAgentId 提取简短的 agent ID（如 'agent:ceo:main' -> 'ceo'）
+    const agentIdShort = agent.config.gatewayAgentId?.split(':')[1] || agentId
+
     const msg = {
       type: 'req',
       id: `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      method: 'chat.send',
+      method: 'agent',
       params: {
-        sessionKey: agent.config.sessionKey,
+        agentId: agentIdShort,
         message: text.trim(),
         idempotencyKey: `ik-${Date.now()}`,
+        deliver: false,
       },
     }
+    console.log(`[WebSocket] [${agentId}] Sending agent request:`, agentIdShort)
     agent.ws.send(JSON.stringify(msg))
   }
 

@@ -70,6 +70,18 @@ export const MOCK_TEMPLATES: MockResponseTemplate[] = [
     finalOutput: '✅ 开发完成！代码已提交，包含完整的功能实现、单元测试和技术文档。'
   },
   {
+    keywords: ['测试', '验证', '质量', 'QA', '检查', '验收'],
+    agentId: 'xiaoce',
+    steps: [
+      '制定测试计划和测试用例...',
+      '执行功能测试和边界测试...',
+      '进行兼容性和性能测试...',
+      '记录和跟踪缺陷问题...',
+      '编写测试报告和验收文档...'
+    ],
+    finalOutput: '✅ 测试完成！测试报告已生成，包含测试用例、缺陷列表、质量评估等。'
+  },
+  {
     keywords: ['文档', '写作', '文案', '报告', '总结', '计划'],
     agentId: 'xiaomu',
     steps: [
@@ -122,5 +134,11 @@ export const AGENT_CONFIG: Record<string, { name: string; role: AgentRole; icon:
     role: 'analyst',
     icon: '/avatars/avatar-xiaoyan.jpeg',
     description: '竞品分析师 - 市场调研'
+  },
+  xiaoce: {
+    name: '测试员',
+    role: 'tester',
+    icon: '/avatars/avatar-xiaoce.jpeg',
+    description: '质量检查员 - 测试验证&质量保障'
   }
 }

@@ -7,7 +7,8 @@ export const AGENT_TO_GATEWAY_MAP: Record<string, string> = {
   xiaomu: 'ceo',           // 项目管理/小呦 <-> ceo (项目统筹)
   xiaokai: 'tech-lead',    // 研发工程师 <-> tech-lead (技术开发)
   xiaochan: 'pm',          // 产品经理 <-> pm (产品设计)
-  xiaoyan: 'researcher'    // 研究员 <-> researcher (调研分析)
+  xiaoyan: 'researcher',   // 研究员 <-> researcher (调研分析)
+  xiaoce: 'team-qa'        // 测试员 <-> team-qa (质量检查)
 }
 
 // localStorage key
@@ -164,6 +165,16 @@ export const useAgentsStore = defineStore('agents', () => {
         completedTasks: savedStats['xiaoyan'] || 0,
         description: '调研分析 - 市场调研',
         gatewayAgentId: 'researcher'
+      },
+      {
+        id: 'xiaoce',
+        name: '测试员',
+        role: 'tester',
+        icon: '/avatars/avatar-xiaoce.jpeg',
+        status: 'idle',
+        completedTasks: savedStats['xiaoce'] || 0,
+        description: '质量检查 - 测试验证&质量保障',
+        gatewayAgentId: 'team-qa'
       }
     ]
   }

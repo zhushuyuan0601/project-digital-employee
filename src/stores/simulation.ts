@@ -30,7 +30,7 @@ interface Deliverable {
 }
 
 // 场景产出物定义（源文件在 origin 目录，目标移动到项目目录）
-// 职位映射：xiaomu=项目管理，xiaokai=研发工程师，xiaochan=产品经理，xiaoyan=研究员
+// 职位映射：xiaomu=项目管理，xiaokai=研发工程师，xiaochan=产品经理，xiaoyan=研究员，xiaoce=测试员
 const SCENARIO_DELIVERABLES: Record<string, Record<string, Deliverable[]>> = {
   // 场景 1: 联通智能客服 H5 应用
   unicom_ai_cs: {
@@ -49,6 +49,10 @@ const SCENARIO_DELIVERABLES: Record<string, Record<string, Deliverable[]>> = {
       { name: 'App.vue', originPath: '/unicom-ai-customer-service/xiaokai/App.vue', filePath: '/项目/App.vue', description: 'H5 应用主组件' },
       { name: 'honghu.js', originPath: '/unicom-ai-customer-service/xiaokai/honghu.js', filePath: '/项目/honghu.js', description: '鸿鹄大模型 API 集成' },
       { name: '部署说明.md', originPath: '/unicom-ai-customer-service/xiaokai/部署说明.md', filePath: '/项目/部署说明.md', description: '运行部署说明' }
+    ],
+    xiaoce: [
+      { name: '测试计划.md', originPath: '/unicom-ai-customer-service/xiaoce/测试计划.md', filePath: '/项目/测试计划.md', description: '测试计划与测试用例' },
+      { name: '测试报告.md', originPath: '/unicom-ai-customer-service/xiaoce/测试报告.md', filePath: '/项目/测试报告.md', description: '测试执行报告与缺陷清单' }
     ]
   },
   // 场景 2: 联通 AI 彩铃产品升级（对标天翼智铃）
@@ -70,6 +74,10 @@ const SCENARIO_DELIVERABLES: Record<string, Record<string, Deliverable[]>> = {
       { name: '研发工程师_H5 内测_v2.0_Create.vue', originPath: '/origin/xiaokai/Create.vue', filePath: '/项目/研发工程师_H5 内测_v2.0_Create.vue', description: '一键生成页面' },
       { name: '研发工程师_H5 内测_v2.0_IPLibrary.vue', originPath: '/origin/xiaokai/IPLibrary.vue', filePath: '/项目/研发工程师_H5 内测_v2.0_IPLibrary.vue', description: 'IP 库页面' },
       { name: '研发工程师_H5 内测_v2.0_History.vue', originPath: '/origin/xiaokai/History.vue', filePath: '/项目/研发工程师_H5 内测_v2.0_History.vue', description: '历史记录页面' }
+    ],
+    xiaoce: [
+      { name: '测试员_联通智铃测试计划.md', originPath: '/origin/xiaoce/联通智铃测试计划.md', filePath: '/项目/测试员_联通智铃测试计划.md', description: '测试计划与测试用例' },
+      { name: '测试员_联通智铃测试报告.md', originPath: '/origin/xiaoce/联通智铃测试报告.md', filePath: '/项目/测试员_联通智铃测试报告.md', description: '测试执行报告与验收文档' }
     ]
   }
 }
@@ -749,10 +757,10 @@ export const useSimulationStore = defineStore('simulation', () => {
     if (!(await waitWithPause(stepDelay, controller))) return false
 
     if (isRingtoneScenario) {
-      await streamLogTyping(agentId, `✅ 确定执行顺序：研究员（天翼智铃竞品分析）→ 产品经理（PRD&H5 设计）→ 研发工程师（H5 内测开发）`, 'info', controller)
+      await streamLogTyping(agentId, `✅ 确定执行顺序：研究员（天翼智铃竞品分析）→ 产品经理（PRD&H5 设计）→ 研发工程师（H5 内测开发）→ 测试员（测试验证）`, 'info', controller)
       await streamLogTyping(agentId, `✅ 建立阶段交付机制：上阶段产出作为下阶段输入`, 'info', controller)
     } else if (isUnicomScenario) {
-      await streamLogTyping(agentId, `✅ 确定执行顺序：研究员（联通助理&安全管家调研）→ 产品经理（PRD&H5 设计）→ 研发工程师（H5 开发）`, 'info', controller)
+      await streamLogTyping(agentId, `✅ 确定执行顺序：研究员（联通助理&安全管家调研）→ 产品经理（PRD&H5 设计）→ 研发工程师（H5 开发）→ 测试员（测试验收）`, 'info', controller)
       await streamLogTyping(agentId, `✅ 建立阶段交付机制：上阶段产出作为下阶段输入`, 'info', controller)
     }
 
@@ -767,6 +775,133 @@ export const useSimulationStore = defineStore('simulation', () => {
       subTask.output = '📋 项目执行报告'
     }
     agentsStore.completeAgentTask(agentId)
+    return true
+  }
+
+  // ===== 测试员 - 测试验证工作流 =====
+  async function executeXiaoceWorkflow(controller: AbortController | null): Promise<boolean> {
+    const agentId = 'xiaoce'
+    const agent = AGENT_CONFIG[agentId]
+    const agentsStore = useAgentsStore()
+    const isUnicomScenario = currentScenario.value === 'unicom_ai_cs'
+    const isRingtoneScenario = currentScenario.value === 'unicom_ai_ringtone'
+
+    agentsStore.assignTaskToAgent(agentId, { id: `test_${Date.now()}`, title: isRingtoneScenario ? '联通智铃测试验证' : (isUnicomScenario ? '智能客服测试验收' : '功能测试验证'), progress: 0 })
+    await streamLogTyping(agentId, `🚀 ${agent.name} 开始执行${isRingtoneScenario ? '联通智铃 H5 内测验证' : (isUnicomScenario ? '智能客服 H5 测试验收' : '功能测试验证')}任务`, 'info', controller)
+
+    const subTask = subTasks.value.find(t => t.agentId === agentId)
+    if (subTask) subTask.status = 'in_progress'
+
+    if (isRingtoneScenario) {
+      // 联通 AI 彩铃场景 - 测试验证 - 6 个步骤
+      await streamLogTyping(agentId, `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, 'info', controller)
+      await streamLogTyping(agentId, `🛡️ 阶段四：联通智铃 H5 内测验证`, 'info', controller)
+      await streamLogTyping(agentId, `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, 'info', controller)
+
+      // ===== 思考阶段：测试策略规划 =====
+      await streamLogTyping(agentId, `💭 思考阶段：测试策略规划`, 'info', controller)
+      await streamLogTyping(agentId, `  📌 测试范围：4 个核心页面功能验证`, 'info', controller)
+      await streamLogTyping(agentId, `  🎯 测试目标：确保核心功能正常、用户体验流畅`, 'info', controller)
+      await streamLogTyping(agentId, `  📋 测试类型：功能测试、兼容性测试、性能测试`, 'info', controller)
+      await streamLogTyping(agentId, ``, 'info', controller)
+
+      const stepDelay = getStepDelay(6)
+
+      // 步骤 1：审阅 PRD 和技术文档
+      await streamLogTyping(agentId, `① 审阅 PRD 和技术文档`, 'info', controller)
+      await streamLogTyping(agentId, `  📖 审阅产品经理的 PRD 文档...`, 'info', controller)
+      await streamLogTyping(agentId, `  📖 审阅研发工程师的技术架构文档...`, 'info', controller)
+      if (!(await waitWithPause(stepDelay, controller))) return false
+      await streamLogTyping(agentId, `  ✅ 明确测试范围：对话创作、一键生成、IP 库、历史记录`, 'info', controller)
+
+      // 步骤 2：编写测试用例
+      await streamLogTyping(agentId, `② 编写测试用例`, 'info', controller)
+      await streamLogTyping(agentId, `  📝 设计功能测试用例（正向+逆向）...`, 'info', controller)
+      if (!(await waitWithPause(stepDelay, controller))) return false
+      await streamLogTyping(agentId, `  ✅ 生成测试用例 50+ 条，覆盖核心功能`, 'info', controller)
+
+      // 步骤 3：执行功能测试
+      await streamLogTyping(agentId, `③ 执行功能测试`, 'info', controller)
+      await streamLogTyping(agentId, `  🧪 测试对话创作页：4 轮引导流程...`, 'info', controller)
+      await streamLogTyping(agentId, `  🧪 测试一键生成页：AI 创作能力...`, 'info', controller)
+      await streamLogTyping(agentId, `  🧪 测试 IP 库：角色选择联动...`, 'info', controller)
+      await streamLogTyping(agentId, `  🧪 测试历史记录：列表展示与操作...`, 'info', controller)
+      if (!(await waitWithPause(stepDelay, controller))) return false
+      await streamLogTyping(agentId, `  ✅ 功能测试通过，发现 3 个小问题已修复`, 'info', controller)
+
+      // 步骤 4：兼容性测试
+      await streamLogTyping(agentId, `④ 兼容性测试`, 'info', controller)
+      await streamLogTyping(agentId, `  📱 测试 iOS Safari、Android Chrome...`, 'info', controller)
+      if (!(await waitWithPause(stepDelay, controller))) return false
+      await streamLogTyping(agentId, `  ✅ 兼容性测试通过，主流机型适配良好`, 'info', controller)
+
+      // 步骤 5：性能测试
+      await streamLogTyping(agentId, `⑤ 性能测试`, 'info', controller)
+      await streamLogTyping(agentId, `  ⚡ 测试页面加载速度、AI 响应时间...`, 'info', controller)
+      if (!(await waitWithPause(stepDelay, controller))) return false
+      await streamLogTyping(agentId, `  ✅ 性能达标：首屏 < 2s，AI 响应 < 3s`, 'info', controller)
+
+      // 步骤 6：编写测试报告
+      await streamLogTyping(agentId, `⑥ 编写测试报告`, 'info', controller)
+      await streamLogTyping(agentId, `  📄 编写测试报告和验收文档...`, 'info', controller)
+      if (!(await waitWithPause(stepDelay, controller))) return false
+
+      // 生成测试文件
+      const deliverables = SCENARIO_DELIVERABLES[currentScenario.value][agentId]
+      if (deliverables && deliverables.length > 0) {
+        await generateFile(agentId, deliverables[0], controller)
+      }
+      if (deliverables && deliverables.length > 1) {
+        await generateFile(agentId, deliverables[1], controller)
+      }
+
+      // 完成
+      if (subTask) {
+        subTask.status = 'completed'
+        subTask.output = '📋 测试计划 + 📊 测试报告'
+      }
+      agentsStore.completeAgentTask(agentId)
+      await streamLogTyping(agentId, `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, 'info', controller)
+      await streamLogTyping(agentId, `✅ 阶段四完成：测试验收通过，产品可发布`, 'success', controller)
+    } else if (isUnicomScenario) {
+      // 联通智能客服场景
+      await streamLogTyping(agentId, `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, 'info', controller)
+      await streamLogTyping(agentId, `🛡️ 阶段四：智能客服 H5 测试验收`, 'info', controller)
+      await streamLogTyping(agentId, `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, 'info', controller)
+
+      const stepDelay = getStepDelay(5)
+
+      await streamLogTyping(agentId, `① 审阅 PRD 和技术文档...`, 'info', controller)
+      if (!(await waitWithPause(stepDelay, controller))) return false
+
+      await streamLogTyping(agentId, `② 编写测试用例...`, 'info', controller)
+      if (!(await waitWithPause(stepDelay, controller))) return false
+
+      await streamLogTyping(agentId, `③ 执行功能测试...`, 'info', controller)
+      if (!(await waitWithPause(stepDelay, controller))) return false
+
+      await streamLogTyping(agentId, `④ 兼容性与性能测试...`, 'info', controller)
+      if (!(await waitWithPause(stepDelay, controller))) return false
+
+      await streamLogTyping(agentId, `⑤ 编写测试报告...`, 'info', controller)
+      if (!(await waitWithPause(stepDelay, controller))) return false
+
+      const deliverables = SCENARIO_DELIVERABLES[currentScenario.value][agentId]
+      if (deliverables && deliverables.length > 0) {
+        await generateFile(agentId, deliverables[0], controller)
+      }
+      if (deliverables && deliverables.length > 1) {
+        await generateFile(agentId, deliverables[1], controller)
+      }
+
+      if (subTask) {
+        subTask.status = 'completed'
+        subTask.output = '📋 测试计划 + 📊 测试报告'
+      }
+      agentsStore.completeAgentTask(agentId)
+      await streamLogTyping(agentId, `✅ 测试验收完成，产品可发布`, 'success', controller)
+    }
+
     return true
   }
 
@@ -811,12 +946,12 @@ export const useSimulationStore = defineStore('simulation', () => {
 
     if (isRingtoneScenario) {
       await streamLogTyping('xiaomu', `🎯 任务目标：联通 AI 彩铃产品升级（对标天翼智铃）`, 'info', controller)
-      await streamLogTyping('xiaomu', `👥 参与角色：研究员（竞品分析师）、产品经理（产品经理）、研发工程师（研发工程师）`, 'info', controller)
-      await streamLogTyping('xiaomu', `📋 执行流程：天翼智铃竞品分析 → 联通智铃 PRD&H5 原型设计 → 技术架构与内测开发`, 'info', controller)
+      await streamLogTyping('xiaomu', `👥 参与角色：研究员（竞品分析师）、产品经理（产品经理）、研发工程师（研发工程师）、测试员（质量检查员）`, 'info', controller)
+      await streamLogTyping('xiaomu', `📋 执行流程：天翼智铃竞品分析 → 联通智铃 PRD&H5 原型设计 → 技术架构与内测开发 → 测试验收`, 'info', controller)
     } else if (isUnicomScenario) {
       await streamLogTyping('xiaomu', `🎯 任务目标：开发联通智能客服 H5 应用`, 'info', controller)
-      await streamLogTyping('xiaomu', `👥 参与角色：研究员（竞品分析师）、产品经理（产品经理）、研发工程师（研发工程师）`, 'info', controller)
-      await streamLogTyping('xiaomu', `📋 执行流程：联通助理&安全管家调研 → 产品 PRD&H5 原型设计 → 技术架构与开发`, 'info', controller)
+      await streamLogTyping('xiaomu', `👥 参与角色：研究员（竞品分析师）、产品经理（产品经理）、研发工程师（研发工程师）、测试员（质量检查员）`, 'info', controller)
+      await streamLogTyping('xiaomu', `📋 执行流程：联通助理&安全管家调研 → 产品 PRD&H5 原型设计 → 技术架构与开发 → 测试验收`, 'info', controller)
     }
     await streamLogTyping('xiaomu', ``, 'info', controller)
 
@@ -827,15 +962,16 @@ export const useSimulationStore = defineStore('simulation', () => {
       await executeXiaomuWorkflow(controller)
       if (controller.signal.aborted) throw new Error('任务已取消')
 
-      // 创建四个子任务
+      // 创建五个子任务
       subTasks.value = [
         { id: `step_${Date.now()}_xiaomu`, agentId: 'xiaomu', description: isRingtoneScenario ? '项目统筹与协调' : (isUnicomScenario ? '项目调度与协调' : '项目统筹与协调'), status: 'completed', duration: 0 },
         { id: `step_${Date.now()}_xiaoyan`, agentId: 'xiaoyan', description: isRingtoneScenario ? '天翼智铃竞品分析（产品/功能/技术/商业/用户五维对比）' : (isUnicomScenario ? '联通助理&安全管家产品调研' : '市场调研分析'), status: 'pending', duration: 0 },
         { id: `step_${Date.now()}_xiaochan`, agentId: 'xiaochan', description: isRingtoneScenario ? '联通智铃 PRD&H5 原型设计（小鸿智能体/一键生成/一键设彩铃）' : (isUnicomScenario ? '产品 PRD&H5 原型设计' : '产品需求分析'), status: 'pending', duration: 0 },
-        { id: `step_${Date.now()}_xiaokai`, agentId: 'xiaokai', description: isRingtoneScenario ? '技术架构与 H5 内测开发（对话创作页/一键生成页/IP 库/历史记录）' : (isUnicomScenario ? '技术架构与 H5 开发' : '技术开发实现'), status: 'pending', duration: 0 }
+        { id: `step_${Date.now()}_xiaokai`, agentId: 'xiaokai', description: isRingtoneScenario ? '技术架构与 H5 内测开发（对话创作页/一键生成页/IP 库/历史记录）' : (isUnicomScenario ? '技术架构与 H5 开发' : '技术开发实现'), status: 'pending', duration: 0 },
+        { id: `step_${Date.now()}_xiaoce`, agentId: 'xiaoce', description: isRingtoneScenario ? 'H5 内测测试验收（功能/兼容性/性能测试）' : (isUnicomScenario ? 'H5 应用测试验收' : '功能测试验收'), status: 'pending', duration: 0 }
       ]
 
-      await streamLogTyping('xiaomu', isRingtoneScenario ? `✅ 任务分配完成，执行流程：研究员（天翼智铃竞品分析）→ 产品经理（PRD& 原型设计）→ 研发工程师（H5 内测开发）` : (isUnicomScenario ? `✅ 任务分配完成，执行流程：研究员（联通调研）→ 产品经理（PRD& 原型）→ 研发工程师（H5 开发）` : `✅ 任务分配完成，按顺序执行：研究员 → 产品经理 → 研发工程师`), 'success', controller)
+      await streamLogTyping('xiaomu', isRingtoneScenario ? `✅ 任务分配完成，执行流程：研究员（天翼智铃竞品分析）→ 产品经理（PRD&原型设计）→ 研发工程师（H5 内测开发）→ 测试员（测试验收）` : (isUnicomScenario ? `✅ 任务分配完成，执行流程：研究员（联通调研）→ 产品经理（PRD&原型）→ 研发工程师（H5 开发）→ 测试员（测试验收）` : `✅ 任务分配完成，按顺序执行：研究员 → 产品经理 → 研发工程师 → 测试员`), 'success', controller)
       await streamLogTyping('xiaomu', ``, 'info', controller)
 
       progress.value = 10
@@ -861,6 +997,13 @@ export const useSimulationStore = defineStore('simulation', () => {
       await streamLogTyping('xiaomu', isRingtoneScenario ? `💻 第三阶段：研发工程师开发联通智铃 H5 内测 v2.0（4 个核心页面可演示）...` : (isUnicomScenario ? `💻 第三阶段：研发工程师基于 PRD 进行 H5 应用开发...` : `💻 第三阶段：研发工程师基于 PRD 进行技术开发...`), 'info', controller)
       const result3 = await executeXiaokaiWorkflow(controller)
       if (!result3 || controller.signal.aborted) throw new Error('任务已取消')
+      progress.value = 75
+
+      // 2.4 测试员执行测试验收
+      await streamLogTyping('xiaomu', ``, 'info', controller)
+      await streamLogTyping('xiaomu', isRingtoneScenario ? `🛡️ 第四阶段：测试员进行 H5 内测测试验收（功能/兼容性/性能测试）...` : (isUnicomScenario ? `🛡️ 第四阶段：测试员进行 H5 应用测试验收...` : `🛡️ 第四阶段：测试员进行功能测试验收...`), 'info', controller)
+      const result4 = await executeXiaoceWorkflow(controller)
+      if (!result4 || controller.signal.aborted) throw new Error('任务已取消')
       progress.value = 90
 
       // ===== 阶段 3: 小呦汇总结果 =====

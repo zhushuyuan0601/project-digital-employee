@@ -35,6 +35,12 @@ export const AGENT_CONFIG: Record<string, { name: string; icon: string; descript
     icon: '/avatars/avatar-xiaoyan.jpeg',
     description: '调研分析',
     role: 'analyst'
+  },
+  xiaoce: {
+    name: '测试员',
+    icon: '/avatars/avatar-xiaoce.jpeg',
+    description: '质量检查',
+    role: 'tester'
   }
 }
 
@@ -54,6 +60,7 @@ Agent 角色说明：
 - xiaokai (研发工程师): 技术开发，负责代码实现、技术研发
 - xiaochan (产品经理): 产品设计，负责需求分析、产品设计
 - xiaoyan (研究员): 调研分析，负责市场调研、竞品分析
+- xiaoce (测试员): 质量检查，负责测试验证、质量保障
 
 任务描述：${taskDescription}
 
