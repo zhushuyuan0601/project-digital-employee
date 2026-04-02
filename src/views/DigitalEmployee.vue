@@ -459,7 +459,8 @@ const filteredWork = computed(() => {
   if (filterDateStart.value) filtered = filtered.filter(w => w.date >= filterDateStart.value)
   if (filterDateEnd.value) filtered = filtered.filter(w => w.date <= filterDateEnd.value)
   if (filterRole.value !== 'all') filtered = filtered.filter(w => w.person.includes(filterRole.value))
-  return filtered
+  // 只显示最新的5条
+  return filtered.slice(0, 5)
 })
 
 const filteredOutputs = computed(() => {
@@ -479,7 +480,8 @@ const teamMembers = computed(() => {
     xiaomu: '小 U',
     xiaokai: '小开',
     xiaochan: '小产',
-    xiaoyan: '小研'
+    xiaoyan: '小研',
+    xiaoce: '小测'
   }
   const getOutputsByPerson = (agentId) => {
     const personName = nameMap[agentId] || ''
@@ -513,7 +515,8 @@ function getGradientForAgent(agentId) {
     xiaomu: 'from-indigo-400 to-purple-500',    // 项目管理
     xiaokai: 'from-green-400 to-cyan-500',      // 研发工程师
     xiaochan: 'from-pink-400 to-rose-500',      // 产品经理
-    xiaoyan: 'from-yellow-400 to-orange-500'    // 研究员
+    xiaoyan: 'from-yellow-400 to-orange-500',   // 研究员
+    xiaoce: 'from-red-400 to-pink-500'          // 测试员
   }
   return gradients[agentId] || 'from-gray-400 to-gray-500'
 }
@@ -524,7 +527,8 @@ function getAgentStats(agentId, workByPerson) {
     xiaomu: { '任务': workByPerson['小 U'] || 0, '同步': '✅' },
     xiaokai: { '提交': stats.value.todayCommits || 0, '代码': '2.5k' },
     xiaochan: { 'PRD': 0, '评审': 0 },
-    xiaoyan: { '报告': 0, '洞察': 15 }
+    xiaoyan: { '报告': 0, '洞察': 15 },
+    xiaoce: { '测试': 0, '通过': '100%' }
   }
   return statsMap[agentId] || {}
 }
@@ -535,7 +539,8 @@ function getAgentTask(agentId) {
     xiaomu: '团队协调',
     xiaokai: '智能情报系统开发',
     xiaochan: '产品需求规划',
-    xiaoyan: '行业情报收集'
+    xiaoyan: '行业情报收集',
+    xiaoce: '功能测试验证'
   }
   return tasks[agentId] || '-'
 }
@@ -737,8 +742,13 @@ const downloadFile = () => {
 const refreshData = async () => {
   refreshing.value = true
   try {
-    const res = await axios.get('/api/dashboard')
-    const data = res.data
+    // 并行获取 dashboard 数据和 activities 数据
+    const [dashboardRes, activitiesRes] = await Promise.all([
+      axios.get('/api/dashboard'),
+      axios.get('/api/activities?hours=24&limit=100')
+    ])
+
+    const data = dashboardRes.data
 
     // 统计
     stats.value = {
@@ -751,8 +761,13 @@ const refreshData = async () => {
     // 项目
     projects.value = data.projects || []
 
-    // 工作记录
-    allWorkRecords.value = data.todayWork || []
+    // 工作记录 - 从 activities API 获取
+    const activitiesData = activitiesRes.data
+    if (activitiesData.success && activitiesData.activities) {
+      allWorkRecords.value = activitiesData.activities
+    } else {
+      allWorkRecords.value = data.todayWork || []
+    }
 
     // 工作成果
     console.log('[DigitalEmployee] API 返回的 outputs:', data.outputs)

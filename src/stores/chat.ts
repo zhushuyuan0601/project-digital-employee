@@ -272,16 +272,22 @@ export const useChatStore = defineStore('chat', () => {
     isTyping.value = true
     typingStartTime.value = Date.now()
 
+    // 使用 'agent' 方法创建新 session 并发送消息（与 Mission-control 一致）
+    // 从 sessionKey 提取简短的 agent ID（如 'agent:ceo:main' -> 'ceo'）
+    const agentIdShort = settings.value.sessionKey.split(':')[1] || 'ceo'
+
     const msg = {
       type: 'req',
       id: `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      method: 'chat.send',
+      method: 'agent',
       params: {
-        sessionKey: settings.value.sessionKey,
+        agentId: agentIdShort,
         message: text.trim(),
         idempotencyKey: `ik-${Date.now()}`,
+        deliver: false,
       },
     }
+    console.log('[WebSocket] Sending agent request:', agentIdShort)
     ws.value.send(JSON.stringify(msg))
   }
 

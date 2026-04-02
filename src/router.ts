@@ -59,6 +59,51 @@ const routes: RouteRecordRaw[] = [
     path: '/group-chat',
     name: 'group-chat',
     component: () => import('@/views/GroupChat.vue')
+  },
+  {
+    path: '/skills',
+    name: 'skills',
+    component: () => import('@/views/SkillsHub.vue')
+  },
+  {
+    path: '/skills-old',
+    name: 'skills-old',
+    component: () => import('@/views/Skills.vue')
+  },
+  {
+    path: '/tokens',
+    name: 'tokens',
+    component: () => import('@/views/Tokens.vue')
+  },
+  {
+    path: '/memory',
+    name: 'memory',
+    component: () => import('@/views/Memory.vue')
+  },
+  {
+    path: '/security',
+    name: 'security',
+    component: () => import('@/views/Security.vue')
+  },
+  {
+    path: '/cron',
+    name: 'cron',
+    component: () => import('@/views/Cron.vue')
+  },
+  {
+    path: '/webhooks',
+    name: 'webhooks',
+    component: () => import('@/views/Webhooks.vue')
+  },
+  {
+    path: '/mission-control',
+    name: 'mission-control',
+    component: () => import('@/views/MissionControl.vue')
+  },
+  {
+    path: '/task-board',
+    name: 'task-board',
+    component: () => import('@/views/TaskBoard.vue')
   }
 ]
 

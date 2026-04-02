@@ -211,6 +211,150 @@
               <span class="footer-value">{{ getAgentFiles('xiaokai').length }} 个</span>
             </div>
           </div>
+
+          <!-- 测试员 -->
+          <div class="agent-panel" :class="[`agent-panel--xiaoce`, { 'is-busy': isAgentBusy('xiaoce') }]" @click="showAgentDetail('xiaoce')">
+            <div class="agent-panel-header">
+              <div class="agent-info-large">
+                <div class="agent-avatar-large">
+                  <img :src="AGENT_CONFIG['xiaoce'].icon" alt="测试员" />
+                  <span class="connection-dot" :class="{ connected: agents['xiaoce']?.isConnected }"></span>
+                </div>
+                <div class="agent-details">
+                  <div class="agent-name-large">测试员</div>
+                  <div class="agent-role-large">质量检查 · agent:team-qa:main</div>
+                </div>
+              </div>
+              <div class="status-badge" :class="`status--${getAgentStatus('xiaoce')}`">
+                <span class="status-dot"></span>
+                <span class="status-text">{{ getAgentStatus('xiaoce') === 'busy' ? '工作中' : '空闲' }}</span>
+              </div>
+            </div>
+            <div class="agent-log-box" :ref="(el) => logBoxRefs['xiaoce'] = el">
+              <div v-if="agents['xiaoce']?.messages.length === 0" class="log-empty">
+                <span>暂无输出</span>
+              </div>
+              <div v-for="msg in agents['xiaoce']?.messages" :key="msg.id" class="log-item" :class="`type-${msg.role}`">
+                <div class="log-role">{{ msg.role === 'user' ? '用户' : msg.role === 'assistant' ? '测试员' : '系统' }}</div>
+                <div class="log-content" v-html="renderMarkdown(msg.content)"></div>
+              </div>
+            </div>
+            <div class="agent-panel-footer">
+              <span class="footer-label">产出文件</span>
+              <span class="footer-value">{{ getAgentFiles('xiaoce').length }} 个</span>
+            </div>
+          </div>
+
+          <!-- ClaudeCode 动态角色 -->
+          <div v-if="claudeCodeSessions.length > 0" class="agent-panel agent-panel--claudecode" :class="{ 'is-busy': claudeCodeSessions.some(s => s.active), 'is-expanded': expandedClaudeSession }">
+            <div class="agent-panel-header" @click="toggleClaudePanel">
+              <div class="agent-info-large">
+                <div class="agent-avatar-large">
+                  <div class="claude-avatar">🤖</div>
+                  <span class="connection-dot connected"></span>
+                </div>
+                <div class="agent-details">
+                  <div class="agent-name-large">ClaudeCode</div>
+                  <div class="agent-role-large">代码执行者 · {{ claudeCodeSessions.length }} 个活跃会话</div>
+                </div>
+              </div>
+              <div class="status-badge status--busy">
+                <span class="status-dot"></span>
+                <span class="status-text">执行中</span>
+              </div>
+              <button class="expand-btn" @click.stop="toggleClaudePanel">
+                <span :class="{ 'expanded': expandedClaudeSession }">▼</span>
+              </button>
+            </div>
+
+            <!-- 会话选择器 -->
+            <div v-if="!expandedClaudeSession" class="claude-session-list">
+              <div v-for="session in claudeCodeSessions" :key="session.id"
+                   class="claude-session-item-mini"
+                   @click="selectClaudeSession(session)">
+                <div class="session-mini-header">
+                  <span class="session-model-badge">{{ session.model }}</span>
+                  <span class="session-name-mini">{{ getSessionDisplayName(session) }}</span>
+                </div>
+                <div class="session-mini-stats">
+                  <span>📊 {{ session.tokens }}</span>
+                  <span>💬 {{ session.userMessages }}/{{ session.assistantMessages }}</span>
+                  <span>🔧 {{ session.toolUses }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 展开的会话详情 -->
+            <div v-if="expandedClaudeSession && selectedClaudeSession" class="claude-session-expanded">
+              <!-- 会话信息栏 -->
+              <div class="session-info-bar">
+                <div class="session-info-left">
+                  <button class="back-btn" @click="expandedClaudeSession = false">← 返回</button>
+                  <span class="session-model-badge">{{ selectedClaudeSession.model }}</span>
+                  <span class="session-path-mini">{{ selectedClaudeSession.workingDir }}</span>
+                </div>
+                <div class="session-info-right">
+                  <span class="token-stat">Token: {{ selectedClaudeSession.tokens }}</span>
+                  <span class="refresh-btn" @click="refreshClaudeTranscript">🔄</span>
+                </div>
+              </div>
+
+              <!-- 消息列表 -->
+              <div class="claude-messages-container" ref="claudeMessagesRef">
+                <div v-if="claudeTranscriptLoading" class="transcript-loading">
+                  <span>加载消息中...</span>
+                </div>
+                <div v-else-if="claudeTranscript.length === 0" class="transcript-empty">
+                  <span>暂无消息记录</span>
+                </div>
+                <div v-else class="transcript-messages">
+                  <div v-for="(msg, idx) in claudeTranscript" :key="idx"
+                       class="transcript-msg"
+                       :class="`msg-${msg.role}`">
+                    <div class="msg-role-badge">{{ getMessageRoleLabel(msg.role) }}</div>
+                    <div class="msg-content">
+                      <template v-for="(part, pidx) in msg.parts" :key="pidx">
+                        <div v-if="part.type === 'text'" class="msg-text">{{ part.text }}</div>
+                        <div v-else-if="part.type === 'thinking'" class="msg-thinking">💭 {{ part.thinking }}</div>
+                        <div v-else-if="part.type === 'tool_use'" class="msg-tool">
+                          <span class="tool-name">🔧 {{ part.name }}</span>
+                          <pre class="tool-input">{{ part.input }}</pre>
+                        </div>
+                        <div v-else-if="part.type === 'tool_result'" class="msg-tool-result" :class="{ 'is-error': part.isError }">
+                          <pre>{{ part.content }}</pre>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 发送消息输入框 -->
+              <div class="claude-input-area">
+                <input
+                  v-model="claudeInputMessage"
+                  type="text"
+                  placeholder="输入消息发送到 ClaudeCode..."
+                  class="claude-input"
+                  @keydown.enter="sendClaudeMessage"
+                  :disabled="claudeSending"
+                />
+                <button
+                  class="send-btn"
+                  @click="sendClaudeMessage"
+                  :disabled="!claudeInputMessage.trim() || claudeSending"
+                >
+                  {{ claudeSending ? '...' : '发送' }}
+                </button>
+              </div>
+              <div v-if="claudeSendError" class="send-error">{{ claudeSendError }}</div>
+            </div>
+
+            <div v-if="!expandedClaudeSession" class="agent-panel-footer">
+              <span class="footer-label">活跃会话</span>
+              <span class="footer-value">{{ claudeCodeSessions.length }} 个 · 点击展开查看详情</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -326,7 +470,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Loading, Warning, Document, Refresh } from '@element-plus/icons-vue'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
@@ -374,7 +518,8 @@ const logBoxRefs = ref<Record<string, HTMLElement | null>>({
   xiaomu: null,
   xiaoyan: null,
   xiaochan: null,
-  xiaokai: null
+  xiaokai: null,
+  xiaoce: null
 })
 
 // 跟踪每个 Agent 日志框用户是否手动向上滚动过（true = 用户手动向上滚动了，false = 一直在底部）
@@ -382,19 +527,150 @@ const userScrolledUp = ref<Record<string, boolean>>({
   xiaomu: false,
   xiaoyan: false,
   xiaochan: false,
-  xiaokai: false
+  xiaokai: false,
+  xiaoce: false
 })
 
 // 任务时间追踪
 const taskStartTime = ref<number>(0)
 const taskEndTime = ref<number>(0)
 
+// ClaudeCode 会话数据
+const claudeCodeSessions = ref<any[]>([])
+let claudeCodePollInterval: ReturnType<typeof setInterval> | null = null
+
+// ClaudeCode 展开状态
+const expandedClaudeSession = ref(false)
+const selectedClaudeSession = ref<any>(null)
+const claudeTranscript = ref<any[]>([])
+const claudeTranscriptLoading = ref(false)
+const claudeInputMessage = ref('')
+const claudeSending = ref(false)
+const claudeSendError = ref('')
+const claudeMessagesRef = ref<HTMLElement | null>(null)
+
+// 获取 ClaudeCode 会话
+const fetchClaudeCodeSessions = async () => {
+  try {
+    const response = await fetch('/api/claude-sessions')
+    const data = await response.json()
+    if (data.success && data.sessions) {
+      claudeCodeSessions.value = data.sessions
+      console.log('[TaskCenter2] Fetched ClaudeCode sessions:', data.sessions.length)
+    }
+  } catch (err) {
+    console.error('[TaskCenter2] Failed to fetch ClaudeCode sessions:', err)
+  }
+}
+
+// 截断文本
+const truncateText = (text: string, maxLength: number) => {
+  if (!text) return ''
+  if (text.length <= maxLength) return text
+  return text.slice(0, maxLength) + '...'
+}
+
+// 获取会话显示名称
+const getSessionDisplayName = (session: any) => {
+  if (!session.workingDir) return session.key || session.id
+  const parts = session.workingDir.split('/')
+  return parts[parts.length - 1] || session.key
+}
+
+// 切换 ClaudeCode 面板展开状态
+const toggleClaudePanel = () => {
+  expandedClaudeSession.value = !expandedClaudeSession.value
+  if (!expandedClaudeSession.value) {
+    selectedClaudeSession.value = null
+    claudeTranscript.value = []
+  }
+}
+
+// 选择 ClaudeCode 会话
+const selectClaudeSession = async (session: any) => {
+  selectedClaudeSession.value = session
+  expandedClaudeSession.value = true
+  await fetchClaudeTranscript(session.id)
+}
+
+// 获取 ClaudeCode 会话消息记录
+const fetchClaudeTranscript = async (sessionId: string) => {
+  claudeTranscriptLoading.value = true
+  claudeTranscript.value = []
+  try {
+    const response = await fetch(`/api/claude-sessions/${sessionId}/transcript?limit=50`)
+    const data = await response.json()
+    if (data.success && data.messages) {
+      claudeTranscript.value = data.messages
+      console.log('[TaskCenter2] Fetched transcript:', data.messages.length, 'messages')
+    }
+  } catch (err) {
+    console.error('[TaskCenter2] Failed to fetch transcript:', err)
+  } finally {
+    claudeTranscriptLoading.value = false
+  }
+}
+
+// 刷新消息记录
+const refreshClaudeTranscript = async () => {
+  if (selectedClaudeSession.value) {
+    await fetchClaudeTranscript(selectedClaudeSession.value.id)
+    // 滚动到底部
+    nextTick(() => {
+      if (claudeMessagesRef.value) {
+        claudeMessagesRef.value.scrollTop = claudeMessagesRef.value.scrollHeight
+      }
+    })
+  }
+}
+
+// 发送消息到 ClaudeCode 会话
+const sendClaudeMessage = async () => {
+  if (!claudeInputMessage.value.trim() || !selectedClaudeSession.value || claudeSending.value) return
+
+  claudeSending.value = true
+  claudeSendError.value = ''
+
+  try {
+    const response = await fetch(`/api/claude-sessions/${selectedClaudeSession.value.id}/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: claudeInputMessage.value.trim() })
+    })
+
+    const data = await response.json()
+    if (data.success) {
+      claudeInputMessage.value = ''
+      // 延迟刷新消息记录
+      setTimeout(() => refreshClaudeTranscript(), 2000)
+    } else {
+      claudeSendError.value = data.error || '发送失败'
+    }
+  } catch (err) {
+    console.error('[TaskCenter2] Failed to send message:', err)
+    claudeSendError.value = '发送失败，请稍后重试'
+  } finally {
+    claudeSending.value = false
+  }
+}
+
+// 获取消息角色标签
+const getMessageRoleLabel = (role: string) => {
+  switch (role) {
+    case 'user': return '👤 用户'
+    case 'assistant': return '🤖 Claude'
+    case 'system': return '⚙️ 系统'
+    default: return role
+  }
+}
+
 // Agent 到角色 ID 的映射
 const AGENT_TO_ROLE_ID: Record<string, string> = {
   xiaomu: 'ceo',
   xiaoyan: 'researcher',
   xiaochan: 'pm',
-  xiaokai: 'tech-lead'
+  xiaokai: 'tech-lead',
+  xiaoce: 'team-qa'
 }
 
 // 渲染 Markdown
@@ -427,7 +703,8 @@ const lastMessageTime = ref<Record<string, number>>({
   xiaomu: 0,
   xiaoyan: 0,
   xiaochan: 0,
-  xiaokai: 0
+  xiaokai: 0,
+  xiaoce: 0
 })
 
 // 判断 Agent 是否忙碌（正在输出内容）
@@ -447,7 +724,7 @@ const isAgentBusy = (agentId: string) => {
 watch(
   () => agents.value,
   () => {
-    const agentIds = ['xiaomu', 'xiaoyan', 'xiaochan', 'xiaokai']
+    const agentIds = ['xiaomu', 'xiaoyan', 'xiaochan', 'xiaokai', 'xiaoce']
     agentIds.forEach(agentId => {
       const agent = agents.value[agentId]
       if (agent && agent.messages.length > 0) {
@@ -605,7 +882,8 @@ const getAgentName = (agentId: string) => {
     xiaomu: '小呦',
     xiaoyan: '研究员',
     xiaochan: '产品经理',
-    xiaokai: '研发工程师'
+    xiaokai: '研发工程师',
+    xiaoce: '测试员'
   }
   return names[agentId] || agentId
 }
@@ -616,7 +894,8 @@ const getAgentRole = (agentId: string) => {
     xiaomu: '项目统筹 · agent:ceo:main',
     xiaoyan: '调研分析 · agent:researcher:main',
     xiaochan: '产品设计 · agent:pm:main',
-    xiaokai: '技术开发 · agent:tech-lead:main'
+    xiaokai: '技术开发 · agent:tech-lead:main',
+    xiaoce: '质量检查 · agent:team-qa:main'
   }
   return roles[agentId] || ''
 }
@@ -708,7 +987,7 @@ const downloadFile = () => {
 }
 
 // 发送任务给小呦
-const sendTask = () => {
+const sendTask = async () => {
   if (!taskInput.value.trim()) return
   if (!xiaomuConnected.value) {
     ElMessage.warning('小呦未连接，请先点击全连按钮')
@@ -721,15 +1000,49 @@ const sendTask = () => {
   taskStartTime.value = Date.now()
   taskEndTime.value = 0
 
-  // 发送消息
-  multiAgentStore.sendMessage('xiaomu', taskInput.value.trim())
+  try {
+    // 使用 HTTP API 发送消息（与 Mission-control 一致）
+    // 使用完整的 agent 名称作为 sessionKey
+    const targetAgentName = 'agent:ceo:main'  // 小呦的完整 agent 名称
 
-  // 清空输入
-  setTimeout(() => {
-    taskInput.value = ''
-    isSending.value = false
-    ElMessage.success('任务已发送给小呦')
-  }, 500)
+    const response = await fetch('/api/chat/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'human',
+        to: targetAgentName,
+        content: taskInput.value.trim(),
+        message_type: 'text',
+        conversation_id: targetAgentName
+      })
+    })
+
+    const data = await response.json()
+
+    if (data.success || data.message) {
+      console.log('[TaskCenter2] Message sent via HTTP API:', data)
+      // 在本地添加用户消息
+      multiAgentStore.agents['xiaomu']?.messages.push({
+        id: `msg-${Date.now()}`,
+        role: 'user',
+        content: taskInput.value.trim(),
+        timestamp: Date.now(),
+        agentId: 'xiaomu'
+      })
+      ElMessage.success('任务已发送给小呦')
+    } else {
+      throw new Error(data.error || '发送失败')
+    }
+  } catch (err) {
+    console.error('[TaskCenter2] Send message error:', err)
+    ElMessage.error('发送失败：' + err.message)
+  } finally {
+    // 清空输入
+    setTimeout(() => {
+      taskInput.value = ''
+      isSending.value = false
+    }, 500)
+  }
 }
 
 // 全连
@@ -757,7 +1070,7 @@ const handleReset = () => {
     taskEndTime.value = Date.now()
 
     // 清空每个 Agent 的消息
-    const agentIds = ['xiaomu', 'xiaoyan', 'xiaochan', 'xiaokai']
+    const agentIds = ['xiaomu', 'xiaoyan', 'xiaochan', 'xiaokai', 'xiaoce']
     agentIds.forEach(agentId => {
       multiAgentStore.clearMessages(agentId)
       lastMessageTime.value[agentId] = 0
@@ -791,7 +1104,7 @@ watch(
     nextTick(() => {
       nextTick(() => {
         // 滚动每个 Agent 的日志框到底部显示最新消息（仅当用户没有手动向上滚动时）
-        const agentIds = ['xiaomu', 'xiaoyan', 'xiaochan', 'xiaokai']
+        const agentIds = ['xiaomu', 'xiaoyan', 'xiaochan', 'xiaokai', 'xiaoce']
         agentIds.forEach(agentId => {
           const logBox = logBoxRefs.value[agentId]
           if (logBox && !userScrolledUp.value[agentId]) {
@@ -811,7 +1124,7 @@ onMounted(() => {
   // 初始化滚动到底部
   nextTick(() => {
     nextTick(() => {
-      const agentIds = ['xiaomu', 'xiaoyan', 'xiaochan', 'xiaokai']
+      const agentIds = ['xiaomu', 'xiaoyan', 'xiaochan', 'xiaokai', 'xiaoce']
       agentIds.forEach(agentId => {
         const logBox = logBoxRefs.value[agentId]
         if (logBox) {
@@ -823,7 +1136,7 @@ onMounted(() => {
 
   // 添加滚动事件监听器
   nextTick(() => {
-    const agentIds = ['xiaomu', 'xiaoyan', 'xiaochan', 'xiaokai']
+    const agentIds = ['xiaomu', 'xiaoyan', 'xiaochan', 'xiaokai', 'xiaoce']
     agentIds.forEach(agentId => {
       const logBox = logBoxRefs.value[agentId]
       if (logBox) {
@@ -837,6 +1150,20 @@ onMounted(() => {
       }
     })
   })
+
+  // 初始获取 ClaudeCode 会话
+  fetchClaudeCodeSessions()
+
+  // 每 5 秒轮询一次 ClaudeCode 会话
+  claudeCodePollInterval = setInterval(fetchClaudeCodeSessions, 5000)
+})
+
+// 组件卸载时清理轮询
+onUnmounted(() => {
+  if (claudeCodePollInterval) {
+    clearInterval(claudeCodePollInterval)
+    claudeCodePollInterval = null
+  }
 })
 </script>
 
@@ -1109,6 +1436,7 @@ onMounted(() => {
 .agent-panel--xiaoyan { border-left: 4px solid var(--color-warning); }
 .agent-panel--xiaochan { border-left: 4px solid var(--color-secondary); }
 .agent-panel--xiaokai { border-left: 4px solid var(--color-primary); }
+.agent-panel--xiaoce { border-left: 4px solid #ff3366; }
 
 .agent-panel-header {
   display: flex;
@@ -2155,5 +2483,481 @@ onMounted(() => {
 
 :root.light-theme .log-empty {
   color: #c2c8d1;
+}
+
+/* ClaudeCode 动态角色样式 */
+.agent-panel--claudecode {
+  border-left: 4px solid #8b5cf6;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%);
+}
+
+.agent-panel--claudecode:hover {
+  border-color: rgba(139, 92, 246, 0.5);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.2);
+}
+
+.agent-panel--claudecode.is-busy {
+  border-color: rgba(139, 92, 246, 0.6);
+  box-shadow: 0 0 25px rgba(139, 92, 246, 0.3);
+  animation: claude-busy-glow 2s ease-in-out infinite;
+}
+
+@keyframes claude-busy-glow {
+  0%, 100% { box-shadow: 0 0 25px rgba(139, 92, 246, 0.3); }
+  50% { box-shadow: 0 0 40px rgba(139, 92, 246, 0.5); }
+}
+
+.claude-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  border: 2px solid var(--grid-line);
+}
+
+.claude-log-box {
+  background: rgba(139, 92, 246, 0.05);
+}
+
+.claude-session-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  border-left: 3px solid #8b5cf6;
+}
+
+.session-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.session-icon {
+  font-size: 14px;
+}
+
+.session-name {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-model {
+  font-size: 10px;
+  color: #8b5cf6;
+  background: rgba(139, 92, 246, 0.2);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+}
+
+.session-details {
+  display: flex;
+  gap: 16px;
+}
+
+.session-detail {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+}
+
+.detail-label {
+  color: var(--text-tertiary);
+}
+
+.detail-value {
+  color: var(--color-primary);
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+.session-path {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  background: rgba(0, 0, 0, 0.2);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.path-icon {
+  font-size: 10px;
+}
+
+.path-value {
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.prompt-label {
+  color: var(--text-tertiary);
+  font-size: 10px;
+}
+
+.prompt-value {
+  color: var(--text-secondary);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* ClaudeCode 会话列表样式 */
+.claude-session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.claude-session-item-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  background: rgba(139, 92, 246, 0.1);
+  border-radius: 8px;
+  border-left: 3px solid #8b5cf6;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.claude-session-item-mini:hover {
+  background: rgba(139, 92, 246, 0.15);
+  transform: translateX(2px);
+}
+
+.session-mini-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.session-model-badge {
+  font-size: 10px;
+  color: #a78bfa;
+  background: rgba(139, 92, 246, 0.3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.session-name-mini {
+  font-size: 12px;
+  color: var(--text-primary);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-mini-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+/* ClaudeCode 展开面板样式 */
+.agent-panel--claudecode.is-expanded {
+  grid-column: span 2;
+  min-height: 500px;
+}
+
+.claude-session-expanded {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.session-info-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(139, 92, 246, 0.1);
+  border-bottom: 1px solid rgba(139, 92, 246, 0.2);
+}
+
+.session-info-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.back-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.2);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.back-btn:hover {
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--text-primary);
+}
+
+.session-path-mini {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-info-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.token-stat {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
+.refresh-btn {
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+
+.refresh-btn:hover {
+  opacity: 1;
+}
+
+.expand-btn {
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  font-size: 10px;
+  transition: transform 0.3s ease;
+}
+
+.expand-btn span {
+  display: inline-block;
+  transition: transform 0.3s ease;
+}
+
+.expand-btn span.expanded {
+  transform: rotate(180deg);
+}
+
+/* 消息容器样式 */
+.claude-messages-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.transcript-loading,
+.transcript-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.transcript-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.transcript-msg {
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.transcript-msg.msg-user {
+  background: rgba(59, 130, 246, 0.15);
+  border-left: 3px solid #3b82f6;
+}
+
+.transcript-msg.msg-assistant {
+  background: rgba(139, 92, 246, 0.15);
+  border-left: 3px solid #8b5cf6;
+}
+
+.transcript-msg.msg-system {
+  background: rgba(100, 100, 100, 0.15);
+  border-left: 3px solid #666;
+}
+
+.msg-role-badge {
+  font-size: 9px;
+  color: var(--text-tertiary);
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.msg-content {
+  color: var(--text-primary);
+}
+
+.msg-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.msg-thinking {
+  color: var(--text-tertiary);
+  font-style: italic;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  margin: 4px 0;
+}
+
+.msg-tool {
+  margin: 4px 0;
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.tool-name {
+  font-size: 10px;
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.tool-input {
+  margin-top: 4px;
+  font-size: 9px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 80px;
+  overflow-y: auto;
+}
+
+.msg-tool-result {
+  margin: 4px 0;
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 100px;
+  overflow-y: auto;
+}
+
+.msg-tool-result.is-error {
+  border-left: 2px solid #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* 输入区域样式 */
+.claude-input-area {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-top: 1px solid rgba(139, 92, 246, 0.2);
+}
+
+.claude-input {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.claude-input:focus {
+  border-color: #8b5cf6;
+}
+
+.claude-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.claude-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.send-btn {
+  padding: 8px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.send-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+.send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.send-error {
+  padding: 6px 12px;
+  font-size: 10px;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  border-top: 1px solid rgba(239, 68, 68, 0.2);
 }
 </style>

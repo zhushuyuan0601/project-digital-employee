@@ -105,8 +105,7 @@
               @click="startExecution"
               :disabled="simStore.isExecuting || !taskDescription.trim()"
             >
-              <span class="btn-icon">⟳</span>
-              🚀 下发
+              下发
             </button>
           </div>
 
@@ -511,7 +510,7 @@ const startExecution = async () => {
     addChatMessage({
       agentId: 'xiaomu',
       sender: '小呦',
-      content: isRingtoneScenario ? '本次任务对标天翼智铃，进行联通 AI 彩铃产品升级：先竞品分析 → 再产品设计 → 最后内测开发' : '本次任务按照标准产品开发流程执行：先调研 → 再设计 → 最后开发',
+      content: isRingtoneScenario ? '本次任务对标天翼智铃，进行联通 AI 彩铃产品升级：先竞品分析 → 再产品设计 → 内测开发 → 最后测试验收' : '本次任务按照标准产品开发流程执行：先调研 → 再设计 → 开发 → 最后测试验收',
       type: 'info',
       mention: ''
     })
@@ -531,8 +530,12 @@ const startExecution = async () => {
   }, 4500)
 
   setTimeout(() => {
-    sendAgentChatMessage('xiaomu', '大家按顺序来，每个阶段完成后在群里同步 👍', '')
+    sendAgentChatMessage('xiaoce', isRingtoneScenario ? '收到！等研发工程师完成 H5 内测后，我进行功能测试和验收验证 🛡️' : '收到！等研发工程师完成开发后，我进行功能测试验收 🛡️', '')
   }, 5500)
+
+  setTimeout(() => {
+    sendAgentChatMessage('xiaomu', '大家按顺序来，每个阶段完成后在群里同步 👍', '')
+  }, 6500)
 
   // 开始执行任务
   const title = desc.slice(0, 20) + (desc.length > 20 ? '...' : '')
@@ -1293,31 +1296,27 @@ onMounted(() => {
   color: var(--text-secondary);
 }
 
-.scenario-label {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  margin-left: auto;
-}
-
 /* 场景选择行 */
 .scenario-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   margin-bottom: 12px;
-  padding: 10px 12px;
+  padding: 10px 14px;
   background: rgba(0, 240, 255, 0.05);
   border: 1px solid rgba(0, 240, 255, 0.15);
   border-radius: 8px;
   flex-wrap: nowrap;
+  justify-content: flex-start;
 }
 
 .scenario-row .scenario-label {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
   font-weight: 500;
   white-space: nowrap;
   flex-shrink: 0;
+  min-width: 72px;
 }
 
 .scenario-row .scenario-select {
@@ -1330,12 +1329,12 @@ onMounted(() => {
 }
 
 .scenario-row .dispatch-btn {
-  padding: 3px 8px;
-  font-size: 11px;
+  padding: 3px 12px;
+  font-size: 12px;
   font-weight: 600;
-  height: 26px;
-  width: 56px;
+  height: 28px;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* 任务描述行 */
@@ -1531,6 +1530,7 @@ onMounted(() => {
 .line-agent.agent--xiaokai { background: rgba(0, 240, 255, 0.15); color: var(--color-primary); border-color: var(--color-primary); }
 .line-agent.agent--xiaochan { background: rgba(189, 0, 255, 0.15); color: var(--color-secondary); border-color: var(--color-secondary); }
 .line-agent.agent--xiaoyan { background: rgba(255, 170, 0, 0.15); color: var(--color-warning); border-color: var(--color-warning); }
+.line-agent.agent--xiaoce { background: rgba(255, 51, 102, 0.15); color: #ff3366; border-color: #ff3366; }
 
 .line-content {
   color: var(--text-secondary);

@@ -353,9 +353,51 @@ const handleConnectAll = () => {
   store.connectAll()
 }
 
-const handleSend = () => {
+const handleSend = async () => {
   if (!inputMessage.value.trim() || !currentAgent.value?.isConnected) return
-  store.sendMessage(currentAgentId.value, inputMessage.value)
+
+  const messageText = inputMessage.value.trim()
+  const agent = store.agents[currentAgentId.value]
+  if (!agent) return
+
+  try {
+    // 使用完整的 gatewayAgentId 作为 agent 名称（如 agent:ceo:main）
+    const targetAgentName = agent.config.gatewayAgentId || agent.config.sessionKey
+
+    // 使用 HTTP API 发送消息（与 Mission-control 一致）
+    const response = await fetch('/api/chat/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'human',
+        to: targetAgentName,
+        content: messageText,
+        message_type: 'text',
+        conversation_id: targetAgentName
+      })
+    })
+
+    const data = await response.json()
+
+    if (data.success || data.message) {
+      console.log('[Chat] Message sent via HTTP API:', data)
+      // 在本地添加用户消息
+      store.agents[currentAgentId.value]?.messages.push({
+        id: `msg-${Date.now()}`,
+        role: 'user',
+        content: messageText,
+        timestamp: Date.now(),
+        agentId: currentAgentId.value
+      })
+    } else {
+      throw new Error(data.error || '发送失败')
+    }
+  } catch (err) {
+    console.error('[Chat] Send message error:', err)
+    ElMessageBox.alert('发送失败：' + err.message, '错误', { type: 'error' })
+    return
+  }
+
   inputMessage.value = ''
   nextTick(() => {
     scrollToBottom()

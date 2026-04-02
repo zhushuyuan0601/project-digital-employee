@@ -81,6 +81,26 @@
             </button>
           </router-link>
 
+          <router-link to="/mission-control" custom v-slot="{ navigate, isActive }">
+            <button :class="['nav-item', { active: isActive }]" @click="navigate">
+              <span class="nav-bracket">[</span>
+              <span class="nav-icon">◈</span>
+              <span class="nav-label">Mission Control</span>
+              <span class="nav-indicator"></span>
+              <span class="nav-bracket-close">]</span>
+            </button>
+          </router-link>
+
+          <router-link to="/task-board" custom v-slot="{ navigate, isActive }">
+            <button :class="['nav-item', { active: isActive }]" @click="navigate">
+              <span class="nav-bracket">[</span>
+              <span class="nav-icon">◫</span>
+              <span class="nav-label">任务看板</span>
+              <span class="nav-indicator"></span>
+              <span class="nav-bracket-close">]</span>
+            </button>
+          </router-link>
+
           <router-link to="/chat" custom v-slot="{ navigate, isActive }">
             <button :class="['nav-item', { active: isActive }]" @click="navigate">
               <span class="nav-bracket">[</span>
@@ -144,6 +164,74 @@
               <span class="nav-bracket">[</span>
               <span class="nav-icon">⚡</span>
               <span class="nav-label">系统配置</span>
+              <span class="nav-indicator"></span>
+              <span class="nav-bracket-close">]</span>
+            </button>
+          </router-link>
+
+          <div class="nav-divider"></div>
+
+          <div class="nav-section-label">
+            <span class="section-bracket">[</span>
+            高级功能
+            <span class="section-bracket">]</span>
+          </div>
+
+          <router-link to="/skills" custom v-slot="{ navigate, isActive }">
+            <button :class="['nav-item', { active: isActive }]" @click="navigate">
+              <span class="nav-bracket">[</span>
+              <span class="nav-icon">◈</span>
+              <span class="nav-label">技能中心</span>
+              <span class="nav-indicator"></span>
+              <span class="nav-bracket-close">]</span>
+            </button>
+          </router-link>
+
+          <router-link to="/tokens" custom v-slot="{ navigate, isActive }">
+            <button :class="['nav-item', { active: isActive }]" @click="navigate">
+              <span class="nav-bracket">[</span>
+              <span class="nav-icon">◈</span>
+              <span class="nav-label">成本追踪</span>
+              <span class="nav-indicator"></span>
+              <span class="nav-bracket-close">]</span>
+            </button>
+          </router-link>
+
+          <router-link to="/memory" custom v-slot="{ navigate, isActive }">
+            <button :class="['nav-item', { active: isActive }]" @click="navigate">
+              <span class="nav-bracket">[</span>
+              <span class="nav-icon">🧠</span>
+              <span class="nav-label">内存图谱</span>
+              <span class="nav-indicator"></span>
+              <span class="nav-bracket-close">]</span>
+            </button>
+          </router-link>
+
+          <router-link to="/security" custom v-slot="{ navigate, isActive }">
+            <button :class="['nav-item', { active: isActive }]" @click="navigate">
+              <span class="nav-bracket">[</span>
+              <span class="nav-icon">🛡️</span>
+              <span class="nav-label">安全审计</span>
+              <span class="nav-indicator"></span>
+              <span class="nav-bracket-close">]</span>
+            </button>
+          </router-link>
+
+          <router-link to="/cron" custom v-slot="{ navigate, isActive }">
+            <button :class="['nav-item', { active: isActive }]" @click="navigate">
+              <span class="nav-bracket">[</span>
+              <span class="nav-icon">⏰</span>
+              <span class="nav-label">定时任务</span>
+              <span class="nav-indicator"></span>
+              <span class="nav-bracket-close">]</span>
+            </button>
+          </router-link>
+
+          <router-link to="/webhooks" custom v-slot="{ navigate, isActive }">
+            <button :class="['nav-item', { active: isActive }]" @click="navigate">
+              <span class="nav-bracket">[</span>
+              <span class="nav-icon">⚡</span>
+              <span class="nav-label">Webhook 管理</span>
               <span class="nav-indicator"></span>
               <span class="nav-bracket-close">]</span>
             </button>
@@ -214,6 +302,12 @@
         </div>
       </main>
     </div>
+
+    <!-- Mission Control 登录对话框 -->
+    <MCAuthDialog
+      v-model="showMCAuthDialog"
+      @success="onMCAuthSuccess"
+    />
   </div>
 </template>
 
@@ -223,12 +317,48 @@ import { useRoute } from 'vue-router'
 import { useChatStore } from '@/stores/chat'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
 import { useThemeStore } from '@/stores/theme'
+import { useMCAuthStore } from '@/stores/mcAuth'
 import { storeToRefs } from 'pinia'
+import MCAuthDialog from '@/components/MCAuthDialog.vue'
 
 const route = useRoute()
 const chatStore = useChatStore()
 const multiAgentStore = useMultiAgentChatStore()
 const themeStore = useThemeStore()
+const mcAuthStore = useMCAuthStore()
+
+// MC 认证对话框
+const showMCAuthDialog = ref(false)
+
+// 需要 MC 认证的路由
+const mcRequiredRoutes = ['/mission-control', '/task-board']
+
+// 检查是否需要 MC 认证
+function checkMCAuth() {
+  const needsAuth = mcRequiredRoutes.some(path => route.path.startsWith(path))
+  if (needsAuth && !mcAuthStore.isAuthenticated) {
+    // 先尝试自动检查
+    mcAuthStore.checkAuth().then((isAuthed) => {
+      if (!isAuthed) {
+        showMCAuthDialog.value = true
+      }
+    })
+  }
+}
+
+// 登录成功回调
+function onMCAuthSuccess() {
+  // 重新加载当前页面数据
+  window.location.reload()
+}
+
+// 监听路由变化
+watch(() => route.path, () => {
+  checkMCAuth()
+})
+
+// 应用启动时检查一次
+checkMCAuth()
 
 // 使用 storeToRefs 保持响应式连接
 const { isConnected, isConnecting } = storeToRefs(chatStore)
@@ -289,21 +419,35 @@ const currentPageTitle = computed(() => {
     '/dashboard': '仪表盘',
     '/agents': '团队成员',
     '/digital-employee': '数字员工监控中心',
-    '/task-center': '任务',
-    '/configs': '配置',
-    '/logs': '日志',
-    '/status': '状态',
-    '/tools': '工具',
-    '/chat': '对话',
-    '/group-chat': '群聊会话'
+    '/task-center': '任务指挥',
+    '/task-center-2': '任务指挥中心 II',
+    '/mission-control': 'Mission Control',
+    '/task-board': '任务看板',
+    '/configs': '系统配置',
+    '/logs': '行动日志',
+    '/status': '系统状态',
+    '/tools': '工具箱',
+    '/chat': '团队对话',
+    '/group-chat': '群聊会话',
+    '/skills': '技能中心',
+    '/tokens': '成本追踪',
+    '/memory': '内存图谱',
+    '/security': '安全审计',
+    '/cron': '定时任务',
+    '/webhooks': 'Webhook 管理'
   }
-  return titles[route.path] || '联通小队'
+  return titles[route.path] || 'OPENCLAW'
 })
 
 // 生命周期 - 应用启动时连接 Gateway
 let hasConnected = false
 
+// 监听自定义事件显示登录对话框
 onMounted(() => {
+  window.addEventListener('show-mc-auth', () => {
+    showMCAuthDialog.value = true
+  })
+
   updateTime()
   setInterval(updateTime, 1000)
 
