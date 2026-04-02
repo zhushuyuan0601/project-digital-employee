@@ -7,10 +7,21 @@
 | 依赖 | 用途 | 是否必需 | 获取方式 |
 |------|------|---------|---------|
 | **OpenClaw Gateway** | Agent 消息转发和会话管理 | **必需** | `npm install -g openclaw` |
-| **Node.js** | 运行环境 | **必需** | https://nodejs.org/ (推荐 v18+) |
+| **Node.js** | 运行环境 (v18+) | **必需** | https://nodejs.org/ |
 | **npm** | 包管理 | **必需** | 随 Node.js 一起安装 |
 
-### 项目内部依赖
+### 数据库说明
+
+**本项目使用本地 SQLite 数据库，不需要外部数据库服务！**
+
+- `server/data/mission-control.db` - 本地数据库，存储技能、Token 统计、Webhooks 等
+- `server/data/agent-chat.db` - 本地数据库，存储 Agent 聊天消息
+
+数据库会在首次启动时自动创建，无需手动配置。
+
+> **注意**: 代码中会尝试读取 `~/.openclaw/.../mission-control.db` 仅用于显示 ClaudeCode 会话列表，这是**可选功能**，不影响核心功能。
+
+### npm 依赖（自动安装）
 
 | 目录 | 依赖文件 | 安装方式 |
 |------|---------|---------|
