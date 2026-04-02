@@ -114,11 +114,36 @@ export async function sendMessageViaGateway(sessionKey, message, from) {
 
     return { success: true }
   } catch (error) {
-    // 检查是否是正常的完成（agent命令返回非0码但消息已发送）
+    // 检查是否是正常的完成（agent 命令返回非 0 码但消息已发送）
     if (error.stdout && error.stdout.includes('completed')) {
       return { success: true }
     }
     console.error('[Gateway] Failed to send message:', error.message)
+    return { success: false, error: error.message }
+  }
+}
+
+/**
+ * 通过 Gateway 发送消息到指定 Agent（使用简化名称，创建新 session）
+ */
+export async function sendMessageViaGatewayDirect(agentName, message, from) {
+  try {
+    const fullMessage = from ? `[${from}] ${message}` : message
+
+    console.log('[Gateway] Sending message to agent:', agentName, 'message:', fullMessage)
+
+    await runOpenClaw(
+      [
+        'agent',
+        '--agent', agentName,
+        '--message', fullMessage
+      ],
+      { timeoutMs: 30000 }
+    )
+
+    return { success: true }
+  } catch (error) {
+    console.error('[Gateway] Failed to send message (direct):', error.message)
     return { success: false, error: error.message }
   }
 }

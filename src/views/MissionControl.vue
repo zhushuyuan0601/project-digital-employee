@@ -280,24 +280,40 @@ function truncate(text: string, maxLen: number): string {
 
 // 发送任务
 async function sendTask() {
-  if (!gateway.isConnected || !taskInput.value.trim() || isSending.value) return
+  if (!taskInput.value.trim() || isSending.value) return
 
   isSending.value = true
   try {
-    const sent = gateway.sendChatToAgent(targetAgent.value, taskInput.value.trim())
-    if (sent) {
+    // 构建完整的 agent ID（如 ceo -> agent:ceo:main）
+    const targetAgentName = `agent:${targetAgent.value}:main`
+
+    // 使用 HTTP API 发送消息到后端，由后端转发到 Gateway
+    const response = await fetch('/api/chat/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'human',
+        to: targetAgentName,
+        content: taskInput.value.trim(),
+        message_type: 'text',
+        conversation_id: targetAgentName
+      })
+    })
+
+    const result = await response.json()
+
+    if (response.ok && result.message) {
       ElMessage.success('任务已发送')
       taskInput.value = ''
     } else {
-      ElMessage.error('发送失败')
+      ElMessage.error('发送失败：' + (result.error || '未知错误'))
     }
   } catch (err) {
-    ElMessage.error('发送失败: ' + (err instanceof Error ? err.message : '未知错误'))
+    ElMessage.error('发送失败：' + (err instanceof Error ? err.message : '未知错误'))
   } finally {
     isSending.value = false
   }
 }
-
 // 保存 Token
 function saveToken() {
   const token = tokenInput.value.trim()

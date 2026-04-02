@@ -280,13 +280,16 @@ router.post('/chat/messages', async (req, res) => {
     }
 
     if (to && to !== 'human') {
-      const db = getDatabase()
-      const agent = db.prepare('SELECT session_key FROM agents WHERE name = ?').get(to)
+      // 从完整的 agent 名称中提取简化名称（如 agent:ceo:main -> ceo）
+      const coreName = to.replace(/^agent:/, '').replace(/:main$/, '')
 
-      if (agent?.session_key) {
-        forwardResult.attempted = true
-        const gatewayResult = await sendMessageViaGateway(
-          agent.session_key,
+      forwardResult.attempted = true
+      console.log('[AgentChat] Sending message via Gateway with agent:', coreName)
+
+      try {
+        const { sendMessageViaGatewayDirect } = await import('../lib/command.js')
+        const gatewayResult = await sendMessageViaGatewayDirect(
+          coreName,  // 使用简化名称
           content,
           from || 'human'
         )
@@ -294,9 +297,8 @@ router.post('/chat/messages', async (req, res) => {
         if (!gatewayResult.success) {
           forwardResult.reason = gatewayResult.error
         }
-      } else {
-        forwardResult.attempted = true
-        forwardResult.reason = 'Agent has no session_key configured'
+      } catch (e) {
+        forwardResult.reason = 'Gateway send failed: ' + e.message
       }
     }
 

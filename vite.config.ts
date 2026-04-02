@@ -35,6 +35,22 @@ export default defineConfig({
         target: 'http://localhost:18888',
         changeOrigin: true
       },
+      '/api/claude-sessions': {
+        target: 'http://127.0.0.1:18888',
+        changeOrigin: true
+      },
+      '/api/activities': {
+        target: 'http://127.0.0.1:18888',
+        changeOrigin: true
+      },
+      '/api/chat': {
+        target: 'http://127.0.0.1:18888',
+        changeOrigin: true
+      },
+      '/api/agents': {
+        target: 'http://127.0.0.1:18888',
+        changeOrigin: true
+      },
       '/ws': {
         target: 'ws://127.0.0.1:18789',
         ws: true

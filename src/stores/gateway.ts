@@ -25,7 +25,7 @@ const MAX_MISSED_PONGS = 3
 const GATEWAY_WS_PATH = import.meta.env.VITE_GATEWAY_WS_PATH || '/ws'
 const GATEWAY_HOST = import.meta.env.VITE_GATEWAY_HOST || ''
 const GATEWAY_PORT = import.meta.env.VITE_GATEWAY_PORT || ''
-const GATEWAY_CLIENT_ID = import.meta.env.VITE_GATEWAY_CLIENT_ID || 'openclaw-control-ui'
+const GATEWAY_CLIENT_ID = 'cli'
 
 // Token 存储键
 const STORAGE_GATEWAY_TOKEN = 'mc-gateway-token'
@@ -144,7 +144,7 @@ export const useGatewayStore = defineStore('gateway', () => {
   }
 
   /**
-   * 发送连接握手（支持设备身份）
+   * 发送连接握手（仅使用 token 认证）
    */
   async function sendConnectHandshake(nonce?: string) {
     if (!ws || ws.readyState !== WebSocket.OPEN) return
@@ -152,8 +152,9 @@ export const useGatewayStore = defineStore('gateway', () => {
     const token = getStoredToken()
     console.log('[Gateway] Token from storage:', token ? `${token.slice(0, 20)}...` : '(empty)')
 
+    // 强制禁用设备签名，只使用 token 认证
     let device: any = undefined
-    const cachedToken = getCachedDeviceToken()
+    tokenOnlyFallback = true
 
     // 检查是否有 token
     if (!token) {
@@ -161,38 +162,6 @@ export const useGatewayStore = defineStore('gateway', () => {
       connectionError.value = '需要配置 Gateway Token'
       ws.close(4001, 'Token required')
       return
-    }
-
-    // 尝试创建设备身份（如果在安全上下文）
-    if (nonce && !tokenOnlyFallback && isSecureContext() && isEd25519Supported()) {
-      try {
-        const identity = await getOrCreateDeviceIdentity()
-        const signedAt = Date.now()
-
-        // 构建 v2 签名 payload
-        const payload = [
-          'v2',
-          identity.deviceId,
-          GATEWAY_CLIENT_ID,
-          'ui',
-          'operator',
-          'operator.admin',
-          String(signedAt),
-          token,
-          nonce,
-        ].join('|')
-
-        const { signature } = await signPayload(identity.privateKey, payload, signedAt)
-        device = {
-          id: identity.deviceId,
-          publicKey: identity.publicKeyBase64,
-          signature,
-          signedAt,
-          nonce,
-        }
-      } catch (err) {
-        console.warn('[Gateway] Device identity unavailable:', err)
-      }
     }
 
     const connectRequest = {
@@ -203,26 +172,20 @@ export const useGatewayStore = defineStore('gateway', () => {
         minProtocol: PROTOCOL_VERSION,
         maxProtocol: PROTOCOL_VERSION,
         client: {
-          id: GATEWAY_CLIENT_ID,
+          id: 'webchat',
           displayName: 'Unicom Mission Control',
           version: '1.0.0',
           platform: 'web',
-          mode: 'ui',
+          mode: 'webchat',
           instanceId: `mc-${Date.now()}`
         },
-        role: 'operator',
-        scopes: ['operator.admin'],
+        scopes: ['operator.admin', 'operator.write', 'operator.read'],
         caps: ['tool-events'],
-        auth: { token }, // 确保使用当前获取的 token
-        device,
+        auth: { token },
       }
     }
 
-    console.log('[Gateway] Sending connect handshake', {
-      hasToken: !!token,
-      hasDevice: !!device,
-      clientId: GATEWAY_CLIENT_ID
-    })
+    console.log('[Gateway] Sending connect handshake (token-only mode)')
     ws.send(JSON.stringify(connectRequest))
   }
 
@@ -324,6 +287,14 @@ export const useGatewayStore = defineStore('gateway', () => {
     // 处理错误
     if (frame.type === 'res' && !frame.ok) {
       const errorMsg = frame.error?.message || JSON.stringify(frame.error)
+
+      // 忽略 ping 方法的错误（Gateway 可能不支持）
+      if (frame.id?.startsWith('ping-') || errorMsg.includes('unknown method: ping')) {
+        console.log('[Gateway] Ping not supported, ignoring error:', errorMsg)
+        missedPongs = 0 // 重置 missedPongs，避免触发重连
+        return
+      }
+
       console.error('[Gateway] Error:', errorMsg)
       connectionError.value = errorMsg
 

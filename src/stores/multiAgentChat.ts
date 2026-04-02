@@ -101,6 +101,14 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
       role: '技术开发',
       avatar: '💻',
       gatewayAgentId: 'agent:tech-lead:main'
+    },
+    {
+      id: 'xiaoce',
+      sessionKey: 'agent:team-qa:main',
+      displayName: '测试员',
+      role: '质量检查',
+      avatar: '🛡️',
+      gatewayAgentId: 'agent:team-qa:main'
     }
   ]
 
@@ -109,8 +117,11 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
 
   // 设置
   const settings = ref<ConnectionSettings>({
-    wsUrl: 'ws://127.0.0.1:18789',
-    token: 'bd0f157b60e41a3d9895ddec846d2d10c8d795bc0a061f70',
+    wsUrl: import.meta.env.VITE_GATEWAY_WS_URL ||
+           (import.meta.env.VITE_GATEWAY_WS_PATH ?
+             (window.location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + window.location.host + import.meta.env.VITE_GATEWAY_WS_PATH :
+             'ws://localhost:3000/ws'),
+    token: import.meta.env.VITE_GATEWAY_TOKEN || 'bd0f157b60e41a3d9895ddec846d2d10c8d795bc0a061f70',
     autoConnect: true,
   })
 
@@ -325,6 +336,7 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
       const myGatewayAgentId = currentAgent?.config.gatewayAgentId?.split(':')[1] || ''
 
       // 检查是否匹配：通过 agent 名称或 gatewayAgentId
+      // 消息应该只传递给对应的 Agent
       const isMatch = !payloadSessionKey ||
                       sessionAgentName === myAgentName ||
                       sessionAgentName === myGatewayAgentId ||

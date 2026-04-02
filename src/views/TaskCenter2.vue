@@ -987,7 +987,7 @@ const downloadFile = () => {
 }
 
 // 发送任务给小呦
-const sendTask = () => {
+const sendTask = async () => {
   if (!taskInput.value.trim()) return
   if (!xiaomuConnected.value) {
     ElMessage.warning('小呦未连接，请先点击全连按钮')
@@ -1000,15 +1000,49 @@ const sendTask = () => {
   taskStartTime.value = Date.now()
   taskEndTime.value = 0
 
-  // 发送消息
-  multiAgentStore.sendMessage('xiaomu', taskInput.value.trim())
+  try {
+    // 使用 HTTP API 发送消息（与 Mission-control 一致）
+    // 使用完整的 agent 名称作为 sessionKey
+    const targetAgentName = 'agent:ceo:main'  // 小呦的完整 agent 名称
 
-  // 清空输入
-  setTimeout(() => {
-    taskInput.value = ''
-    isSending.value = false
-    ElMessage.success('任务已发送给小呦')
-  }, 500)
+    const response = await fetch('/api/chat/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'human',
+        to: targetAgentName,
+        content: taskInput.value.trim(),
+        message_type: 'text',
+        conversation_id: targetAgentName
+      })
+    })
+
+    const data = await response.json()
+
+    if (data.success || data.message) {
+      console.log('[TaskCenter2] Message sent via HTTP API:', data)
+      // 在本地添加用户消息
+      multiAgentStore.agents['xiaomu']?.messages.push({
+        id: `msg-${Date.now()}`,
+        role: 'user',
+        content: taskInput.value.trim(),
+        timestamp: Date.now(),
+        agentId: 'xiaomu'
+      })
+      ElMessage.success('任务已发送给小呦')
+    } else {
+      throw new Error(data.error || '发送失败')
+    }
+  } catch (err) {
+    console.error('[TaskCenter2] Send message error:', err)
+    ElMessage.error('发送失败：' + err.message)
+  } finally {
+    // 清空输入
+    setTimeout(() => {
+      taskInput.value = ''
+      isSending.value = false
+    }, 500)
+  }
 }
 
 // 全连
