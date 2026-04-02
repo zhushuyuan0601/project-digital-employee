@@ -2,6 +2,30 @@
 
 基于 **Vue 3 + Vite + TypeScript + Pinia + Element Plus** 的多 Agent 协作管理平台。
 
+## 🚀 快速开始
+
+### 一键安装（推荐）
+
+```bash
+# 克隆项目
+git clone <项目地址>
+cd unicom-ui-new.bak
+
+# 一键安装所有依赖
+./scripts/install.sh
+
+# 启动服务
+./start-dev.sh
+```
+
+访问 http://localhost:3000
+
+### 手动安装
+
+详细安装步骤请查看 [DEPLOYMENT.md](DEPLOYMENT.md)
+
+---
+
 ## 技术栈
 
 - **框架**: Vue 3 (Composition API)
@@ -66,26 +90,81 @@ src/
 
 ## 安装和运行
 
+### 前置条件
+
+- **Node.js** v18+
+- **npm** v8+
+- **OpenClaw Gateway** (`npm install -g openclaw`)
+
 ### 安装依赖
+
 ```bash
+# 一键安装（推荐）
+./scripts/install.sh
+
+# 手动安装
 npm install
+cd server && npm install && cd ..
+```
+
+### 配置环境变量
+
+```bash
+cp .env.example .env
+# 编辑 .env 文件，填入你的 Gateway Token
 ```
 
 ### 开发模式
+
 ```bash
-npm run dev
+# 启动所有服务（推荐）
+./start-dev.sh
+
+# 或者分别启动
+# 1. 启动 Gateway: openclaw gateway start
+# 2. 启动后端：cd server && node index.js
+# 3. 启动前端：npm run dev
 ```
+
 访问 http://localhost:3000
 
 ### 生产构建
+
 ```bash
 npm run build
 ```
 
 ### 预览生产构建
+
 ```bash
 npm run preview
 ```
+
+## 外部依赖说明
+
+本项目依赖 **OpenClaw Gateway** 进行 Agent 消息转发和会话管理。
+
+### 安装 OpenClaw Gateway
+
+```bash
+npm install -g openclaw
+```
+
+### 启动 Gateway
+
+```bash
+openclaw gateway start
+```
+
+### 获取 Gateway Token
+
+```bash
+openclaw gateway token
+```
+
+将获取的 Token 配置到 `.env` 文件的 `VITE_GATEWAY_TOKEN` 变量中。
+
+详细部署指南请查看 [DEPLOYMENT.md](DEPLOYMENT.md)
 
 ## 主要页面
 

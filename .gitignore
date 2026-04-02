@@ -25,3 +25,9 @@ npm-debug.log*
 # Backup files
 *.bak
 views.backup.*/
+
+# Database files
+server/data/*.db
+server/data/*.db-shm
+server/data/*.db-wal
+server/data/agent-chat.db
