@@ -3,7 +3,7 @@
     <!-- 顶部标题 -->
     <div class="task-center__header">
       <div class="task-center__title">
-        <h1>任务中心</h1>
+        <h1><i class="fas fa-tasks"></i> 任务中心</h1>
         <p>多 Agent 协作管理平台</p>
       </div>
       <div class="header-actions">
@@ -14,12 +14,12 @@
           </span>
         </div>
         <button class="btn btn-success btn-sm" @click="handleConnectAll" :disabled="gatewayStore.allConnected">
-          <span class="btn-icon">⬡</span>
-          🔗 全连
+          <i class="fas fa-link"></i>
+          <span>全连</span>
         </button>
         <button class="btn btn-danger btn-sm" @click="handleDisconnectAll" :disabled="!gatewayStore.anyConnected">
-          <span class="btn-icon">⏻</span>
-          ✕ 全断
+          <i class="fas fa-unlink"></i>
+          <span>全断</span>
         </button>
       </div>
     </div>
@@ -31,14 +31,14 @@
         <!-- 群聊窗口 -->
         <div class="chat-section">
           <div class="chat-header">
-            <span class="chat-title">💬 Agent 协作群</span>
-            <span class="chat-members">👥 {{ agentsStore.agents.length }}</span>
+            <span class="chat-title"><i class="fas fa-comments"></i> Agent 协作群</span>
+            <span class="chat-members"><i class="fas fa-users"></i> {{ agentsStore.agents.length }}</span>
           </div>
           <div class="chat-body" ref="chatRef">
             <!-- 欢迎消息 -->
             <div class="chat-welcome">
               <div class="welcome-bubble">
-                <p>👋 欢迎使用 Agent 协作群！</p>
+                <p><i class="fas fa-hand-sparkles"></i> 欢迎使用 Agent 协作群！</p>
                 <p>小呦、研发工程师、产品经理、研究员已加入群聊</p>
                 <p>在下方输入任务，小呦 会协调分配给各位成员</p>
               </div>
@@ -79,7 +79,7 @@
         <!-- 任务输入区域 -->
         <div class="task-input-section">
           <div class="section-title">
-            <span class="title-icon">📝</span>
+            <i class="fas fa-edit"></i>
             <span>下达任务</span>
           </div>
 
@@ -128,7 +128,7 @@
         <!-- Agent 状态卡片 - 集成执行日志 -->
         <div class="task-center__agents">
           <div class="section-title">
-            <span class="title-icon">🤖</span>
+            <i class="fas fa-robot"></i>
             <span>Agent 状态</span>
             <div class="section-actions">
               <button
@@ -136,8 +136,8 @@
                 @click="clearAgentStats"
                 :disabled="simStore.isExecuting"
               >
-                <span class="btn-icon">↻</span>
-                🗑️ 清空统计
+                <i class="fas fa-trash-alt"></i>
+                <span>清空统计</span>
               </button>
             </div>
           </div>
@@ -163,22 +163,22 @@
             <!-- 阶段指示器 -->
             <div class="phase-indicator" v-if="simStore.subTasks.length > 0">
               <div class="phase-item" :class="getPhaseClass(0)">
-                <span class="phase-icon">📋</span>
+                <span class="phase-icon"><i class="fas fa-clipboard-list"></i></span>
                 <span class="phase-name">项目统筹</span>
                 <span class="phase-dot"></span>
               </div>
               <div class="phase-item" :class="getPhaseClass(1)">
-                <span class="phase-icon">🔍</span>
+                <span class="phase-icon"><i class="fas fa-search"></i></span>
                 <span class="phase-name">竞品分析</span>
                 <span class="phase-dot"></span>
               </div>
               <div class="phase-item" :class="getPhaseClass(2)">
-                <span class="phase-icon">📝</span>
+                <span class="phase-icon"><i class="fas fa-pen-fancy"></i></span>
                 <span class="phase-name">产品设计</span>
                 <span class="phase-dot"></span>
               </div>
               <div class="phase-item" :class="getPhaseClass(3)">
-                <span class="phase-icon">💻</span>
+                <span class="phase-icon"><i class="fas fa-laptop-code"></i></span>
                 <span class="phase-name">技术开发</span>
                 <span class="phase-dot"></span>
               </div>
@@ -194,17 +194,17 @@
               class="btn btn-secondary btn-sm"
               @click="simStore.pause"
             >
-              ⏸️ 暂停
+              <i class="fas fa-pause"></i> 暂停
             </button>
             <button
               v-else
               class="btn btn-secondary btn-sm"
               @click="simStore.resume"
             >
-              ▶️ 继续
+              <i class="fas fa-play"></i> 继续
             </button>
             <button class="btn btn-danger btn-sm" @click="simStore.cancel">
-              ⛔ 取消
+              <i class="fas fa-stop"></i> 取消
             </button>
           </div>
         </div>
@@ -212,7 +212,7 @@
         <!-- 完成状态 -->
         <div v-if="simStore.status === 'completed'" class="task-center__complete">
           <div class="complete-card">
-            <div class="complete-icon">🎉</div>
+            <div class="complete-icon"><i class="fas fa-check-circle"></i></div>
             <h3>任务完成!</h3>
             <p>{{ simStore.currentTask?.title }}</p>
             <div class="complete-stats">
@@ -264,21 +264,21 @@
         <!-- 工作统计 -->
         <div class="work-stats">
           <div class="stat-card">
-            <span class="stat-icon">📋</span>
+            <span class="stat-icon"><i class="fas fa-tasks"></i></span>
             <div class="stat-content">
               <span class="stat-label">总任务数</span>
               <span class="stat-value">{{ agentDetails?.totalTasks || 0 }}</span>
             </div>
           </div>
           <div class="stat-card">
-            <span class="stat-icon">✅</span>
+            <span class="stat-icon"><i class="fas fa-check-circle"></i></span>
             <div class="stat-content">
               <span class="stat-label">已完成</span>
               <span class="stat-value">{{ agentDetails?.completedTasks || 0 }}</span>
             </div>
           </div>
           <div class="stat-card">
-            <span class="stat-icon">📝</span>
+            <span class="stat-icon"><i class="fas fa-file-alt"></i></span>
             <div class="stat-content">
               <span class="stat-label">日志数</span>
               <span class="stat-value">{{ agentDetails?.logs.length || 0 }}</span>
@@ -288,7 +288,7 @@
 
         <!-- 任务列表 -->
         <div class="detail-section">
-          <h5>📋 负责任务</h5>
+          <h5><i class="fas fa-clipboard-list"></i> 负责任务</h5>
           <div class="agent-tasks-list">
             <div
               v-for="(task, index) in agentDetails?.tasks"
@@ -310,14 +310,14 @@
 
         <!-- 产出文件 -->
         <div class="detail-section">
-          <h5>📁 产出文件</h5>
+          <h5><i class="fas fa-folder-open"></i> 产出文件</h5>
           <div class="agent-files-list">
             <div
               v-for="file in agentDetails?.files"
               :key="file.fileName"
               class="agent-file-item"
             >
-              <span class="file-icon">📄</span>
+              <span class="file-icon"><i class="fas fa-file"></i></span>
               <span class="file-name">{{ file.fileName }}</span>
               <a :href="file.path" target="_blank" class="file-link">
                 <button class="btn btn-primary btn-sm">查看</button>
@@ -331,7 +331,7 @@
 
         <!-- 执行日志 -->
         <div class="detail-section">
-          <h5>📜 执行日志</h5>
+          <h5><i class="fas fa-scroll"></i> 执行日志</h5>
           <div class="agent-logs-list">
             <div
               v-for="log in agentDetails?.logs"
@@ -544,7 +544,7 @@ const startExecution = async () => {
   // 任务完成后在群里通知
   if (simStore.status === 'completed') {
     setTimeout(() => {
-      sendAgentChatMessage('xiaomu', '🎉 任务全部完成！大家辛苦了！', '@所有人')
+      sendAgentChatMessage('xiaomu', '任务全部完成！大家辛苦了！', '@所有人')
     }, 1000)
 
     setTimeout(() => {
@@ -565,19 +565,19 @@ watch(() => simStore.logs.length, (newVal, oldVal) => {
     if (latestLog && !latestLog.message.includes('━')) {
       // 将关键日志转换为群聊消息
       if (latestLog.message.includes('开始执行')) {
-        sendAgentChatMessage(latestLog.agentId, '我开始干活了！💪', '')
+        sendAgentChatMessage(latestLog.agentId, '我开始干活了！', '')
       } else if (latestLog.message.includes('完成') && latestLog.agentId !== 'xiaomu') {
         // Agent 完成时，汇总该 Agent 的所有产出文件
         const agentFiles = simStore.generatedFiles.filter(f => f.agentId === latestLog.agentId)
         if (agentFiles.length > 0) {
-          const fileList = agentFiles.map(f => `📄 ${f.fileName}`).join('\n')
+          const fileList = agentFiles.map(f => `[文件] ${f.fileName}`).join('\n')
           sendAgentChatMessage(
             latestLog.agentId,
-            `我的任务完成了！✅\n\n产出文件：\n${fileList}`,
+            `我的任务完成了！\n\n产出文件：\n${fileList}`,
             ''
           )
         } else {
-          sendAgentChatMessage(latestLog.agentId, '我的任务完成了！✅', '')
+          sendAgentChatMessage(latestLog.agentId, '我的任务完成了！', '')
         }
       } else if (latestLog.message.includes('产出文件')) {
         // 不单独发送文件消息，而是在完成时统一发送
@@ -664,21 +664,21 @@ const getPhaseClass = (phaseIndex: number) => {
   return 'phase--pending'
 }
 
-// 获取日志内容图标
+// 获取日志内容图标（返回 Font Awesome 类名）
 const getContentIcon = (type: string, message: string) => {
   // 空日志或分隔线不显示图标
   if (message === '' || message.includes('━━')) return ''
-  if (type === 'success') return '✅'
-  if (type === 'error') return '❌'
-  if (type === 'warning') return '⚠️'
-  if (message.includes('小呦') || message.includes('小 u')) return '📋'
-  if (message.includes('阶段一')) return '🔍'
-  if (message.includes('阶段二')) return '📝'
-  if (message.includes('阶段三')) return '💻'
-  if (message.includes('研发工程师')) return '💻'
-  if (message.includes('产品经理')) return '📝'
-  if (message.includes('研究员')) return '🔍'
-  return 'ℹ️'
+  if (type === 'success') return 'fas fa-check-circle'
+  if (type === 'error') return 'fas fa-times-circle'
+  if (type === 'warning') return 'fas fa-exclamation-triangle'
+  if (message.includes('小呦') || message.includes('小 u')) return 'fas fa-clipboard-list'
+  if (message.includes('阶段一')) return 'fas fa-search'
+  if (message.includes('阶段二')) return 'fas fa-edit'
+  if (message.includes('阶段三')) return 'fas fa-laptop-code'
+  if (message.includes('研发工程师')) return 'fas fa-laptop-code'
+  if (message.includes('产品经理')) return 'fas fa-edit'
+  if (message.includes('研究员')) return 'fas fa-search'
+  return 'fas fa-info-circle'
 }
 
 const formatTime = (timestamp: number) => {
@@ -734,8 +734,7 @@ onMounted(() => {
   font-size: 26px;
   font-weight: 700;
   color: var(--color-primary);
-  text-shadow: 0 0 20px rgba(0, 240, 255, 0.4);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.05em;
   margin: 0;
 }
 
@@ -792,8 +791,8 @@ onMounted(() => {
 
 .ai-status.status--connected .status-dot {
   background: var(--color-success);
-  box-shadow: 0 0 8px rgba(0, 255, 136, 0.6);
-  animation: pulse 1.5s ease-in-out infinite;
+  box-shadow: 0 0 6px rgba(0, 255, 136, 0.4);
+  animation: pulse 2s ease-out-quart infinite;
 }
 
 .status-label {
@@ -814,8 +813,22 @@ onMounted(() => {
 /* 左右布局主体 */
 .task-center__main {
   display: grid;
-  grid-template-columns: 420px 1fr;
+  grid-template-columns: minmax(320px, 380px) 1fr;
   gap: 24px;
+}
+
+@media (max-width: 1024px) {
+  .task-center__main {
+    grid-template-columns: minmax(280px, 340px) 1fr;
+    gap: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .task-center__main {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
 }
 
 /* 左侧区域 */
@@ -994,7 +1007,7 @@ onMounted(() => {
 
 .phase-item.phase--completed .phase-dot {
   background: var(--color-success);
-  box-shadow: 0 0 8px rgba(0, 255, 136, 0.6);
+  box-shadow: 0 0 4px rgba(0, 255, 136, 0.4);
 }
 
 .phase-item.phase--completed:not(:last-child)::after {
@@ -1003,14 +1016,13 @@ onMounted(() => {
 }
 
 .phase-item.phase--active {
-  background: rgba(0, 240, 255, 0.1);
-  border-color: rgba(0, 240, 255, 0.4);
-  animation: phasePulse 2s ease-in-out infinite;
+  background: rgba(0, 240, 255, 0.08);
+  border-color: rgba(0, 240, 255, 0.3);
 }
 
 .phase-item.phase--active .phase-icon {
   filter: grayscale(0);
-  animation: iconBounce 1s ease-in-out infinite;
+  animation: iconPulse 2s ease-out-quart infinite;
 }
 
 .phase-item.phase--active .phase-name {
@@ -1020,8 +1032,8 @@ onMounted(() => {
 
 .phase-item.phase--active .phase-dot {
   background: var(--color-primary);
-  box-shadow: 0 0 10px rgba(0, 240, 255, 0.8);
-  animation: dotPulse 1s ease-in-out infinite;
+  box-shadow: 0 0 6px rgba(0, 240, 255, 0.5);
+  animation: dotPulse 2s ease-out-quart infinite;
 }
 
 .phase-item.phase--active:not(:last-child)::after {
@@ -1041,16 +1053,16 @@ onMounted(() => {
     box-shadow: 0 0 0 rgba(0, 240, 255, 0);
   }
   50% {
-    box-shadow: 0 0 20px rgba(0, 240, 255, 0.2);
+    box-shadow: 0 0 10px rgba(0, 240, 255, 0.15);
   }
 }
 
-@keyframes iconBounce {
+@keyframes iconPulse {
   0%, 100% {
     transform: scale(1);
   }
   50% {
-    transform: scale(1.15);
+    transform: scale(1.08);
   }
 }
 
@@ -1060,8 +1072,8 @@ onMounted(() => {
     transform: scale(1);
   }
   50% {
-    opacity: 0.7;
-    transform: scale(1.2);
+    opacity: 0.8;
+    transform: scale(1.1);
   }
 }
 
@@ -1069,17 +1081,11 @@ onMounted(() => {
 .progress-controls {
   display: flex;
   justify-content: center;
-  gap: 16px;
+  gap: 8px;
   padding-top: 12px;
   padding-bottom: 4px;
   border-top: 1px dashed rgba(255, 255, 255, 0.08);
   margin-top: 4px;
-}
-
-.progress-controls {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
 }
 
 .progress-controls .btn {
@@ -1150,8 +1156,22 @@ onMounted(() => {
 
 .chat-message {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: flex-start;
+  margin-bottom: 16px;
+  animation: messageSlideIn 0.3s ease-out-quart;
+  will-change: opacity, transform;
+}
+
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .chat-message.self {
@@ -1163,61 +1183,75 @@ onMounted(() => {
 }
 
 .chat-message.self .message-bubble {
-  background: var(--color-primary);
-  color: var(--bg-base);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
+  color: var(--text-inverse);
   border-bottom-right-radius: 4px;
   border-bottom-left-radius: 16px;
   border: none;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.2);
+}
+
+.chat-message.self .message-sender {
+  color: var(--color-primary);
 }
 
 .chat-message.system {
   justify-content: center;
+  margin: 20px 0;
 }
 
 .message-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
   background: var(--bg-surface);
-  border: 1px solid var(--grid-line);
+  border: 2px solid var(--grid-line);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.chat-message:hover .message-avatar {
+  border-color: var(--color-primary);
+  transform: scale(1.05);
 }
 
 .message-avatar img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
 }
 
 .message-content {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  max-width: 280px;
+  gap: 6px;
+  max-width: 320px;
 }
 
 .message-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   padding: 0 4px;
 }
 
 .message-sender {
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
+  font-size: 13px;
 }
 
 .message-time {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-tertiary);
+  font-family: var(--font-mono);
 }
 
 .message-bubble {
@@ -1225,50 +1259,105 @@ onMounted(() => {
   border: 1px solid var(--grid-line);
   border-radius: 16px;
   border-bottom-left-radius: 4px;
-  padding: 10px 14px;
-  font-size: 13px;
+  padding: 12px 16px;
+  font-size: 14px;
   color: var(--text-primary);
-  line-height: 1.6;
-  word-break: break-word;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  line-height: 1.7;
+  overflow-wrap: break-word;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   white-space: pre-line;
+  transition: box-shadow 0.2s ease;
+  will-change: box-shadow;
+}
+
+.chat-message:hover .message-bubble {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .message-bubble .mention {
   color: var(--color-primary);
-  font-weight: 600;
+  font-weight: 700;
+  background: rgba(37, 99, 235, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.chat-message.self .message-bubble .mention {
+  color: var(--text-inverse);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* 系统消息样式 */
+.chat-message.system .message-bubble {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(251, 191, 36, 0.1) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-style: italic;
+  text-align: center;
+  max-width: 400px;
 }
 
 .chat-typing {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  font-size: 12px;
+  gap: 10px;
+  padding: 10px 16px;
+  font-size: 13px;
   color: var(--text-muted);
   background: var(--bg-surface);
-  border-radius: 8px;
-  margin-top: 4px;
+  border: 1px solid var(--grid-line);
+  border-radius: 12px;
+  margin-top: 8px;
+  animation: typingPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes typingPulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
 }
 
 .typing-avatar {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
+  border: 1px solid var(--grid-line);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .typing-avatar img {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
 }
 
 .typing-text {
   font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.typing-text::after {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 14px;
+  background: var(--color-primary);
+  animation: cursorBlink 1s infinite;
+  border-radius: 1px;
+}
+
+@keyframes cursorBlink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
 }
 
 /* 任务输入区域 */
@@ -1397,8 +1486,8 @@ onMounted(() => {
   border-radius: 50%;
   background: var(--color-warning);
   margin-right: 6px;
-  animation: pulse 1s ease-in-out infinite;
-  box-shadow: 0 0 8px rgba(255, 170, 0, 0.5);
+  animation: pulse 2s ease-out-quart infinite;
+  box-shadow: 0 0 4px rgba(255, 170, 0, 0.4);
 }
 
 .logs-terminal {
@@ -1438,9 +1527,9 @@ onMounted(() => {
   border-radius: 50%;
 }
 
-.terminal-dots .dot.red { background: var(--color-error); box-shadow: 0 0 6px rgba(255, 51, 102, 0.5); }
-.terminal-dots .dot.yellow { background: var(--color-warning); box-shadow: 0 0 6px rgba(255, 170, 0, 0.5); }
-.terminal-dots .dot.green { background: var(--color-success); box-shadow: 0 0 6px rgba(0, 255, 136, 0.5); }
+.terminal-dots .dot.red { background: var(--color-error); box-shadow: 0 0 4px rgba(255, 51, 102, 0.4); }
+.terminal-dots .dot.yellow { background: var(--color-warning); box-shadow: 0 0 4px rgba(255, 170, 0, 0.4); }
+.terminal-dots .dot.green { background: var(--color-success); box-shadow: 0 0 4px rgba(0, 255, 136, 0.4); }
 
 .terminal-body {
   max-height: 400px;
@@ -1907,169 +1996,169 @@ onMounted(() => {
 
 /* ========== 亮色主题样式 ========== */
 :root.light-theme .task-center__header {
-  border-bottom-color: #e5e7eb;
+  border-bottom-color: var(--grid-line);
 }
 
 :root.light-theme .task-center__title h1 {
-  color: #1e293b;
+  color: var(--text-primary);
   font-weight: 800;
 }
 
 :root.light-theme .task-center__title p {
-  color: #64748b;
+  color: var(--text-secondary);
 }
 
 :root.light-theme .section-title {
-  color: #1e293b;
+  color: var(--text-primary);
   font-weight: 700;
 }
 
 :root.light-theme .chat-section {
-  background: #ffffff;
-  border-color: #e5e7eb;
+  background: var(--bg-surface);
+  border-color: var(--grid-line);
 }
 
 :root.light-theme .chat-header {
-  border-bottom-color: #f3f4f6;
+  border-bottom-color: var(--bg-base);
 }
 
 :root.light-theme .chat-title {
-  color: #1e293b;
+  color: var(--text-primary);
   font-weight: 700;
 }
 
 :root.light-theme .chat-members {
-  color: #64748b;
+  color: var(--text-secondary);
 }
 
 :root.light-theme .chat-body {
-  background: #fafbfc;
+  background: var(--bg-base);
 }
 
 :root.light-theme .welcome-bubble {
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.05) 0%, rgba(99, 102, 241, 0.05) 100%);
-  border-color: #e5e7eb;
-  color: #475569;
+  background: linear-gradient(135deg, var(--color-primary-bg) 0%, var(--color-secondary-bg) 100%);
+  border-color: var(--grid-line);
+  color: var(--text-secondary);
 }
 
 :root.light-theme .chat-message .message-bubble {
-  background: #ffffff;
-  border-color: #e5e7eb;
-  color: #1e293b;
+  background: var(--bg-surface);
+  border-color: var(--grid-line);
+  color: var(--text-primary);
 }
 
 :root.light-theme .chat-message.self .message-bubble {
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  color: #ffffff;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
+  color: var(--text-on-primary);
 }
 
 :root.light-theme .message-sender {
-  color: #1e293b;
+  color: var(--text-primary);
 }
 
 :root.light-theme .message-time {
-  color: #9ca3af;
+  color: var(--text-muted);
 }
 
 :root.light-theme .task-input-section {
-  background: #ffffff;
-  border-color: #dee0e3;
+  background: var(--bg-surface);
+  border-color: var(--grid-line);
 }
 
 :root.light-theme .task-input-section .section-title span {
-  color: #1f2329;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 :root.light-theme .scenario-label {
-  color: #8f959e;
+  color: var(--text-tertiary);
 }
 
 :root.light-theme .scenario-row {
-  background: rgba(51, 112, 255, 0.06);
-  border-color: #e3e7ff;
+  background: var(--color-primary-bg);
+  border-color: var(--color-primary-light);
 }
 
 /* ========== 飞书风格消息气泡 ========== */
 :root.light-theme .chat-section {
-  background: #ffffff;
-  border-color: #dee0e3;
+  background: var(--bg-surface);
+  border-color: var(--grid-line);
 }
 
 :root.light-theme .chat-header {
-  border-bottom-color: #f5f6f7;
+  border-bottom-color: var(--bg-base);
 }
 
 :root.light-theme .chat-title {
-  color: #1f2329;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 :root.light-theme .chat-members {
-  color: #646a73;
+  color: var(--text-secondary);
 }
 
 :root.light-theme .chat-body {
-  background: #f5f6f7;
+  background: var(--bg-base);
 }
 
 :root.light-theme .welcome-bubble {
-  background: #ffffff;
-  border-color: #dee0e3;
-  color: #646a73;
+  background: var(--bg-surface);
+  border-color: var(--grid-line);
+  color: var(--text-secondary);
   border-radius: 16px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-sm);
 }
 
 :root.light-theme .chat-message .message-bubble {
-  background: #ffffff;
-  border-color: #e5e6e9;
-  color: #1f2329;
+  background: var(--bg-surface);
+  border-color: var(--grid-line-dim);
+  color: var(--text-primary);
   border-radius: 16px;
   border-bottom-left-radius: 4px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-sm);
 }
 
 :root.light-theme .chat-message.self .message-bubble {
-  background: linear-gradient(135deg, #3370ff 0%, #4d82ff 100%);
-  color: #ffffff;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
+  color: var(--text-on-primary);
   border-bottom-left-radius: 16px;
   border-bottom-right-radius: 4px;
   box-shadow: 0 2px 8px rgba(51, 112, 255, 0.2);
 }
 
 :root.light-theme .chat-message.system .message-bubble {
-  background: #f5f6f7;
-  color: #8f959e;
+  background: var(--bg-base);
+  color: var(--text-tertiary);
   border-radius: 8px;
 }
 
 :root.light-theme .message-sender {
-  color: #1f2329;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 :root.light-theme .message-time {
-  color: #c2c8d1;
+  color: var(--text-muted);
 }
 
 :root.light-theme .message-avatar {
-  border-color: #e5e6e9;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  border-color: var(--grid-line-dim);
+  box-shadow: var(--shadow-sm);
 }
 
 :root.light-theme .chat-typing {
-  background: #ffffff;
-  border: 1px solid #e5e6e9;
-  color: #8f959e;
+  background: var(--bg-surface);
+  border: 1px solid var(--grid-line);
+  color: var(--text-tertiary);
   border-radius: 16px;
   padding: 8px 14px;
 }
 
 :root.light-theme .task-readonly-input :deep(.el-textarea__inner) {
-  background: #f9fafb;
-  border-color: #e5e7eb;
-  color: #475569;
+  background: var(--bg-base);
+  border-color: var(--grid-line);
+  color: var(--text-secondary);
 }
 
 :root.light-theme .agents-grid {
@@ -2077,116 +2166,116 @@ onMounted(() => {
 }
 
 :root.light-theme .agent-card {
-  background: #ffffff;
-  border-color: #dee0e3;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  background: var(--bg-surface);
+  border-color: var(--grid-line);
+  box-shadow: var(--shadow-md);
 }
 
 :root.light-theme .agent-card__name {
-  color: #1f2329;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 :root.light-theme .agent-card__status {
-  color: #646a73;
+  color: var(--text-secondary);
 }
 
 :root.light-theme .agent-card__logs {
-  background: #fafbfc;
-  border-color: #f5f6f7;
+  background: var(--bg-base);
+  border-color: var(--bg-surface);
 }
 
 :root.light-theme .log-entry {
-  color: #646a73;
+  color: var(--text-secondary);
 }
 
 :root.light-theme .execution-progress {
-  background: #ffffff;
-  border-color: #dee0e3;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  background: var(--bg-surface);
+  border-color: var(--grid-line);
+  box-shadow: var(--shadow-sm);
 }
 
 :root.light-theme .progress-title {
-  color: #1f2329;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 :root.light-theme .progress-value {
-  color: #3370ff;
+  color: var(--color-primary);
   font-weight: 600;
 }
 
 :root.light-theme .phase-item {
-  background: #ffffff;
-  border-color: #dee0e3;
-  color: #646a73;
+  background: var(--bg-surface);
+  border-color: var(--grid-line);
+  color: var(--text-secondary);
 }
 
 :root.light-theme .phase-item.active {
-  background: rgba(51, 112, 255, 0.08);
-  border-color: #3370ff;
-  color: #1f2329;
+  background: var(--color-primary-bg);
+  border-color: var(--color-primary);
+  color: var(--text-primary);
 }
 
 :root.light-theme .complete-card {
-  background: #ffffff;
-  border-color: #dee0e3;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  background: var(--bg-surface);
+  border-color: var(--grid-line);
+  box-shadow: var(--shadow-md);
 }
 
 :root.light-theme .complete-card h3 {
-  color: #00b365;
+  color: var(--color-success);
   font-weight: 600;
 }
 
 :root.light-theme .complete-card p {
-  color: #646a73;
+  color: var(--text-secondary);
 }
 
 :root.light-theme .stat-label {
-  color: #8f959e;
+  color: var(--text-tertiary);
 }
 
 :root.light-theme .stat-value {
-  color: #1f2329;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 :root.light-theme .agent-info-header {
-  background: #fafbfc;
-  border-color: #dee0e3;
+  background: var(--bg-base);
+  border-color: var(--grid-line);
 }
 
 :root.light-theme .agent-info-text h4 {
-  color: #1f2329;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 :root.light-theme .agent-info-text p {
-  color: #646a73;
+  color: var(--text-secondary);
 }
 
 :root.light-theme .work-stats .stat-card {
-  background: #ffffff;
-  border-color: #dee0e3;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  background: var(--bg-surface);
+  border-color: var(--grid-line);
+  box-shadow: var(--shadow-sm);
 }
 
 :root.light-theme .detail-section h5 {
-  color: #1f2329;
+  color: var(--text-primary);
   font-weight: 600;
-  border-bottom-color: #dee0e3;
+  border-bottom-color: var(--grid-line);
 }
 
 :root.light-theme .agent-task-item {
-  background: #ffffff;
-  border-color: #dee0e3;
-  color: #646a73;
+  background: var(--bg-surface);
+  border-color: var(--grid-line);
+  color: var(--text-secondary);
 }
 
 :root.light-theme .agent-task-item--in_progress {
-  background: rgba(51, 112, 255, 0.08);
-  border-color: #bcd0ff;
+  background: var(--color-primary-bg);
+  border-color: var(--color-primary-light);
 }
 
 :root.light-theme .agent-task-item--completed {
@@ -2195,13 +2284,13 @@ onMounted(() => {
 }
 
 :root.light-theme .task-desc {
-  color: #646a73;
+  color: var(--text-secondary);
 }
 
 :root.light-theme .agent-log-item {
-  background: #ffffff;
-  border-color: #dee0e3;
-  color: #646a73;
+  background: var(--bg-surface);
+  border-color: var(--grid-line);
+  color: var(--text-secondary);
 }
 
 :root.light-theme .agent-log-item--success {
@@ -2220,62 +2309,148 @@ onMounted(() => {
 }
 
 :root.light-theme .log-time {
-  color: #c2c8d1;
+  color: var(--text-muted);
 }
 
 :root.light-theme .log-message {
-  color: #646a73;
+  color: var(--text-secondary);
 }
 
 :root.light-theme .agent-file-item {
-  background: #ffffff;
-  border-color: #dee0e3;
+  background: var(--bg-surface);
+  border-color: var(--grid-line);
 }
 
 :root.light-theme .agent-file-item .file-name {
-  color: #646a73;
+  color: var(--text-secondary);
 }
 
 :root.light-theme .empty-tip {
-  color: #c2c8d1;
+  color: var(--text-muted);
 }
 
 :root.light-theme .terminal-header {
-  background: #fafbfc;
-  border-bottom-color: #dee0e3;
+  background: var(--bg-base);
+  border-bottom-color: var(--grid-line);
 }
 
 :root.light-theme .terminal-title {
-  color: #646a73;
+  color: var(--text-secondary);
   font-weight: 600;
 }
 
 :root.light-theme .terminal-body {
-  background: #f5f6f7;
+  background: var(--bg-base);
 }
 
 :root.light-theme .terminal-line {
-  background: #ffffff;
-  border-color: #dee0e3;
-  color: #646a73;
+  background: var(--bg-surface);
+  border-color: var(--grid-line);
+  color: var(--text-secondary);
 }
 
 :root.light-theme :deep(.el-dialog) {
-  background: #ffffff;
+  background: var(--bg-surface);
   border-radius: 16px;
 }
 
 :root.light-theme :deep(.el-dialog__header) {
-  border-bottom-color: #dee0e3;
+  border-bottom-color: var(--grid-line);
 }
 
 :root.light-theme :deep(.el-dialog__title) {
-  color: #1f2329;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 :root.light-theme :deep(.el-dialog__body) {
-  color: #646a73;
+  color: var(--text-secondary);
+}
+
+/* ===== 减少动画偏好支持 ===== */
+@media (prefers-reduced-motion: reduce) {
+  .chat-message {
+    animation: none;
+  }
+
+  .phase-item.phase--active {
+    animation: none;
+    box-shadow: 0 0 4px rgba(0, 240, 255, 0.3);
+  }
+
+  .phase-item.phase--active .phase-icon,
+  .phase-item.phase--active .phase-dot {
+    animation: none;
+  }
+
+  .ai-status.status--connected .status-dot {
+    animation: none;
+  }
+
+  .chat-typing {
+    animation: none;
+  }
+
+  .typing-text::after {
+    animation: none;
+    opacity: 1;
+  }
+
+  .cursor-blink {
+    animation: none;
+  }
+
+  .message-bubble,
+  .message-avatar {
+    transition: none;
+  }
+
+  .chat-message:hover .message-avatar {
+    transform: none;
+  }
+}
+
+/* ===== 焦点状态 ===== */
+.message-avatar:focus-visible,
+.agent-file-item:focus-visible,
+.phase-item:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.chat-message:focus-visible .message-bubble {
+  box-shadow: 0 0 0 2px var(--color-primary);
+}
+
+/* ===== 性能优化：will-change ===== */
+.chat-message,
+.phase-item,
+.message-avatar,
+.agent-file-item {
+  will-change: transform;
+}
+
+.phase-dot,
+.status-dot {
+  will-change: opacity;
+}
+
+/* ===== 响应式触摸目标 ===== */
+@media (max-width: 768px) {
+  .phase-item {
+    min-height: 44px;
+    padding: 8px 4px;
+  }
+
+  .agent-file-item {
+    min-height: 44px;
+    padding: 12px;
+  }
+
+  .progress-controls .btn {
+    min-height: 44px;
+    min-width: 80px;
+  }
 }
 
 </style>
