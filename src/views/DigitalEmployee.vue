@@ -40,86 +40,95 @@
 
     <div class="max-w-7xl mx-auto px-6 py-8 relative z-10">
       <!-- 统计卡片 -->
-      <div class="grid grid-cols-4 gap-4 mb-8">
-        <div class="glass-card glass-card-hover p-5 border-l-4 border-l-blue-500">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-xs text-gray-400 uppercase tracking-wider">项目总数</p>
-              <p class="text-3xl font-bold mt-1 mono">{{ stats.totalProjects }}</p>
+      <div class="stats-grid mb-8">
+        <div class="stat-card stat-card--blue">
+          <div class="stat-card-inner">
+            <div class="stat-info">
+              <p class="stat-label-upper">项目总数</p>
+              <p class="stat-value-large mono">{{ stats.totalProjects }}</p>
             </div>
-            <div class="w-12 h-12 rounded-lg bg-blue-500/20 flex items-center justify-center">
-              <i class="fas fa-folder text-blue-400 text-xl"></i>
-            </div>
-          </div>
-        </div>
-        <div class="glass-card glass-card-hover p-5 border-l-4 border-l-green-500">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-xs text-gray-400 uppercase tracking-wider">开发中</p>
-              <p class="text-3xl font-bold mt-1 mono">{{ stats.inProgress }}</p>
-            </div>
-            <div class="w-12 h-12 rounded-lg bg-green-500/20 flex items-center justify-center">
-              <i class="fas fa-code text-green-400 text-xl"></i>
+            <div class="stat-icon stat-icon--blue">
+              <i class="fas fa-folder"></i>
             </div>
           </div>
         </div>
-        <div class="glass-card glass-card-hover p-5 border-l-4 border-l-yellow-500">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-xs text-gray-400 uppercase tracking-wider">规划中</p>
-              <p class="text-3xl font-bold mt-1 mono">{{ stats.notStarted }}</p>
+        <div class="stat-card stat-card--green">
+          <div class="stat-card-inner">
+            <div class="stat-info">
+              <p class="stat-label-upper">开发中</p>
+              <p class="stat-value-large mono">{{ stats.inProgress }}</p>
             </div>
-            <div class="w-12 h-12 rounded-lg bg-yellow-500/20 flex items-center justify-center">
-              <i class="fas fa-clipboard text-yellow-400 text-xl"></i>
+            <div class="stat-icon stat-icon--green">
+              <i class="fas fa-code"></i>
             </div>
           </div>
         </div>
-        <div class="glass-card glass-card-hover p-5 border-l-4 border-l-purple-500">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-xs text-gray-400 uppercase tracking-wider">今日提交</p>
-              <p class="text-3xl font-bold mt-1 mono">{{ stats.todayCommits }}</p>
+        <div class="stat-card stat-card--yellow">
+          <div class="stat-card-inner">
+            <div class="stat-info">
+              <p class="stat-label-upper">规划中</p>
+              <p class="stat-value-large mono">{{ stats.notStarted }}</p>
             </div>
-            <div class="w-12 h-12 rounded-lg bg-purple-500/20 flex items-center justify-center">
-              <i class="fas fa-git-alt text-purple-400 text-xl"></i>
+            <div class="stat-icon stat-icon--yellow">
+              <i class="fas fa-clipboard"></i>
+            </div>
+          </div>
+        </div>
+        <div class="stat-card stat-card--purple">
+          <div class="stat-card-inner">
+            <div class="stat-info">
+              <p class="stat-label-upper">今日提交</p>
+              <p class="stat-value-large mono">{{ stats.todayCommits }}</p>
+            </div>
+            <div class="stat-icon stat-icon--purple">
+              <i class="fas fa-git-alt"></i>
             </div>
           </div>
         </div>
       </div>
 
       <!-- 数字员工 -->
-      <h2 class="text-lg font-bold mb-4 flex items-center space-x-2">
-        <i class="fas fa-users text-purple-400"></i>
+      <h2 class="section-title">
+        <i class="fas fa-users"></i>
         <span>数字员工</span>
       </h2>
-      <div class="grid grid-cols-4 gap-4 mb-8">
-        <div v-for="member in teamMembers" :key="member.id" class="agent-card glass-card-hover p-4 border border-white/10">
-          <div class="flex items-center space-x-3 mb-3">
-            <div :class="['w-12 h-12 bg-gradient-to-r rounded-xl flex items-center justify-center shadow-lg', member.gradient]">
-              <img :src="member.icon" :alt="member.name" class="w-full h-full object-cover rounded-xl" />
+      <div class="team-members-grid mb-8">
+        <div v-for="member in teamMembers" :key="member.id" class="agent-card glass-card-hover">
+          <!-- Agent 头部 -->
+          <div class="agent-header">
+            <div class="agent-avatar" :style="{ background: getGradientStyle(member.gradient) }">
+              <img :src="member.icon" :alt="member.name" />
             </div>
-            <div>
-              <h4 class="font-semibold text-gray-100">{{ member.name }}</h4>
-              <p class="text-xs text-gray-500">{{ member.title }}</p>
-            </div>
-          </div>
-          <div class="grid grid-cols-2 gap-2 mb-3">
-            <div v-for="(value, key) in member.stats" :key="key" class="text-center p-2 bg-gray-800/50 rounded-lg border border-gray-700/50">
-              <p class="font-bold text-indigo-400 mono">{{ value }}</p>
-              <p class="text-xs text-gray-500">{{ key }}</p>
+            <div class="agent-info">
+              <h4 class="agent-name">{{ member.name }}</h4>
+              <p class="agent-title">{{ member.title }}</p>
             </div>
           </div>
-          <div class="flex items-center space-x-2 text-xs bg-green-500/10 text-green-400 px-2 py-1.5 rounded-lg mb-2 border border-green-500/20">
-            <div class="w-2 h-2 bg-green-400 rounded-full status-dot"></div>
+
+          <!-- 统计数据 -->
+          <div class="agent-stats">
+            <div v-for="(value, key) in member.stats" :key="key" class="stat-item">
+              <p class="stat-value mono">{{ value }}</p>
+              <p class="stat-label">{{ key }}</p>
+            </div>
+          </div>
+
+          <!-- 状态 -->
+          <div class="agent-status">
+            <div class="status-dot"></div>
             <span>Active</span>
           </div>
-          <div class="text-xs bg-gray-800/50 p-2 rounded-lg mb-2 border border-gray-700/50">
-            <span class="text-gray-500">当前:</span> <span class="text-gray-300">{{ member.task }}</span>
+
+          <!-- 当前任务 -->
+          <div class="agent-task">
+            <span class="task-label">当前:</span> <span class="task-value">{{ member.task }}</span>
           </div>
-          <div v-if="member.todayOutputs && member.todayOutputs.length" class="pt-2 border-t border-gray-700/50">
-            <p class="text-xs text-gray-500 mb-2">今日产出 ({{ member.todayOutputs.length }})</p>
-            <div class="flex flex-wrap gap-1.5">
-              <a v-for="output in member.todayOutputs" :key="output.name" :href="output.url" target="_blank" class="px-2 py-1 text-xs bg-indigo-500/20 text-indigo-400 rounded border border-indigo-500/30 hover:bg-indigo-500/30 transition-all">
+
+          <!-- 今日产出 -->
+          <div v-if="member.todayOutputs && member.todayOutputs.length" class="agent-outputs">
+            <p class="outputs-title">今日产出 ({{ member.todayOutputs.length }})</p>
+            <div class="outputs-list">
+              <a v-for="output in member.todayOutputs" :key="output.name" :href="output.url" target="_blank" class="output-tag">
                 {{ getTypeEmoji(output.type) }} {{ output.name.slice(0, 6) }}...
               </a>
             </div>
@@ -408,7 +417,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 import { useAgentsStore } from '@/stores/agents'
@@ -519,6 +528,19 @@ function getGradientForAgent(agentId) {
     xiaoce: 'from-red-400 to-pink-500'          // 测试员
   }
   return gradients[agentId] || 'from-gray-400 to-gray-500'
+}
+
+// 获取渐变色样式（用于内联 style）
+function getGradientStyle(gradientClass: string): string {
+  const gradientMap: Record<string, string> = {
+    'from-indigo-400 to-purple-500': 'linear-gradient(135deg, #818cf8, #a855f7)',
+    'from-green-400 to-cyan-500': 'linear-gradient(135deg, #4ade80, #06b6d4)',
+    'from-pink-400 to-rose-500': 'linear-gradient(135deg, #f472b6, #f43f5e)',
+    'from-yellow-400 to-orange-500': 'linear-gradient(135deg, #facc15, #f97316)',
+    'from-red-400 to-pink-500': 'linear-gradient(135deg, #f87171, #ec4899)',
+    'from-gray-400 to-gray-500': 'linear-gradient(135deg, #9ca3af, #6b7280)'
+  }
+  return gradientMap[gradientClass] || gradientMap['from-gray-400 to-gray-500']
 }
 
 // 获取 Agent 统计信息
@@ -998,6 +1020,280 @@ onMounted(() => {
   overflow: hidden;
   transition: all var(--transition-base);
   border: 1px solid var(--digital-border);
+  display: block;
+  width: 100%;
+}
+
+/* 数字员工 Grid 布局 */
+.digital-employee-page .team-members-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+@media (max-width: 1200px) {
+  .digital-employee-page .team-members-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .digital-employee-page .team-members-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 统计卡片 Grid 布局 */
+.digital-employee-page .stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+@media (max-width: 1200px) {
+  .digital-employee-page .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .digital-employee-page .stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 统计卡片样式 */
+.digital-employee-page .stat-card {
+  background: var(--digital-card-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--digital-border);
+  border-radius: 16px;
+  padding: 20px;
+  transition: all 0.3s ease;
+  border-left-width: 4px;
+}
+
+.digital-employee-page .stat-card--blue { border-left-color: #3b82f6; }
+.digital-employee-page .stat-card--green { border-left-color: #22c55e; }
+.digital-employee-page .stat-card--yellow { border-left-color: #eab308; }
+.digital-employee-page .stat-card--purple { border-left-color: #a855f7; }
+
+.digital-employee-page .stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 48px var(--digital-shadow);
+  border-color: var(--digital-accent);
+}
+
+.digital-employee-page .stat-card-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.digital-employee-page .stat-info {
+  flex: 1;
+}
+
+.digital-employee-page .stat-label-upper {
+  font-size: 12px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.digital-employee-page .stat-value-large {
+  font-size: 32px;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin-top: 4px;
+}
+
+.digital-employee-page .stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.digital-employee-page .stat-icon--blue {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
+
+.digital-employee-page .stat-icon--green {
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+}
+
+.digital-employee-page .stat-icon--yellow {
+  background: rgba(234, 179, 8, 0.2);
+  color: #facc15;
+}
+
+.digital-employee-page .stat-icon--purple {
+  background: rgba(168, 85, 247, 0.2);
+  color: #c084fc;
+}
+
+/* 确保数字员工卡片内的图片容器正常显示 */
+.digital-employee-page .agent-card .agent-avatar-container,
+.digital-employee-page .agent-card > div > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 确保图片正确显示 */
+.digital-employee-page .agent-card img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+/* Agent 卡片内部布局 - 修复 Tailwind 样式不生效问题 */
+.digital-employee-page .agent-card .agent-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.digital-employee-page .agent-card .agent-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.digital-employee-page .agent-card .agent-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.digital-employee-page .agent-card .agent-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.digital-employee-page .agent-card .agent-title {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.digital-employee-page .agent-card .agent-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.digital-employee-page .agent-card .stat-item {
+  text-align: center;
+  padding: 8px;
+  background: rgba(31, 41, 55, 0.5);
+  border-radius: 8px;
+  border: 1px solid rgba(55, 65, 81, 0.5);
+}
+
+.digital-employee-page .agent-card .stat-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #818cf8;
+  font-family: 'JetBrains Mono', monospace;
+  margin-bottom: 2px;
+}
+
+.digital-employee-page .agent-card .stat-label {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.digital-employee-page .agent-card .agent-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #4ade80;
+  background: rgba(34, 197, 94, 0.1);
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(74, 222, 128, 0.2);
+  margin-bottom: 10px;
+}
+
+.digital-employee-page .agent-card .status-dot {
+  width: 8px;
+  height: 8px;
+  background: #4ade80;
+  border-radius: 50%;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.digital-employee-page .agent-card .agent-task {
+  font-size: 12px;
+  padding: 8px;
+  background: rgba(31, 41, 55, 0.5);
+  border-radius: 8px;
+  border: 1px solid rgba(55, 65, 81, 0.5);
+  margin-bottom: 10px;
+}
+
+.digital-employee-page .agent-card .agent-task .task-label {
+  color: #6b7280;
+}
+
+.digital-employee-page .agent-card .agent-task .task-value {
+  color: #d1d5db;
+}
+
+.digital-employee-page .agent-card .agent-outputs {
+  padding-top: 10px;
+  border-top: 1px solid rgba(55, 65, 81, 0.5);
+}
+
+.digital-employee-page .agent-card .outputs-title {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 8px;
+}
+
+.digital-employee-page .agent-card .outputs-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.digital-employee-page .agent-card .output-tag {
+  font-size: 11px;
+  padding: 4px 8px;
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+  border-radius: 6px;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  transition: all 0.2s;
+  text-decoration: none;
+}
+
+.digital-employee-page .agent-card .output-tag:hover {
+  background: rgba(99, 102, 241, 0.25);
 }
 
 .digital-employee-page .agent-card::before {
