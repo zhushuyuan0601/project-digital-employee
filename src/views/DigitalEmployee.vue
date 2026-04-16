@@ -137,52 +137,115 @@
       </div>
 
       <!-- 工作成果 -->
-      <h2 class="text-lg font-bold mb-4 flex items-center space-x-2">
-        <i class="fas fa-trophy text-yellow-400"></i>
+      <h2 class="section-title">
+        <i class="fas fa-trophy"></i>
         <span>工作成果</span>
+        <span class="section-title__sub">OPC · 数字员工团队所有任务输出</span>
       </h2>
-      <div class="glass-card p-5 mb-8">
-        <div class="flex flex-wrap items-center gap-3 mb-4 pb-4 border-b border-white/10">
-          <input v-model="filterOutputDateStart" @change="applyOutputFilters" type="date" class="dark-input text-sm">
-          <span class="text-gray-500">至</span>
-          <input v-model="filterOutputDateEnd" @change="applyOutputFilters" type="date" class="dark-input text-sm">
-          <select v-model="filterOutputRole" @change="applyOutputFilters" class="dark-input text-sm">
-            <option value="all">全部角色</option>
-            <option value="小 U">小 U</option>
-            <option value="小开">小开</option>
-            <option value="小研">小研</option>
-            <option value="小产">小产</option>
-          </select>
-          <select v-model="filterOutputType" @change="applyOutputFilters" class="dark-input text-sm">
-            <option value="all">全部类型</option>
-            <option value="report">📊 报告</option>
-            <option value="doc">📝 文档</option>
-            <option value="code">🔧 代码</option>
-          </select>
-          <button @click="setOutputQuickDate('today')" class="px-3 py-1.5 text-xs bg-indigo-500/20 text-indigo-400 rounded-lg border border-indigo-500/30 hover:bg-indigo-500/30 transition-all">今天</button>
-          <button @click="setOutputQuickDate('week')" class="px-3 py-1.5 text-xs bg-indigo-500/20 text-indigo-400 rounded-lg border border-indigo-500/30 hover:bg-indigo-500/30 transition-all">本周</button>
-          <span class="ml-auto text-xs text-gray-500 mono">显示 <span class="text-indigo-400">{{ filteredOutputs.length }}</span> 项</span>
+      <div class="glass-card outputs-panel mb-8">
+        <!-- 筛选工具栏 -->
+        <div class="outputs-filter-bar">
+          <div class="filter-group">
+            <div class="filter-item">
+              <i class="fas fa-calendar-alt filter-icon"></i>
+              <input v-model="filterOutputDateStart" @change="applyOutputFilters" type="date" class="dark-input">
+              <span class="filter-separator">至</span>
+              <input v-model="filterOutputDateEnd" @change="applyOutputFilters" type="date" class="dark-input">
+            </div>
+            <div class="filter-item">
+              <i class="fas fa-user-tag filter-icon"></i>
+              <select v-model="filterOutputRole" @change="applyOutputFilters" class="dark-input">
+                <option value="all">全部角色</option>
+                <option value="小 U">小 U · 项目管理</option>
+                <option value="小开">小开 · 研发工程师</option>
+                <option value="小研">小研 · 竞品分析师</option>
+                <option value="小产">小产 · 产品经理</option>
+              </select>
+            </div>
+            <div class="filter-item">
+              <i class="fas fa-file-type filter-icon"></i>
+              <select v-model="filterOutputType" @change="applyOutputFilters" class="dark-input">
+                <option value="all">全部类型</option>
+                <option value="report">
+                  <i class="fas fa-chart-bar"></i> 报告
+                </option>
+                <option value="doc">
+                  <i class="fas fa-file-alt"></i> 文档
+                </option>
+                <option value="code">
+                  <i class="fas fa-code"></i> 代码
+                </option>
+              </select>
+            </div>
+          </div>
+          <div class="filter-actions">
+            <button @click="setOutputQuickDate('today')" class="filter-chip" :class="{ active: isTodayFilter }">
+              <i class="fas fa-calendar-day"></i>
+              今天
+            </button>
+            <button @click="setOutputQuickDate('week')" class="filter-chip" :class="{ active: isWeekFilter }">
+              <i class="fas fa-calendar-week"></i>
+              本周
+            </button>
+            <div class="results-count">
+              <i class="fas fa-layer-group"></i>
+              <span class="count-value">{{ filteredOutputs.length }}</span>
+              <span class="count-label">项</span>
+            </div>
+          </div>
         </div>
-        <div class="grid grid-cols-3 gap-3">
-          <div v-if="loading" class="text-center py-8 text-gray-400 col-span-full">
-            <i class="fas fa-spinner fa-spin text-2xl"></i>
+
+        <!-- 输出卡片网格 -->
+        <div class="outputs-grid">
+          <div v-if="loading" class="loading-state col-span-full">
+            <div class="loading-spinner">
+              <div class="spinner-ring"></div>
+              <div class="spinner-ring"></div>
+              <div class="spinner-ring"></div>
+            </div>
+            <p class="loading-text">加载工作成果...</p>
           </div>
-          <div v-else-if="!filteredOutputs.length" class="text-center py-8 text-gray-500 col-span-full">
-            <i class="fas fa-inbox text-3xl mb-2"></i>
-            <p>暂无成果</p>
+          <div v-else-if="!filteredOutputs.length" class="empty-state col-span-full">
+            <div class="empty-icon">
+              <i class="fas fa-inbox"></i>
+            </div>
+            <p class="empty-title">暂无成果</p>
+            <p class="empty-hint">筛选条件可能没有匹配的结果</p>
           </div>
-          <div v-for="output in filteredOutputs" :key="output.name + output.date" class="block p-3 bg-gray-800/50 rounded-lg border border-gray-700/50 hover:border-indigo-500/30 hover:bg-gray-700/50 transition-all group">
-            <div class="flex items-start justify-between mb-2">
-              <div class="flex items-center space-x-2">
-                <span class="text-xl">{{ getTypeEmoji(output.type) }}</span>
-                <span class="text-xs text-gray-500 mono">{{ output.date }}</span>
+          <div
+            v-for="output in filteredOutputs"
+            :key="output.name + output.date"
+            class="output-card"
+            @click="previewFile(output)"
+          >
+            <div class="output-card__header">
+              <div class="output-icon" :style="{ background: getTypeIconColor(output.type) + '20', color: getTypeIconColor(output.type) }">
+                <i :class="getTypeIcon(output.type)"></i>
+              </div>
+              <div class="output-meta">
+                <span class="output-date">
+                  <i class="fas fa-clock"></i>
+                  {{ output.date }}
+                </span>
+                <span class="output-type">{{ getOutputFileTypeName(output.type) }}</span>
               </div>
             </div>
-            <h4 class="text-sm font-medium text-gray-200 group-hover:text-indigo-400 transition-colors mb-2">{{ output.name }}</h4>
-            <p class="text-xs text-gray-500 mb-2">{{ output.person }}</p>
-            <div class="flex items-center justify-between">
-              <span class="text-xs text-gray-600">{{ getOutputFileTypeName(output.type) }}</span>
-              <el-button size="small" type="primary" plain @click.stop="previewFile(output)">预览</el-button>
+            <div class="output-card__body">
+              <h4 class="output-name">{{ output.name }}</h4>
+              <p class="output-author">
+                <i class="fas fa-user-circle"></i>
+                {{ output.person }}
+              </p>
+            </div>
+            <div class="output-card__footer">
+              <span class="file-badge" :class="'file-badge--' + output.type">
+                <i :class="getTypeIcon(output.type)"></i>
+                {{ getOutputFileTypeName(output.type) }}
+              </span>
+              <button class="preview-btn">
+                <i class="fas fa-eye"></i>
+                预览
+              </button>
             </div>
           </div>
         </div>
@@ -481,6 +544,17 @@ const filteredOutputs = computed(() => {
   return filtered
 })
 
+const isTodayFilter = computed(() => {
+  const today = getLocalDate()
+  return filterOutputDateStart.value === today && filterOutputDateEnd.value === today
+})
+
+const isWeekFilter = computed(() => {
+  const today = getLocalDate()
+  const weekAgo = getLocalDateDaysAgo(7)
+  return filterOutputDateStart.value === weekAgo && filterOutputDateEnd.value === today
+})
+
 const teamMembers = computed(() => {
   const today = new Date().toISOString().split('T')[0]
   const todayOutputs = allOutputs.value.filter(o => o.date === today)
@@ -620,9 +694,22 @@ const getStatusEmoji = (status) => {
   return emojis[status] || '📦'
 }
 
-const getTypeEmoji = (type) => {
-  const emojis = { code: '🔧', doc: '📝', report: '📊' }
-  return emojis[type] || '📄'
+const getTypeIcon = (type: string): string => {
+  const icons: Record<string, string> = {
+    code: 'fas fa-code',
+    doc: 'fas fa-file-alt',
+    report: 'fas fa-chart-bar'
+  }
+  return icons[type] || 'fas fa-file'
+}
+
+const getTypeIconColor = (type: string): string => {
+  const colors: Record<string, string> = {
+    code: '#60a5fa',
+    doc: '#fbbf24',
+    report: '#a78bfa'
+  }
+  return colors[type] || '#94a3b8'
 }
 
 const getOutputFileTypeName = (type) => {
@@ -877,14 +964,15 @@ onMounted(() => {
 :root.dark-theme .digital-employee-page,
 .digital-employee-page {
   --digital-bg: linear-gradient(135deg, #0f172a 0%, #020617 100%);
-  --digital-card-bg: rgba(17, 24, 39, 0.8);
-  --digital-border: rgba(255, 255, 255, 0.1);
-  --digital-shadow: rgba(0, 0, 0, 0.3);
+  --digital-card-bg: rgba(17, 24, 39, 0.7);
+  --digital-border: rgba(255, 255, 255, 0.08);
+  --digital-shadow: rgba(0, 0, 0, 0.4);
   --digital-grid: rgba(99, 102, 241, 0.03);
-  --digital-glow: rgba(99, 102, 241, 0.08);
-  --digital-text-primary: #f1f5f9;
+  --digital-glow: rgba(99, 102, 241, 0.15);
+  --digital-text-primary: #f8fafc;
   --digital-text-secondary: #94a3b8;
   --digital-accent: #6366F1;
+  --digital-accent-secondary: #818CF8;
 }
 
 /* CSS 变量 - 亮色主题 (毛玻璃柔和风格) */
@@ -946,12 +1034,14 @@ onMounted(() => {
 /* 玻璃态卡片 */
 .digital-employee-page .glass-card {
   background: var(--digital-card-bg);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
   border: 1px solid var(--digital-border);
-  border-radius: 16px;
-  box-shadow: 0 8px 32px var(--digital-shadow);
-  transition: all var(--transition-base);
+  border-radius: 20px;
+  box-shadow:
+    0 4px 24px -4px var(--digital-shadow),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* 玻璃态卡片悬停效果 */
@@ -1016,47 +1106,94 @@ onMounted(() => {
   background: var(--digital-card-bg);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-radius: 16px;
+  border-radius: 20px;
   overflow: hidden;
-  transition: all var(--transition-base);
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   border: 1px solid var(--digital-border);
-  display: block;
-  width: 100%;
+  box-shadow:
+    0 4px 24px -4px var(--digital-shadow),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
 }
 
-/* 数字员工 Grid 布局 */
+.digital-employee-page .agent-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--digital-accent) 0%, var(--digital-accent-secondary) 50%, #06B6D4 100%);
+  opacity: 0.8;
+}
+
+.digital-employee-page .agent-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow:
+    0 20px 48px -8px var(--digital-shadow),
+    0 0 0 1px rgba(99, 102, 241, 0.2) inset;
+  border-color: rgba(99, 102, 241, 0.3);
+}
+
+/* 数字员工 Grid 布局 - Bento Grid 风格 */
 .digital-employee-page .team-members-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
 }
 
-@media (max-width: 1200px) {
+@media (min-width: 1400px) {
   .digital-employee-page .team-members-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(5, 1fr);
   }
 }
 
-@media (max-width: 640px) {
+@media (min-width: 1200px) and (max-width: 1399px) {
+  .digital-employee-page .team-members-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  .digital-employee-page .team-members-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 480px) and (max-width: 767px) {
+  .digital-employee-page .team-members-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 479px) {
   .digital-employee-page .team-members-grid {
     grid-template-columns: 1fr;
   }
 }
 
-/* 统计卡片 Grid 布局 */
+/* 统计卡片 Grid 布局 - Bento Grid 风格 */
 .digital-employee-page .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
 }
 
-@media (max-width: 1200px) {
+@media (min-width: 1200px) {
   .digital-employee-page .stats-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 
-@media (max-width: 640px) {
+@media (min-width: 768px) and (max-width: 1199px) {
+  .digital-employee-page .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 767px) {
   .digital-employee-page .stats-grid {
     grid-template-columns: 1fr;
   }
@@ -1068,21 +1205,26 @@ onMounted(() => {
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid var(--digital-border);
-  border-radius: 16px;
-  padding: 20px;
-  transition: all 0.3s ease;
+  border-radius: 20px;
+  padding: 24px;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   border-left-width: 4px;
+  box-shadow:
+    0 4px 24px -4px var(--digital-shadow),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset;
 }
 
-.digital-employee-page .stat-card--blue { border-left-color: #3b82f6; }
+.digital-employee-page .stat-card--blue { border-left-color: #6366F1; }
 .digital-employee-page .stat-card--green { border-left-color: #22c55e; }
-.digital-employee-page .stat-card--yellow { border-left-color: #eab308; }
+.digital-employee-page .stat-card--yellow { border-left-color: #f59e0b; }
 .digital-employee-page .stat-card--purple { border-left-color: #a855f7; }
 
 .digital-employee-page .stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 16px 48px var(--digital-shadow);
-  border-color: var(--digital-accent);
+  transform: translateY(-4px) scale(1.01);
+  box-shadow:
+    0 20px 48px -8px var(--digital-shadow),
+    0 0 0 1px rgba(99, 102, 241, 0.15) inset;
+  border-color: rgba(99, 102, 241, 0.3);
 }
 
 .digital-employee-page .stat-card-inner {
@@ -1097,85 +1239,101 @@ onMounted(() => {
 
 .digital-employee-page .stat-label-upper {
   font-size: 12px;
-  color: #94a3b8;
+  font-weight: 600;
+  color: var(--digital-text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 4px;
+  letter-spacing: 0.08em;
+  margin-bottom: 8px;
 }
 
 .digital-employee-page .stat-value-large {
-  font-size: 32px;
-  font-weight: 700;
-  color: #f1f5f9;
+  font-size: 36px;
+  font-weight: 800;
+  color: var(--digital-text-primary);
   margin-top: 4px;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, var(--digital-text-primary) 0%, var(--digital-accent-secondary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .digital-employee-page .stat-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 20px;
+  font-size: 22px;
   flex-shrink: 0;
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.3);
 }
 
 .digital-employee-page .stat-icon--blue {
-  background: rgba(59, 130, 246, 0.2);
-  color: #60a5fa;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(99, 102, 241, 0.05) 100%);
+  color: #818cf8;
+  border: 1px solid rgba(99, 102, 241, 0.3);
 }
 
 .digital-employee-page .stat-icon--green {
-  background: rgba(34, 197, 94, 0.2);
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.2) 0%, rgba(34, 197, 94, 0.05) 100%);
   color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
 }
 
 .digital-employee-page .stat-icon--yellow {
-  background: rgba(234, 179, 8, 0.2);
-  color: #facc15;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(245, 158, 11, 0.05) 100%);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
 .digital-employee-page .stat-icon--purple {
-  background: rgba(168, 85, 247, 0.2);
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(168, 85, 247, 0.05) 100%);
   color: #c084fc;
+  border: 1px solid rgba(168, 85, 247, 0.3);
 }
 
-/* 确保数字员工卡片内的图片容器正常显示 */
-.digital-employee-page .agent-card .agent-avatar-container,
-.digital-employee-page .agent-card > div > div:first-child {
+/* Agent 卡片内部布局 */
+.digital-employee-page .agent-card .agent-header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
+  margin-bottom: 16px;
 }
 
-/* 确保图片正确显示 */
-.digital-employee-page .agent-card img {
+.digital-employee-page .agent-card .agent-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 8px 20px -4px rgba(0, 0, 0, 0.4),
+    0 0 0 2px rgba(255, 255, 255, 0.1) inset;
+  overflow: hidden;
+  position: relative;
+}
+
+.digital-employee-page .agent-card .agent-avatar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.digital-employee-page .agent-card .agent-avatar img {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 12px;
-}
-
-/* Agent 卡片内部布局 - 修复 Tailwind 样式不生效问题 */
-.digital-employee-page .agent-card .agent-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.digital-employee-page .agent-card .agent-avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  overflow: hidden;
+  border-radius: 16px;
 }
 
 .digital-employee-page .agent-card .agent-info {
@@ -1184,46 +1342,57 @@ onMounted(() => {
 }
 
 .digital-employee-page .agent-card .agent-name {
-  font-size: 15px;
-  font-weight: 600;
-  color: #f1f5f9;
-  margin-bottom: 2px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--digital-text-primary);
+  margin-bottom: 4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: 0.02em;
 }
 
 .digital-employee-page .agent-card .agent-title {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--digital-text-secondary);
+  font-weight: 500;
 }
 
 .digital-employee-page .agent-card .agent-stats {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 10px;
+  margin-bottom: 16px;
 }
 
 .digital-employee-page .agent-card .stat-item {
   text-align: center;
-  padding: 8px;
-  background: rgba(31, 41, 55, 0.5);
-  border-radius: 8px;
-  border: 1px solid rgba(55, 65, 81, 0.5);
+  padding: 12px 8px;
+  background: rgba(30, 41, 59, 0.6);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: all 0.2s ease;
+}
+
+.digital-employee-page .agent-card .stat-item:hover {
+  background: rgba(51, 65, 85, 0.6);
+  border-color: rgba(99, 102, 241, 0.2);
 }
 
 .digital-employee-page .agent-card .stat-value {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
-  color: #818cf8;
+  color: var(--digital-accent-secondary);
   font-family: 'JetBrains Mono', monospace;
-  margin-bottom: 2px;
+  margin-bottom: 4px;
 }
 
 .digital-employee-page .agent-card .stat-label {
   font-size: 11px;
-  color: #6b7280;
+  color: var(--digital-text-secondary);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .digital-employee-page .agent-card .agent-status {
@@ -1231,12 +1400,14 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   font-size: 12px;
+  font-weight: 600;
   color: #4ade80;
-  background: rgba(34, 197, 94, 0.1);
-  padding: 6px 10px;
-  border-radius: 8px;
-  border: 1px solid rgba(74, 222, 128, 0.2);
-  margin-bottom: 10px;
+  background: rgba(34, 197, 94, 0.12);
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(74, 222, 128, 0.25);
+  margin-bottom: 12px;
+  width: fit-content;
 }
 
 .digital-employee-page .agent-card .status-dot {
@@ -1245,70 +1416,64 @@ onMounted(() => {
   background: #4ade80;
   border-radius: 50%;
   animation: pulse 2s ease-in-out infinite;
+  box-shadow: 0 0 8px #4ade80;
 }
 
 .digital-employee-page .agent-card .agent-task {
   font-size: 12px;
-  padding: 8px;
-  background: rgba(31, 41, 55, 0.5);
-  border-radius: 8px;
-  border: 1px solid rgba(55, 65, 81, 0.5);
-  margin-bottom: 10px;
+  padding: 12px;
+  background: rgba(30, 41, 59, 0.6);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 12px;
 }
 
 .digital-employee-page .agent-card .agent-task .task-label {
-  color: #6b7280;
+  color: var(--digital-text-secondary);
+  font-weight: 500;
 }
 
 .digital-employee-page .agent-card .agent-task .task-value {
-  color: #d1d5db;
+  color: var(--digital-text-primary);
+  font-weight: 600;
 }
 
 .digital-employee-page .agent-card .agent-outputs {
-  padding-top: 10px;
-  border-top: 1px solid rgba(55, 65, 81, 0.5);
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .digital-employee-page .agent-card .outputs-title {
-  font-size: 12px;
-  color: #6b7280;
-  margin-bottom: 8px;
+  font-size: 11px;
+  color: var(--digital-text-secondary);
+  margin-bottom: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .digital-employee-page .agent-card .outputs-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 
 .digital-employee-page .agent-card .output-tag {
   font-size: 11px;
-  padding: 4px 8px;
-  background: rgba(99, 102, 241, 0.15);
-  color: #a5b4fc;
-  border-radius: 6px;
-  border: 1px solid rgba(99, 102, 241, 0.3);
-  transition: all 0.2s;
+  padding: 6px 10px;
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--digital-accent-secondary);
+  border-radius: 8px;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  transition: all 0.2s ease;
   text-decoration: none;
+  font-weight: 500;
 }
 
 .digital-employee-page .agent-card .output-tag:hover {
-  background: rgba(99, 102, 241, 0.25);
-}
-
-.digital-employee-page .agent-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(90deg, var(--digital-accent) 0%, #06B6D4 50%, #22C55E 100%);
-}
-
-.digital-employee-page .agent-card:hover {
-  box-shadow: 0 12px 40px var(--digital-shadow);
-  transform: translateY(-2px);
+  background: rgba(99, 102, 241, 0.2);
+  border-color: rgba(99, 102, 241, 0.4);
+  transform: translateY(-1px);
 }
 
 /* 发光文字 */
@@ -1720,32 +1885,376 @@ onMounted(() => {
   color: #c2c8d1;
 }
 
+/* ========== 工作成果 (OPC) 样式 ========== */
+.digital-employee-page .outputs-panel {
+  padding: 0;
+  overflow: hidden;
+}
+
+/* 筛选工具栏 */
+.digital-employee-page .outputs-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 20px 24px;
+  background: rgba(15, 23, 42, 0.4);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.15);
+}
+
+.digital-employee-page .filter-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.digital-employee-page .filter-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.digital-employee-page .filter-icon {
+  color: var(--digital-accent);
+  font-size: 14px;
+}
+
+.digital-employee-page .filter-separator {
+  color: var(--digital-text-secondary);
+  font-size: 13px;
+}
+
+.digital-employee-page .filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.digital-employee-page .filter-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 10px;
+  color: var(--digital-accent-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.digital-employee-page .filter-chip:hover {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: rgba(99, 102, 241, 0.4);
+  transform: translateY(-1px);
+}
+
+.digital-employee-page .filter-chip.active {
+  background: rgba(99, 102, 241, 0.3);
+  border-color: var(--digital-accent);
+  color: #fff;
+  box-shadow: 0 4px 12px -2px rgba(99, 102, 241, 0.3);
+}
+
+.digital-employee-page .results-count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  color: var(--digital-text-secondary);
+  font-size: 13px;
+  font-family: var(--font-mono);
+}
+
+.digital-employee-page .results-count .count-value {
+  color: var(--digital-accent);
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.digital-employee-page .results-count .count-label {
+  font-size: 12px;
+}
+
+/* 输出卡片网格 */
+.digital-employee-page .outputs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+  padding: 24px;
+}
+
+@media (min-width: 1400px) {
+  .digital-employee-page .outputs-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (min-width: 1200px) and (max-width: 1399px) {
+  .digital-employee-page .outputs-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 767px) {
+  .digital-employee-page .outputs-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 输出卡片 */
+.digital-employee-page .output-card {
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.digital-employee-page .output-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--digital-accent) 0%, var(--digital-accent-secondary) 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.digital-employee-page .output-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  background: rgba(51, 65, 85, 0.5);
+  border-color: rgba(99, 102, 241, 0.3);
+  box-shadow:
+    0 20px 40px -8px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(99, 102, 241, 0.1) inset;
+}
+
+.digital-employee-page .output-card:hover::before {
+  opacity: 1;
+}
+
+.digital-employee-page .output-card__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.digital-employee-page .output-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.digital-employee-page .output-card:hover .output-icon {
+  transform: scale(1.1);
+}
+
+.digital-employee-page .output-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.digital-employee-page .output-date {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--digital-text-secondary);
+  font-family: var(--font-mono);
+}
+
+.digital-employee-page .output-type {
+  font-size: 11px;
+  color: var(--digital-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.digital-employee-page .output-card__body {
+  margin-bottom: 16px;
+}
+
+.digital-employee-page .output-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--digital-text-primary);
+  margin-bottom: 10px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 42px;
+}
+
+.digital-employee-page .output-author {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--digital-text-secondary);
+}
+
+.digital-employee-page .output-author i {
+  color: var(--digital-accent);
+}
+
+.digital-employee-page .output-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.digital-employee-page .file-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.digital-employee-page .file-badge--report {
+  background: rgba(167, 139, 250, 0.15);
+  color: #a78bfa;
+  border: 1px solid rgba(167, 139, 250, 0.3);
+}
+
+.digital-employee-page .file-badge--doc {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.digital-employee-page .file-badge--code {
+  background: rgba(96, 165, 250, 0.15);
+  color: #60a5fa;
+  border: 1px solid rgba(96, 165, 250, 0.3);
+}
+
+.digital-employee-page .preview-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: linear-gradient(135deg, var(--digital-accent) 0%, var(--digital-accent-secondary) 100%);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 12px -2px rgba(99, 102, 241, 0.3);
+}
+
+.digital-employee-page .preview-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px -2px rgba(99, 102, 241, 0.4);
+}
+
+/* 空状态 */
+.digital-employee-page .outputs-grid .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.digital-employee-page .outputs-grid .empty-icon {
+  width: 80px;
+  height: 80px;
+  border-radius: 24px;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  color: var(--digital-accent);
+  margin-bottom: 20px;
+}
+
+.digital-employee-page .outputs-grid .empty-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--digital-text-primary);
+  margin-bottom: 8px;
+}
+
+.digital-employee-page .outputs-grid .empty-hint {
+  font-size: 14px;
+  color: var(--digital-text-secondary);
+}
+
+/* 加载状态 */
+.digital-employee-page .outputs-grid .loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+}
+
 /* ========== 项目进度面板样式 - 参考 Agents.vue 风格 ========== */
 /* 章节标题 */
 .digital-employee-page .section-title {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 20px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--grid-line);
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--digital-text-primary);
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+  letter-spacing: -0.02em;
 }
 
 .digital-employee-page .section-title i {
-  color: var(--color-primary);
-  font-size: 20px;
+  color: var(--digital-accent);
+  font-size: 22px;
+  filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.4));
 }
 
 .digital-employee-page .section-title__sub {
   margin-left: auto;
   font-size: 11px;
-  color: var(--text-tertiary);
+  color: var(--digital-text-secondary);
   font-family: var(--font-mono);
   text-transform: uppercase;
   letter-spacing: 0.15em;
+  font-weight: 600;
 }
 
 /* 项目面板 */
