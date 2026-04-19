@@ -4,8 +4,9 @@
     <div class="task-center__header">
       <div class="task-center__title-wrap">
         <div class="task-center__title">
-          <h1>任务指挥中心 II</h1>
-          <span class="task-center__mode">多 Agent 协作 · Gateway 直连</span>
+          <span class="title-icon"><i class="fas fa-satellite-dish"></i></span>
+          <h1>任务指挥中心</h1>
+          <span class="task-center__mode">Gateway 直连</span>
         </div>
       </div>
       <div class="header-actions">
@@ -200,7 +201,7 @@
                   </div>
                 </div>
               </div>
-              <!-- 底部输入栏 -->
+              <!-- 底部派发输入栏 -->
               <div class="chat-input-bar">
                 <div class="chat-input-row">
                   <el-input
@@ -213,11 +214,12 @@
                   />
                   <button
                     type="button"
-                    class="btn btn-primary chat-send-btn"
+                    class="dispatch-send-btn"
                     @click="sendToSelectedAgent"
                     :disabled="!taskInput.trim() || !selectedAgentConnected"
                   >
                     <i class="fas fa-paper-plane"></i>
+                    <span>派发</span>
                   </button>
                 </div>
                 <div class="chat-input-meta">
@@ -225,7 +227,7 @@
                     <span class="hint-dot"></span>
                     {{ selectedAgentConnected ? getAgentName(selectedAgent!) + ' 已连接' : getAgentName(selectedAgent!) + ' 未连接' }}
                   </span>
-                  <span class="input-shortcut">Ctrl+Enter 发送</span>
+                  <span class="input-shortcut">Ctrl+Enter 派发</span>
                 </div>
               </div>
             </div>
@@ -418,8 +420,10 @@ const selectedAgentConnected = computed(() => {
 
 // 聊天输入框占位符
 const chatInputPlaceholder = computed(() => {
-  if (!selectedAgent.value) return '选择一个 Agent 后开始对话...'
-  return `给 ${getAgentName(selectedAgent.value)} 发送消息...`
+  if (!selectedAgent.value) return '选择一个 Agent 后开始派发任务...'
+  const name = getAgentName(selectedAgent.value)
+  if (selectedAgent.value === 'xiaomu') return `输入任务内容，${name} 将负责拆解分配...`
+  return `向 ${name} 派发指令...`
 })
 
 // 文件预览对话框
@@ -759,10 +763,10 @@ const sendToSelectedAgent = async () => {
 
   try {
     multiAgentStore.sendMessage(selectedAgent.value, content)
-    ElMessage.success(`消息已发送给 ${getAgentName(selectedAgent.value)}`)
+    ElMessage.success(`任务已派发给 ${getAgentName(selectedAgent.value)}`)
     taskInput.value = ''
   } catch (err) {
-    ElMessage.error('发送失败：' + (err instanceof Error ? err.message : '未知错误'))
+    ElMessage.error('派发失败：' + (err instanceof Error ? err.message : '未知错误'))
   } finally {
     isSending.value = false
   }
@@ -936,22 +940,24 @@ onUnmounted(() => {
 .task-center-2 {
   max-width: 1600px;
   margin: 0 auto;
-  padding: 0 20px 12px;
+  padding: 0 16px 8px;
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
 }
 
-/* Header */
+/* Header — reference style top bar */
 .task-center__header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 6px;
-  padding: 0 0 4px;
-  border-bottom: 1px solid color-mix(in oklab, var(--border-subtle) 84%, transparent);
+  gap: 16px;
+  padding: 0 32px;
+  height: 64px;
+  border-bottom: 1px solid var(--border-default);
+  background: rgba(22, 27, 34, 0.8);
+  backdrop-filter: blur(10px);
   flex-shrink: 0;
 }
 
@@ -959,29 +965,42 @@ onUnmounted(() => {
   min-width: 0;
 }
 
+.title-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
+  color: white;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
 .task-center__title h1 {
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 20px;
+  font-weight: 600;
   color: var(--text-primary);
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
   margin: 0;
 }
 
 .task-center__title {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
 }
 
 .task-center__mode {
   display: inline-flex;
   align-items: center;
-  padding: 4px 8px;
+  padding: 3px 8px;
   border-radius: 999px;
   background: color-mix(in oklab, var(--color-primary-bg) 80%, transparent);
   color: var(--text-tertiary);
   font-size: 10px;
+  font-family: var(--font-mono);
   letter-spacing: 0.04em;
 }
 
@@ -990,24 +1009,26 @@ onUnmounted(() => {
   align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 6px;
 }
 
 .ai-status {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 11px;
-  border-radius: 999px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  font-size: 11px;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  background: rgba(46, 160, 67, 0.1);
+  border: 1px solid rgba(46, 160, 67, 0.2);
+  font-size: 12px;
+  font-weight: 500;
   white-space: nowrap;
+  color: var(--color-success);
 }
 
 .ai-status.status--connected {
-  background: var(--badge-bg-idle);
-  border-color: var(--color-success);
+  background: rgba(46, 160, 67, 0.1);
+  border-color: rgba(46, 160, 67, 0.2);
   color: var(--color-success);
 }
 
@@ -1015,19 +1036,18 @@ onUnmounted(() => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--text-muted);
+  background: var(--color-success);
+  box-shadow: 0 0 8px var(--color-success);
 }
 
 .ai-status.status--connected .status-dot {
   background: var(--color-success);
-  box-shadow: 0 0 6px var(--color-success-glow);
-  animation: pulse 1.5s ease-in-out infinite;
+  box-shadow: 0 0 8px var(--color-success);
 }
 
 .ai-status .status-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .ai-status.status--connected .status-label {
@@ -1068,60 +1088,59 @@ onUnmounted(() => {
 /* Main Layout: Sidebar + Detail */
 .main-layout {
   display: flex;
-  gap: 10px;
+  gap: 24px;
   flex: 1;
   min-height: 0;
+  padding: 24px;
 }
 
 /* Sidebar */
 .sidebar {
-  width: 300px;
+  width: 380px;
   flex-shrink: 0;
-  background:
-    linear-gradient(180deg, var(--bg-panel) 0%, color-mix(in oklab, var(--bg-panel) 92%, var(--bg-base) 8%) 100%);
-  border-radius: 20px;
+  background: var(--bg-panel);
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
-  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-default);
+  overflow: hidden;
 }
 
 .sidebar-header {
-  padding: 12px 14px 10px;
-  border-bottom: 1px solid var(--border-subtle);
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-default);
 }
 
 .sidebar-header .section-title {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  color: var(--text-secondary);
-  letter-spacing: 3px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .sidebar-header .section-title::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(90deg, var(--border-subtle), transparent);
+  display: none;
 }
 
 .sidebar-header .agent-count {
-  background: rgba(255, 255, 255, 0.08);
-  padding: 3px 10px;
-  border-radius: 12px;
+  background: rgba(88, 166, 255, 0.1);
+  color: var(--color-primary);
+  padding: 2px 8px;
+  border-radius: 10px;
   font-size: 12px;
+  font-weight: 500;
 }
 
 .agent-list {
   flex: 1;
   overflow-y: auto;
-  padding: 10px 14px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  min-height: 400px;
+  gap: 8px;
 }
 
 .agent-list::-webkit-scrollbar {
@@ -1133,51 +1152,45 @@ onUnmounted(() => {
 }
 
 .agent-card-mini {
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 14px;
-  padding: 12px 14px;
+  background: var(--bg-card);
+  border-radius: 8px;
+  padding: 14px 16px;
   display: flex;
   align-items: center;
   gap: 12px;
   cursor: pointer;
-  border: 1px solid transparent;
-  transition: all 0.25s ease;
+  border: 1px solid var(--border-default);
+  transition: all 0.2s ease;
   position: relative;
   overflow: hidden;
-  min-height: 70px;
 }
 
 .agent-card-mini:hover {
-  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--color-primary);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .agent-card-mini.active {
-  background: rgba(0, 229, 153, 0.06);
-  border-color: rgba(0, 229, 153, 0.25);
-  box-shadow: 0 2px 16px rgba(0, 229, 153, 0.08);
+  border-color: var(--color-primary);
+  background: rgba(88, 166, 255, 0.05);
+  box-shadow: none;
 }
 
 .agent-card-mini.active::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--color-success);
-  border-radius: 0 3px 3px 0;
+  display: none;
 }
 
 .agent-avatar-mini {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: var(--bg-panel);
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: var(--bg-card);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border: 2px solid var(--border-subtle);
+  border: none;
   position: relative;
   overflow: hidden;
 }
@@ -1247,32 +1260,31 @@ onUnmounted(() => {
 }
 
 .status-badge-mini {
-  font-size: 11px;
-  padding: 4px 10px;
-  border-radius: 20px;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 12px;
   display: inline-flex;
   align-items: center;
   gap: 4px;
   width: fit-content;
-  font-family: var(--font-mono);
 }
 
 .status-badge-mini.idle {
-  background: rgba(139, 146, 165, 0.12);
+  background: rgba(139, 148, 158, 0.1);
   color: var(--text-secondary);
-  border: 1px solid rgba(139, 146, 165, 0.15);
+  border: 1px solid rgba(139, 148, 158, 0.2);
 }
 
 .status-badge-mini.busy {
-  background: rgba(251, 146, 60, 0.1);
-  color: var(--color-accent);
-  border: 1px solid rgba(251, 146, 60, 0.2);
+  background: rgba(210, 153, 34, 0.1);
+  color: var(--color-warning);
+  border: 1px solid rgba(210, 153, 34, 0.2);
 }
 
 .status-badge-mini.offline {
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-tertiary);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(248, 81, 73, 0.1);
+  color: var(--color-error);
+  border: 1px solid rgba(248, 81, 73, 0.2);
 }
 
 /* 新文件红点提示 */
@@ -1296,47 +1308,47 @@ onUnmounted(() => {
 /* Detail Panel */
 .detail-panel {
   flex: 1;
-  background:
-    linear-gradient(135deg, var(--bg-panel) 0%, color-mix(in oklab, var(--bg-panel) 94%, var(--color-primary) 6%) 100%);
-  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
-  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-default);
+  overflow: hidden;
 }
 
 /* Compact Topbar (replaces old detail-header) */
 .detail-topbar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border-subtle);
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-default);
   flex-shrink: 0;
+  background: rgba(33, 38, 45, 0.5);
 }
 
 .detail-topbar-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
   object-fit: cover;
-  border: 1.5px solid var(--border-subtle);
+  border: none;
   flex-shrink: 0;
 }
 
 .detail-topbar-name {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 16px;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
 .detail-topbar-role {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--color-cyan);
-  background: rgba(34, 211, 238, 0.1);
-  padding: 2px 8px;
-  border-radius: 20px;
-  border: 1px solid rgba(34, 211, 238, 0.2);
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  border: none;
 }
 
 .detail-topbar-spacer {
@@ -1561,7 +1573,7 @@ onUnmounted(() => {
 /* Chat section: full width */
 .chat-section {
   flex: 1;
-  padding: 12px 20px 16px;
+  padding: 20px 24px;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -1590,8 +1602,12 @@ onUnmounted(() => {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
   padding-right: 8px;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 20px 20px;
 }
 
 .chat-container::-webkit-scrollbar {
@@ -1602,17 +1618,26 @@ onUnmounted(() => {
   border-radius: 4px;
 }
 
-/* Chat Input Bar */
+/* Chat Input Bar — dispatch console */
 .chat-input-bar {
   flex-shrink: 0;
-  padding: 10px 0 0;
-  border-top: 1px solid var(--border-subtle);
+  padding: 20px 0 0;
+  border-top: 1px solid var(--border-default);
 }
 
 .chat-input-row {
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
+  gap: 12px;
+  background: var(--bg-base);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 12px;
+  transition: border-color 0.2s;
+}
+
+.chat-input-row:focus-within {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary);
 }
 
 .chat-input {
@@ -1620,32 +1645,61 @@ onUnmounted(() => {
 }
 
 .chat-input :deep(.el-textarea__inner) {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
+  background: transparent;
+  border: none;
   color: var(--text-primary);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 14px;
+  line-height: 1.6;
   resize: none;
-  border-radius: 12px;
-  padding: 8px 12px;
-  min-height: 36px !important;
+  border-radius: 0;
+  padding: 0;
+  min-height: 24px !important;
+  box-shadow: none !important;
 }
 
 .chat-input :deep(.el-textarea__inner):focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px var(--color-primary-bg);
+  border-color: transparent;
+  box-shadow: none !important;
 }
 
-.chat-send-btn {
-  min-height: 36px;
-  min-width: 36px;
-  padding: 0;
-  border-radius: 12px;
-  flex-shrink: 0;
+.chat-input :deep(.el-textarea__inner)::placeholder {
+  color: var(--text-muted);
+}
+
+.dispatch-send-btn {
+  align-self: flex-end;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  gap: 6px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: var(--color-primary);
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.2s;
+}
+
+.dispatch-send-btn span {
+  display: none;
+}
+
+.dispatch-send-btn:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+}
+
+.dispatch-send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dispatch-send-btn i {
+  font-size: 16px;
 }
 
 .chat-input-meta {
@@ -1690,8 +1744,8 @@ onUnmounted(() => {
 /* Chat Messages */
 .chat-msg {
   display: flex;
-  gap: 12px;
-  max-width: 90%;
+  gap: 16px;
+  max-width: 80%;
 }
 
 .chat-msg.user {
@@ -1700,47 +1754,50 @@ onUnmounted(() => {
 }
 
 .msg-avatar {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--bg-surface);
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--bg-card);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border: 1px solid var(--border-subtle);
-  font-size: 14px;
+  border: none;
+  font-size: 16px;
   color: var(--text-secondary);
 }
 
 .chat-msg.user .msg-avatar {
-  background: rgba(0, 229, 153, 0.1);
-  color: var(--color-success);
-  border-color: rgba(0, 229, 153, 0.3);
+  background: #30363d;
+  color: var(--text-primary);
+  border-color: transparent;
 }
 
 .msg-avatar img {
   width: 100%;
   height: 100%;
-  border-radius: 50%;
+  border-radius: 8px;
   object-fit: cover;
 }
 
 .msg-bubble {
-  background: var(--bg-surface);
-  padding: 12px 16px;
-  border-radius: 0 12px 12px 12px;
-  font-size: 13px;
+  background: var(--bg-card);
+  padding: 16px;
+  border-radius: 12px;
+  border-top-left-radius: 4px;
+  font-size: 14px;
   line-height: 1.6;
   color: var(--text-primary);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-default);
   word-break: break-word;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 .chat-msg.user .msg-bubble {
-  background: rgba(0, 229, 153, 0.08);
-  border-radius: 12px 0 12px 12px;
-  border-color: rgba(0, 229, 153, 0.2);
+  background: rgba(88, 166, 255, 0.1);
+  border-radius: 12px;
+  border-top-right-radius: 4px;
+  border-color: rgba(88, 166, 255, 0.2);
 }
 
 .msg-bubble :deep(p) {
@@ -2174,6 +2231,8 @@ onUnmounted(() => {
 @media (max-width: 1024px) {
   .main-layout {
     flex-direction: column;
+    padding: 12px;
+    gap: 12px;
   }
 
   .sidebar {
@@ -2188,32 +2247,27 @@ onUnmounted(() => {
   }
 
   .agent-card-mini {
-    min-width: 200px;
+    min-width: 220px;
   }
 }
 
 @media (max-width: 768px) {
   .task-center-2 {
-    padding: 0 12px 20px;
+    padding: 0;
     height: auto;
   }
 
-  .task-center__header,
-  .send-btn-row {
-    flex-direction: column;
-    align-items: stretch;
+  .task-center__header {
+    padding: 0 16px;
+    height: 56px;
+  }
+
+  .task-center__header {
+    flex-wrap: wrap;
   }
 
   .header-actions {
     width: 100%;
-    justify-content: flex-start;
-  }
-
-  .task-center__title {
-    align-items: flex-start;
-  }
-
-  .connection-hint {
     justify-content: flex-start;
   }
 

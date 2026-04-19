@@ -129,68 +129,74 @@
 :root.dark-theme {
   color-scheme: dark;
 
-  --color-primary: oklch(0.74 0.1 248);
-  --color-primary-dark: oklch(0.64 0.1 248);
-  --color-primary-dim: oklch(0.6 0.07 248);
-  --color-primary-bg: oklch(0.29 0.04 248);
-  --color-primary-glow: rgba(136, 160, 255, 0.24);
-  --color-primary-rgb: 136, 160, 255;
+  /* Accent colors — bright blue accent like reference */
+  --color-primary: #58a6ff;
+  --color-primary-dark: #3182ce;
+  --color-primary-dim: #4090d0;
+  --color-primary-bg: rgba(88, 166, 255, 0.1);
+  --color-primary-glow: rgba(88, 166, 255, 0.24);
+  --color-primary-rgb: 88, 166, 255;
 
-  --color-secondary: oklch(0.73 0.07 192);
-  --color-secondary-dim: oklch(0.64 0.05 192);
-  --color-accent: oklch(0.76 0.13 34);
-  --color-accent-dim: oklch(0.68 0.11 34);
-  --color-success: oklch(0.76 0.12 165);
-  --color-success-glow: rgba(113, 228, 182, 0.2);
-  --color-warning: oklch(0.81 0.13 80);
-  --color-error: oklch(0.69 0.17 24);
-  --color-info: oklch(0.73 0.08 228);
-  --color-cyan: oklch(0.79 0.08 214);
+  --color-secondary: #79c0ff;
+  --color-secondary-dim: #539bf5;
+  --color-accent: #d29922;
+  --color-accent-dim: #bb8009;
+  --color-success: #2ea043;
+  --color-success-glow: rgba(46, 160, 67, 0.25);
+  --color-warning: #d29922;
+  --color-error: #f85149;
+  --color-info: #58a6ff;
+  --color-cyan: #79c0ff;
 
-  --bg-base: oklch(0.18 0.032 264);
-  --bg-surface: oklch(0.22 0.030 264);
-  --bg-surface-elevated: oklch(0.26 0.028 264);
-  --bg-panel: oklch(0.21 0.030 264);
-  --bg-panel-hover: oklch(0.26 0.032 264);
-  --bg-panel-header: oklch(0.23 0.028 264);
-  --bg-panel-footer: oklch(0.20 0.028 264);
-  --bg-sidebar: oklch(0.20 0.030 264);
-  --bg-card: oklch(0.23 0.032 264);
+  /* Backgrounds — GitHub dark palette */
+  --bg-base: #0d1117;
+  --bg-surface: #161b22;
+  --bg-surface-elevated: #1c2128;
+  --bg-panel: #161b22;
+  --bg-panel-hover: #1c2128;
+  --bg-panel-header: #161b22;
+  --bg-panel-footer: #0d1117;
+  --bg-sidebar: #161b22;
+  --bg-card: #21262d;
 
-  --grid-line: oklch(0.34 0.022 264);
-  --grid-line-dim: oklch(0.30 0.018 264);
-  --border-subtle: oklch(0.30 0.024 264);
-  --border-default: oklch(0.37 0.028 264);
-  --border-strong: oklch(0.48 0.034 264);
+  /* Borders */
+  --grid-line: #21262d;
+  --grid-line-dim: #1c2128;
+  --border-subtle: #21262d;
+  --border-default: #30363d;
+  --border-strong: #484f58;
   --color-border: var(--border-default);
 
-  --text-primary: oklch(0.95 0.01 250);
-  --text-secondary: oklch(0.81 0.012 248);
-  --text-tertiary: oklch(0.68 0.014 248);
-  --text-muted: oklch(0.56 0.015 248);
-  --text-inverse: oklch(0.18 0.02 250);
-  --text-on-primary: oklch(0.18 0.02 250);
+  /* Text */
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --text-tertiary: #6e7681;
+  --text-muted: #484f58;
+  --text-inverse: #0d1117;
+  --text-on-primary: #ffffff;
   --color-text: var(--text-primary);
   --color-text-dim: var(--text-secondary);
   --icon-color: var(--color-primary);
 
-  --terminal-black: oklch(0.18 0.02 250);
-  --gray-900: oklch(0.22 0.024 264);
-  --gray-950: oklch(0.16 0.020 264);
+  --terminal-black: #0d1117;
+  --gray-900: #161b22;
+  --gray-950: #0d1117;
 
-  --shadow-sm: 0 12px 24px rgba(0, 0, 0, 0.22);
-  --shadow-md: 0 24px 48px rgba(0, 0, 0, 0.28);
-  --shadow-lg: 0 36px 72px rgba(0, 0, 0, 0.34);
-  --shadow-xl: 0 48px 96px rgba(0, 0, 0, 0.42);
-  --glow-primary: 0 0 0 1px rgba(136, 160, 255, 0.18), 0 18px 38px rgba(136, 160, 255, 0.18);
-  --glow-error: 0 18px 32px rgba(235, 116, 103, 0.22);
+  /* Shadows — subtle for dark theme */
+  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.4);
+  --shadow-xl: 0 24px 64px rgba(0, 0, 0, 0.45);
+  --glow-primary: 0 0 0 1px rgba(88, 166, 255, 0.15), 0 0 20px rgba(88, 166, 255, 0.1);
+  --glow-error: 0 0 16px rgba(248, 81, 73, 0.2);
 
-  --badge-bg-idle: rgba(136, 160, 255, 0.14);
+  --badge-bg-idle: rgba(88, 166, 255, 0.1);
 
-  --digital-border: rgba(136, 160, 255, 0.18);
-  --digital-card-bg: rgba(37, 43, 62, 0.88);
-  --digital-grid: rgba(136, 160, 255, 0.1);
-  --digital-shadow: 0 28px 60px rgba(0, 0, 0, 0.34);
+  --digital-border: rgba(88, 166, 255, 0.15);
+  --digital-card-bg: rgba(22, 27, 34, 0.9);
+  --digital-grid: rgba(88, 166, 255, 0.06);
+  --digital-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --agent-claude: #a371f7;
 }
 
 *,

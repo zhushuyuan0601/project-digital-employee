@@ -10,13 +10,9 @@
             <div class="brand-mark__orb">U</div>
             <div class="brand-copy">
               <strong>OpenClaw Unicom</strong>
-              <span>多 Agent 协作管理平台</span>
+              <span>联通多Agent 协作管理平台</span>
             </div>
           </div>
-
-          <p class="brand-description">
-            以更轻盈的工作台视角查看协作、调度与运行状态，让复杂系统的信息层次更容易读懂。
-          </p>
         </div>
 
         <div class="nav-scroll">
@@ -196,7 +192,7 @@ onMounted(() => {
 .app-shell {
   position: relative;
   min-height: 100vh;
-  padding: 20px;
+  padding: 12px;
   overflow: visible;
 }
 
@@ -229,24 +225,23 @@ onMounted(() => {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 318px minmax(0, 1fr);
+  grid-template-columns: 280px minmax(0, 1fr);
   align-items: start;
-  gap: 18px;
-  min-height: calc(100vh - 40px);
+  gap: 0;
+  min-height: calc(100vh - 24px);
 }
 
 .app-sidebar {
   position: sticky;
-  top: 20px;
+  top: 12px;
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 40px);
-  padding: 22px 18px 18px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 30px;
-  background:
-    linear-gradient(180deg, color-mix(in oklab, var(--bg-surface) 92%, white 8%) 0%, var(--bg-panel) 100%);
-  box-shadow: var(--shadow-lg);
+  min-height: calc(100vh - 24px);
+  padding: 20px 16px 16px;
+  border-right: 1px solid var(--border-default);
+  border-radius: 0;
+  background: var(--bg-panel);
+  box-shadow: none;
 }
 
 .brand-panel {
@@ -264,16 +259,15 @@ onMounted(() => {
 .brand-mark__orb {
   display: grid;
   place-items: center;
-  width: 3rem;
-  height: 3rem;
-  border-radius: 1.1rem;
-  background:
-    linear-gradient(145deg, color-mix(in oklab, var(--color-primary) 84%, white 16%) 0%, color-mix(in oklab, var(--color-secondary) 72%, white 28%) 100%);
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--color-primary), #a371f7);
   color: white;
   font-family: var(--font-display);
   font-size: 1.1rem;
   font-weight: 800;
-  box-shadow: 0 12px 24px color-mix(in oklab, var(--color-primary) 24%, transparent);
+  box-shadow: none;
 }
 
 .brand-copy {
@@ -296,14 +290,6 @@ onMounted(() => {
   line-height: 1.35;
 }
 
-.brand-description {
-  max-width: 26ch;
-  margin: 0;
-  color: var(--text-tertiary);
-  font-size: 0.82rem;
-  line-height: 1.62;
-}
-
 .nav-scroll {
   flex: 1;
   min-height: 0;
@@ -318,7 +304,7 @@ onMounted(() => {
 .nav-section__label {
   margin: 0 0 10px;
   padding-left: 10px;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: var(--text-xs);
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -330,13 +316,13 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 12px;
+  padding: 10px 12px;
   border: 1px solid transparent;
-  border-radius: 22px;
+  border-radius: 8px;
   background: transparent;
   color: inherit;
   text-align: left;
-  transition: transform var(--transition-base), background var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
+  transition: all 0.2s ease;
 }
 
 .nav-link + .nav-link {
@@ -344,16 +330,15 @@ onMounted(() => {
 }
 
 .nav-link:hover {
-  transform: translateY(-1px);
-  background: color-mix(in oklab, var(--color-primary-bg) 54%, transparent);
-  border-color: color-mix(in oklab, var(--color-primary) 14%, var(--border-subtle));
+  background: var(--bg-card);
+  color: var(--text-primary);
 }
 
 .nav-link.is-active {
-  background:
-    linear-gradient(135deg, color-mix(in oklab, var(--color-primary-bg) 78%, white 22%) 0%, color-mix(in oklab, var(--color-secondary) 8%, var(--bg-surface)) 100%);
-  border-color: color-mix(in oklab, var(--color-primary) 20%, var(--border-default));
-  box-shadow: 0 14px 30px color-mix(in oklab, var(--color-primary) 12%, transparent);
+  background: rgba(88, 166, 255, 0.1);
+  border-left: 3px solid var(--color-primary);
+  color: var(--color-primary);
+  box-shadow: none;
 }
 
 .nav-link__icon,
@@ -365,10 +350,14 @@ onMounted(() => {
 }
 
 .nav-link__icon {
-  width: 2.4rem;
-  height: 2.4rem;
-  border-radius: 50%;
-  background: color-mix(in oklab, var(--bg-surface) 72%, var(--color-primary-bg) 28%);
+  width: 2rem;
+  height: 2rem;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.nav-link.is-active .nav-link__icon {
   color: var(--color-primary);
 }
 
@@ -404,7 +393,7 @@ onMounted(() => {
 }
 
 .nav-link.is-active .nav-link__arrow {
-  background: color-mix(in oklab, var(--color-primary) 14%, transparent);
+  background: transparent;
   color: var(--color-primary);
 }
 
@@ -465,18 +454,17 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 22px;
-  background: color-mix(in oklab, var(--bg-surface) 88%, transparent);
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-card);
   color: inherit;
-  transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
+  transition: all 0.2s ease;
 }
 
 .theme-toggle:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in oklab, var(--color-primary) 20%, var(--border-default));
-  box-shadow: 0 12px 24px color-mix(in oklab, var(--color-primary) 10%, transparent);
+  border-color: var(--color-primary);
+  box-shadow: none;
 }
 
 .theme-toggle__icon {
@@ -516,13 +504,13 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  height: calc(100vh - 40px);
-  padding: 18px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 34px;
-  background:
-    linear-gradient(180deg, color-mix(in oklab, var(--bg-surface) 78%, white 22%) 0%, color-mix(in oklab, var(--bg-base) 92%, var(--bg-surface) 8%) 100%);
-  box-shadow: var(--shadow-lg);
+  height: calc(100vh - 24px);
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: var(--bg-base);
+  background-image: radial-gradient(circle at top right, rgba(88, 166, 255, 0.03), transparent 40%);
+  box-shadow: none;
 }
 
 .stage-content {
@@ -542,6 +530,8 @@ onMounted(() => {
     min-height: auto;
     max-height: none;
     gap: 18px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-default);
   }
 
   .app-stage {
@@ -561,29 +551,22 @@ onMounted(() => {
 
 @media (max-width: 820px) {
   .app-shell {
-    padding: 12px;
+    padding: 8px;
   }
 
   .app-frame {
-    gap: 12px;
+    gap: 0;
   }
-
-  .app-sidebar,
-  .app-stage {
-    border-radius: 26px;
-  }
-
 }
 
 @media (max-width: 620px) {
   .app-shell {
-    padding: 10px;
+    padding: 4px;
   }
 
   .app-sidebar,
   .app-stage {
-    padding: 14px;
-    border-radius: 22px;
+    padding: 12px;
   }
 
   .brand-panel,
