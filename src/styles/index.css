@@ -1,8 +1,9 @@
 /*
  * ==========================================
  * OPENCLAW UNICOM UI - AI 作战指挥中心风格
- * 美学方向：深色科技风 × 战术界面
- * 支持明暗主题切换
+ * 美学方向：超级椭圆现代风 × 全时段适配
+ * 支持明暗主题自动切换 (prefers-color-scheme)
+ * 配色：深靛蓝 (#2D3561) + 珊瑚橙 (#FF6B6B) + 奶油白 (#FFF9F0)
  * ==========================================
  */
 
@@ -12,83 +13,83 @@
 /* ========== CSS 变量系统 - 暗色主题（默认） ========== */
 :root,
 :root.dark-theme {
-  /* 主色调 - 柔和蓝青色（降低饱和度，更专业） */
-  --color-primary: #4A9D9C;
-  --color-primary-dim: #3D8584;
-  --color-primary-glow: rgba(74, 157, 156, 0.25);
-  --color-primary-bg: rgba(74, 157, 156, 0.08);
-  --color-primary-light: rgba(74, 157, 156, 0.12);
+  /* 主色调 - 深靛蓝 (Deep Indigo) */
+  --color-primary: #5D6BB5;
+  --color-primary-dim: #4A5696;
+  --color-primary-glow: rgba(93, 107, 181, 0.3);
+  --color-primary-bg: rgba(93, 107, 181, 0.12);
+  --color-primary-light: rgba(93, 107, 181, 0.2);
 
-  /* 次要色 - 柔和靛蓝（更优雅，不刺眼） */
-  --color-secondary: #6B7BA8;
-  --color-secondary-dim: #5A6A94;
-  --color-secondary-glow: rgba(107, 123, 168, 0.25);
-  --color-secondary-bg: rgba(107, 123, 168, 0.08);
+  /* 次要色 - 柔和靛蓝 */
+  --color-secondary: #7A88C9;
+  --color-secondary-dim: #6474B5;
+  --color-secondary-glow: rgba(122, 136, 201, 0.25);
+  --color-secondary-bg: rgba(122, 136, 201, 0.1);
 
-  /* 强调色 - 柔和橙棕 */
-  --color-accent: #D4794A;
-  --color-accent-dim: #B8683F;
-  --color-accent-glow: rgba(212, 121, 74, 0.25);
+  /* 强调色 - 珊瑚橙 (Coral Orange) */
+  --color-accent: #FF6B6B;
+  --color-accent-dim: #E55A5A;
+  --color-accent-glow: rgba(255, 107, 107, 0.35);
 
-  /* 成功色 - 柔和绿 */
-  --color-success: #5BA88C;
-  --color-success-dim: #4D8F77;
-  --color-success-glow: rgba(91, 168, 140, 0.25);
+  /* 成功色 - 薄荷绿 */
+  --color-success: #7FD4C4;
+  --color-success-dim: #6BC0B0;
+  --color-success-glow: rgba(127, 212, 196, 0.3);
 
   /* 警告色 */
-  --color-warning: #ffaa00;
-  --color-warning-dim: #d48e00;
+  --color-warning: #FFB347;
+  --color-warning-dim: #E59D3E;
 
   /* 错误色 */
-  --color-error: #ff3366;
+  --color-error: #FF6B6B;
 
   /* 信息色 */
-  --color-info: #00a8ff;
+  --color-info: #5D6BB5;
 
-  /* 背景色层次 - 深空黑战术风格 */
-  --bg-base: #0a0e14;
-  --bg-surface: #121820;
-  --bg-surface-elevated: #1a2230;
-  --bg-panel: #0f1520;
-  --bg-panel-hover: #1a2330;
-  --bg-sidebar: #0d1218;
+  /* 背景色层次 - 深空靛黑 */
+  --bg-base: #1A1E2E;
+  --bg-surface: #23283D;
+  --bg-surface-elevated: #2D3246;
+  --bg-panel: #1F2437;
+  --bg-panel-hover: #282D42;
+  --bg-sidebar: #181C2A;
 
-  /* 网格/边框色 - 战术网格 */
-  --grid-line: #1e3a5f;
-  --grid-line-dim: #152840;
-  --border-subtle: #234060;
-  --border-default: #305070;
-  --border-strong: #406080;
+  /* 网格/边框色 - 靛蓝调 */
+  --grid-line: #3D4261;
+  --grid-line-dim: #2D3246;
+  --border-subtle: #333852;
+  --border-default: #404566;
+  --border-strong: #52587D;
 
-  /* 文字色层次 - 亮色文字 */
-  --text-primary: #e8f0ff;
-  --text-secondary: #b8c8e0;
-  --text-tertiary: #8090a8;
-  --text-muted: #506078;
-  --text-inverse: #0a0e14;
-  --text-on-primary: #0a0e14;
+  /* 文字色层次 - 奶油白文字 */
+  --text-primary: #F5F3EF;
+  --text-secondary: #D4CFBF;
+  --text-tertiary: #A8A498;
+  --text-muted: #6B685F;
+  --text-inverse: #1A1E2E;
+  --text-on-primary: #F5F3EF;
 
-  /* 终端色板 - 深色主题（柔和色调） */
-  --terminal-black: #0a0e14;
-  --terminal-red: #C97575;
-  --terminal-green: #5BA88C;
-  --terminal-yellow: #C9A86C;
-  --terminal-blue: #5A8DAD;
-  --terminal-magenta: #9B7CB6;
-  --terminal-cyan: #4A9D9C;
-  --terminal-white: #e8f0ff;
+  /* 终端色板 - 深色主题 */
+  --terminal-black: #1A1E2E;
+  --terminal-red: #FF6B6B;
+  --terminal-green: #7FD4C4;
+  --terminal-yellow: #FFD97D;
+  --terminal-blue: #5D6BB5;
+  --terminal-magenta: #B57BD4;
+  --terminal-cyan: #6BC4DC;
+  --terminal-white: #F5F3EF;
 
-  /* 光晕效果 - 柔和发光（降低强度） */
-  --glow-primary: 0 0 10px rgba(74, 157, 156, 0.3), 0 0 20px rgba(74, 157, 156, 0.15);
-  --glow-secondary: 0 0 10px rgba(107, 123, 168, 0.3);
-  --glow-success: 0 0 10px rgba(91, 168, 140, 0.3);
-  --glow-error: 0 0 10px rgba(201, 117, 117, 0.3);
+  /* 光晕效果 - 靛蓝 glow */
+  --glow-primary: 0 0 15px rgba(93, 107, 181, 0.4), 0 0 30px rgba(93, 107, 181, 0.2);
+  --glow-secondary: 0 0 15px rgba(122, 136, 201, 0.3);
+  --glow-success: 0 0 15px rgba(127, 212, 196, 0.3);
+  --glow-error: 0 0 15px rgba(255, 107, 107, 0.3);
 
   /* 阴影 - 深色阴影 */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.6);
-  --shadow-xl: 0 8px 32px rgba(0, 0, 0, 0.7);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.6);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.7);
+  --shadow-xl: 0 12px 48px rgba(0, 0, 0, 0.8);
 
   /* 动画 */
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -96,7 +97,7 @@
   --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-bounce: 500ms cubic-bezier(0.34, 1.56, 0.64, 1);
 
-  /* 间距 */
+  /* 间距 - 4pt scale */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -113,15 +114,15 @@
   --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
-  /* 字体大小 */
-  --text-xs: 11px;
-  --text-sm: 13px;
-  --text-base: 14px;
-  --text-lg: 16px;
-  --text-xl: 18px;
-  --text-2xl: 22px;
-  --text-3xl: 28px;
-  --text-4xl: 36px;
+  /* 字体大小 - fixed rem scale for app UI */
+  --text-xs: 0.6875rem;    /* 11px */
+  --text-sm: 0.8125rem;    /* 13px */
+  --text-base: 0.875rem;   /* 14px */
+  --text-lg: 1rem;         /* 16px */
+  --text-xl: 1.125rem;     /* 18px */
+  --text-2xl: 1.375rem;    /* 22px */
+  --text-3xl: 1.75rem;     /* 28px */
+  --text-4xl: 2.25rem;     /* 36px */
 
   /* 字重 */
   --font-light: 300;
@@ -130,97 +131,152 @@
   --font-semibold: 600;
   --font-bold: 700;
 
-  /* 圆角 - 使用更圆润的圆角 */
+  /* 圆角 - 超级椭圆风格 (macOS Big Sur inspired) */
   --radius-none: 0;
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
+  --radius-sm: 6px;         /* 小元素 */
+  --radius-md: 12px;        /* 按钮/输入框 */
+  --radius-lg: 16px;        /* 卡片 */
+  --radius-xl: 24px;        /* 大卡片/面板 */
+  --radius-2xl: 32px;       /* 超大容器 */
   --radius-full: 9999px;
 
   /* CRT 效果（保留但默认关闭） */
   --scanline-color: rgba(0, 0, 0, 0.01);
-  --crt-flicker: rgba(102, 126, 234, 0.01);
+  --crt-flicker: rgba(93, 107, 181, 0.01);
+
+  /* ========== VoltAgent+Linear 风格扩展 ========== */
+
+  /* 灰度系统 - VoltAgent 纯黑画布 */
+  --gray-50: #fafafa;
+  --gray-100: #f4f4f5;
+  --gray-200: #e4e4e7;
+  --gray-300: #d4d4d8;
+  --gray-400: #a1a1aa;
+  --gray-500: #71717a;
+  --gray-600: #52525b;
+  --gray-700: #3f3f46;
+  --gray-800: #27272a;
+  --gray-900: #18181b;
+  --gray-950: #09090b;  /* VoltAgent 纯黑 */
+
+  /* Agent 专属色板 - 适配新配色 */
+  --agent-xiaomu: #7FD4C4;      /* 薄荷绿 */
+  --agent-xiaoyan: #FF9F47;     /* 琥珀橙 */
+  --agent-xiaochan: #5D6BB5;    /* 深靛蓝 */
+  --agent-xiaokai: #7A88C9;     /* 柔和靛蓝 */
+  --agent-xiaoce: #FF6B6B;      /* 珊瑚红 */
+  --agent-claude: #9B8BD4;      /* 柔和紫 */
+
+  /* Agent 背景渐变预设 - VoltAgent 风格 (适配新配色) */
+  --agent-gradient-xiaomu: linear-gradient(135deg, rgba(127, 212, 196, 0.12) 0%, transparent 40%);
+  --agent-gradient-xiaoyan: linear-gradient(135deg, rgba(255, 159, 71, 0.12) 0%, transparent 40%);
+  --agent-gradient-xiaochan: linear-gradient(135deg, rgba(61, 69, 128, 0.12) 0%, transparent 40%);
+  --agent-gradient-xiaokai: linear-gradient(135deg, rgba(122, 136, 201, 0.12) 0%, transparent 40%);
+  --agent-gradient-xiaoce: linear-gradient(135deg, rgba(255, 107, 107, 0.12) 0%, transparent 40%);
+  --agent-gradient-claude: linear-gradient(135deg, rgba(155, 139, 212, 0.12) 0%, rgba(122, 136, 201, 0.08) 100%);
+
+  /* Z-index 层级系统 */
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-fixed: 300;
+  --z-modal: 500;
+  --z-tooltip: 700;
+
+  /* 状态徽章系统 - Linear 极简风格 */
+  --badge-size-sm: 6px;
+  --badge-size-md: 8px;
+  --badge-bg-idle: rgba(127, 212, 196, 0.12);
+  --badge-bg-busy: rgba(255, 159, 71, 0.12);
+  --badge-bg-offline: rgba(168, 164, 152, 0.12);
+
+  /* 卡片样式 - 央视风格 */
+  --card-bg: rgba(17, 24, 39, 0.7);
+  --card-border: rgba(52, 211, 153, 0.2);
+
+  /* 颜色扩展 */
+  --color-cyan: #22d3ee;
+  --color-blue: #3b82f6;
 }
 
-/* ========== CSS 变量系统 - 亮色主题（飞书风格）========== */
-/* 设计理念：干净简洁、清晰边框、圆润气泡、克制用色 */
+/* ========== CSS 变量系统 - 亮色主题（奶油白风格）========== */
+/* 设计理念：奶油白基调 + 深靛蓝文字 + 珊瑚橙点缀，温暖专业 */
 :root.light-theme {
-  /* ========== 主色调 - 飞书蓝 ========== */
-  --color-primary: #3370ff;           /* 飞书品牌蓝 */
-  --color-primary-dim: #2860e1;
+  /* ========== 主色调 - 深靛蓝 ========== */
+  --color-primary: #3D4580;           /* 深靛蓝 */
+  --color-primary-dim: #2D3561;
   --color-primary-glow: none;
-  --color-primary-bg: rgba(51, 112, 255, 0.08);
-  --color-primary-light: rgba(51, 112, 255, 0.1);
+  --color-primary-bg: rgba(61, 69, 128, 0.08);
+  --color-primary-light: rgba(61, 69, 128, 0.12);
 
-  /* ========== 次要色 - 柔和蓝 ========== */
-  --color-secondary: #6aa1ff;
-  --color-secondary-dim: #5a8ae6;
+  /* ========== 次要色 - 柔和靛蓝 ========== */
+  --color-secondary: #5D6BB5;
+  --color-secondary-dim: #4A5696;
   --color-secondary-glow: none;
-  --color-secondary-bg: rgba(106, 161, 255, 0.08);
+  --color-secondary-bg: rgba(93, 107, 181, 0.08);
 
-  /* ========== 强调色 - 橙色 ========== */
-  --color-accent: #fa8c16;
-  --color-accent-dim: #e37a12;
+  /* ========== 强调色 - 珊瑚橙 ========== */
+  --color-accent: #FF6B6B;
+  --color-accent-dim: #E55A5A;
   --color-accent-glow: none;
 
   /* ========== 功能色 ========== */
-  --color-success: #00b365;
-  --color-success-dim: #009a5a;
+  --color-success: #5BA88C;
+  --color-success-dim: #4D8F77;
   --color-success-glow: none;
 
-  --color-warning: #ff7a2d;
-  --color-warning-dim: #e66a24;
+  --color-warning: #FF9F47;
+  --color-warning-dim: #E58A3E;
 
-  --color-error: #ff4d4f;
-  --color-error-dim: #e64446;
+  --color-error: #FF6B6B;
+  --color-error-dim: #E55A5A;
 
-  --color-info: #3370ff;
-  --color-info-dim: #2860e1;
+  --color-info: #5D6BB5;
+  --color-info-dim: #4A5696;
 
-  /* ========== 背景色层次 - 飞书风格 ========== */
-  --bg-base: #f5f6f7;               /* 飞书浅灰背景 */
-  --bg-surface: #ffffff;            /* 纯白卡片 */
-  --bg-surface-elevated: #ffffff;
-  --bg-panel: #ffffff;              /* 白色面板 */
-  --bg-panel-hover: #fafbfc;
-  --bg-sidebar: #ffffff;            /* 白色侧边栏 */
-  --bg-input: #ffffff;
+  /* ========== 背景色层次 - 奶油白风格 ========== */
+  --bg-base: #FFF9F0;               /* 奶油白 */
+  --bg-surface: #FFFFFF;            /* 纯白卡片 */
+  --bg-surface-elevated: #FFFFFF;
+  --bg-panel: #FFFFFF;              /* 白色面板 */
+  --bg-panel-hover: #FDFBF7;
+  --bg-sidebar: #FFFFFF;            /* 白色侧边栏 */
+  --bg-input: #FFFFFF;
 
-  /* ========== 边框色 - 飞书风格 ========== */
-  --grid-line: #dee0e3;             /* 清晰边框 */
-  --grid-line-dim: #e5e6e9;
-  --border-subtle: #e5e6e9;
-  --border-default: #dee0e3;
-  --border-strong: #c9cdd1;
-  --border-focus: rgba(51, 112, 255, 0.3);
+  /* ========== 边框色 - 暖灰色调 ========== */
+  --grid-line: #E8E4DC;             /* 暖灰边框 */
+  --grid-line-dim: #F0EDE6;
+  --border-subtle: #E8E4DC;
+  --border-default: #DCD6CC;
+  --border-strong: #C9C4B8;
+  --border-focus: rgba(61, 69, 128, 0.3);
 
-  /* ========== 文字色 - 飞书风格 ========== */
-  --text-primary: #1f2329;          /* 深灰黑 */
-  --text-secondary: #646a73;        /* 中灰 */
-  --text-tertiary: #8f959e;         /* 浅灰 */
-  --text-muted: #c2c8d1;            /* 更浅灰 */
-  --text-inverse: #ffffff;
-  --text-on-primary: #ffffff;
+  /* ========== 文字色 - 深靛蓝文字 ========== */
+  --text-primary: #2D3561;          /* 深靛蓝 */
+  --text-secondary: #4A5696;        /* 靛蓝 */
+  --text-tertiary: #6B73A8;         /* 浅靛蓝 */
+  --text-muted: #A8A498;            /* 暖灰 */
+  --text-inverse: #FFFFFF;
+  --text-on-primary: #FFFFFF;
 
-  /* ========== 终端色板 - 飞书风格 ========== */
-  --terminal-black: #1f2329;
-  --terminal-red: #ff4d4f;
-  --terminal-green: #00b365;
-  --terminal-yellow: #ff7a2d;
-  --terminal-blue: #3370ff;
-  --terminal-magenta: #9254de;
-  --terminal-cyan: #33c9dd;
-  --terminal-white: #ffffff;
+  /* ========== 终端色板 - 亮色主题 ========== */
+  --terminal-black: #2D3561;
+  --terminal-red: #FF6B6B;
+  --terminal-green: #5BA88C;
+  --terminal-yellow: #FF9F47;
+  --terminal-blue: #5D6BB5;
+  --terminal-magenta: #9B7CB6;
+  --terminal-cyan: #5DA8B5;
+  --terminal-white: #2D3561;
 
-  /* ========== 阴影 - 飞书风格 ========== */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 2px 8px 0 rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 4px 16px 0 rgba(0, 0, 0, 0.08);
-  --shadow-xl: 0 8px 24px 0 rgba(0, 0, 0, 0.1);
+  /* ========== 阴影 - 柔和阴影 ========== */
+  --shadow-sm: 0 1px 2px rgba(45, 53, 97, 0.06);
+  --shadow-md: 0 4px 12px rgba(45, 53, 97, 0.08);
+  --shadow-lg: 0 8px 24px rgba(45, 53, 97, 0.1);
+  --shadow-xl: 0 12px 48px rgba(45, 53, 97, 0.12);
 
   /* 卡片悬浮阴影 */
-  --shadow-card-hover: 0 4px 12px 0 rgba(0, 0, 0, 0.08);
+  --shadow-card-hover: 0 6px 20px rgba(45, 53, 97, 0.1);
 
   /* ========== 光晕效果 - 无 ========== */
   --glow-primary: none;
@@ -236,6 +292,14 @@
   --scanline-color: rgba(0, 0, 0, 0);
   --crt-flicker: rgba(0, 0, 0, 0);
 
+  /* 卡片样式 - 央视风格 (亮色主题) */
+  --card-bg: rgba(255, 255, 255, 0.8);
+  --card-border: rgba(52, 211, 153, 0.3);
+
+  /* 颜色扩展 */
+  --color-cyan: #0891b2;
+  --color-blue: #2563eb;
+
   /* ========== 动画 - 流畅自然 ========== */
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -243,10 +307,10 @@
   --transition-bounce: 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* 暗色主题的文字发光效果（柔和） */
+/* 暗色主题的文字发光效果（柔和靛蓝） */
 :root.dark-theme {
-  --text-shadow-primary: 0 0 10px rgba(74, 157, 156, 0.3);
-  --text-shadow-glow: 0 0 10px rgba(74, 157, 156, 0.2);
+  --text-shadow-primary: 0 0 10px rgba(93, 107, 181, 0.3);
+  --text-shadow-glow: 0 0 10px rgba(93, 107, 181, 0.2);
 }
 
 /* ========== 全局重置 ========== */

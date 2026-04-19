@@ -25,7 +25,6 @@ export async function loginMC(username: string, password: string): Promise<boole
     }
 
     const data = await response.json()
-    console.log('[MissionControl] Login success:', data.user?.username)
     return true
   } catch (err) {
     console.error('[MissionControl] Login error:', err)
@@ -36,7 +35,6 @@ export async function loginMC(username: string, password: string): Promise<boole
 // 请求拦截器
 async function mcFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const url = `${MC_BASE_URL}${path}`
-  console.log('[MissionControl API] Request:', url)
 
   try {
     const response = await fetch(url, {
@@ -49,7 +47,6 @@ async function mcFetch<T>(path: string, options?: RequestInit): Promise<T> {
       // 注意：认证由 Vite 代理处理，不设置 credentials
     })
 
-    console.log('[MissionControl API] Response status:', response.status)
     const contentType = response.headers.get('content-type')
 
     if (!response.ok) {

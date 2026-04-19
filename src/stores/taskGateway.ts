@@ -78,6 +78,12 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
   const messages = ref<TaskMessage[]>([])
   const taskQueue = ref<Array<{ agentId: string; content: string }>>([])
 
+  // 追踪 pending requests，用于匹配响应
+  const pendingRequests = ref<Record<string, { method: string; agentId: string }>>({})
+
+  // Gateway 协议版本（与服务端保持一致）
+  const PROTOCOL_VERSION = 3
+
   // 计算属性
   const allConnected = computed(() => {
     return Object.values(connections.value).every(c => c.isConnected)
@@ -139,22 +145,24 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
       id: `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       method: 'connect',
       params: {
-        minProtocol: 1,
-        maxProtocol: 10,
+        minProtocol: PROTOCOL_VERSION,
+        maxProtocol: PROTOCOL_VERSION,
         client: {
-          id: 'webchat',
+          id: 'openclaw-control-ui',  // 必须使用这个 ID 才能被识别为 Control UI
           displayName: 'Web Chat',
           version: '1.0.0',
           platform: 'web',
           mode: 'webchat',
         },
+        role: 'operator',  // 必须指定 role，dangerouslyDisableDeviceAuth 只对 operator 生效
         scopes: ['operator.admin', 'operator.write', 'operator.read'],
         caps: ['tool-events'],
         auth: GATEWAY_CONFIG.token ? { token: GATEWAY_CONFIG.token } : undefined,
       },
     }
+    pendingRequests.value[msg.id] = { method: 'connect', agentId }
     conn.ws?.send(JSON.stringify(msg))
-    console.log(`[TaskGateway:${agentId}] 发送连接请求`)
+    console.log(`[TaskGateway:${agentId}] 发送连接请求 (protocol v${PROTOCOL_VERSION})`)
   }
 
   // 发送消息到指定 Agent（模拟模式下直接返回成功）
@@ -179,7 +187,7 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
         agentId: conn.gatewayAgentId,
         message: content,
         idempotencyKey: `ik-${Date.now()}`,
-        deliver: false,
+        deliver: true,
       },
     }
     conn.ws.send(JSON.stringify(msg))
@@ -202,7 +210,37 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
     console.log(`[TaskGateway:${agentId}] 收到消息:`, msg)
 
     if (msg.type === 'res') {
-      // 响应消息
+      // 响应消息 - 检查是否是 connect 响应
+      const pending = pendingRequests.value[msg.id]
+      if (pending?.method === 'connect') {
+        delete pendingRequests.value[msg.id]
+        if (msg.ok) {
+          // connect 握手成功，才设置 isConnected = true
+          const conn = connections.value[agentId]
+          if (conn) {
+            conn.isConnected = true
+            conn.isConnecting = false
+          }
+          // 打印服务端授予的 scopes
+          const result = msg.result || msg.payload || {}
+          console.log(`[TaskGateway:${agentId}] 连接握手成功 (hello-ok):`, JSON.stringify(result, null, 2))
+          const grantedScopes = result.scopes || result.grantedScopes || result.granted_scopes
+          if (grantedScopes) {
+            console.log(`[TaskGateway:${agentId}] 服务端授予的 scopes:`, JSON.stringify(grantedScopes))
+            if (!grantedScopes.includes('operator.write')) {
+              console.error(`[TaskGateway:${agentId}] ⚠️ 缺少 operator.write scope！写入操作将被拒绝。`)
+            }
+          }
+        } else {
+          console.error(`[TaskGateway:${agentId}] connect 握手失败:`, msg.error)
+          addMessage({
+            agentId,
+            type: 'task_error',
+            content: `连接失败：${msg.error?.message || '未知错误'}`,
+            data: msg.error
+          })
+        }
+      }
       return
     }
 
@@ -253,13 +291,20 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
       return
     }
 
+    // 检查 crypto.subtle 是否可用（安全上下文）
+    if (!window.crypto?.subtle) {
+      console.warn(`[TaskGateway:${agentId}] crypto.subtle 不可用（非安全上下文），跳过挑战响应`)
+      // 在非安全上下文下，Gateway 应配置 allowInsecureAuth 来支持纯 token 认证
+      return
+    }
+
     // 使用 HMAC-SHA256 计算签名
     const encoder = new TextEncoder()
     const keyData = encoder.encode(GATEWAY_CONFIG.token)
     const messageData = encoder.encode(payload.nonce)
 
     // 导入密钥
-    const key = await crypto.subtle.importKey(
+    const key = await window.crypto.subtle.importKey(
       'raw',
       keyData,
       { name: 'HMAC', hash: 'SHA-256' },
@@ -268,7 +313,7 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
     )
 
     // 计算签名
-    const signature = await crypto.subtle.sign('HMAC', key, messageData)
+    const signature = await window.crypto.subtle.sign('HMAC', key, messageData)
 
     // 转换为 hex 字符串
     const signatureHex = Array.from(new Uint8Array(signature))
@@ -440,8 +485,8 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
       const ws = new WebSocket(wsUrl)
 
       ws.onopen = () => {
-        console.log(`[TaskGateway:${agentId}] 连接成功`)
-        conn.isConnected = true
+        console.log(`[TaskGateway:${agentId}] WebSocket 已打开，等待 connect 握手响应`)
+        // 注意：isConnected 在收到 connect 响应 (hello-ok) 后才设置为 true
         conn.isConnecting = false
         sendConnectRequest(agentId)
       }

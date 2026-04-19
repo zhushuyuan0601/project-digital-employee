@@ -17,6 +17,7 @@ export default defineConfig({
     }
   },
   server: {
+    host: '0.0.0.0',
     port: 3000,
     proxy: {
       '/api/files': {
@@ -54,6 +55,19 @@ export default defineConfig({
       '/ws': {
         target: 'ws://127.0.0.1:18789',
         ws: true
+      },
+      // Mission Control API
+      '/mc-api': {
+        target: 'http://127.0.0.1:3100',
+        changeOrigin: true
+      },
+      '/mc-login': {
+        target: 'http://127.0.0.1:3100',
+        changeOrigin: true
+      },
+      '/mc-events': {
+        target: 'http://127.0.0.1:3100',
+        changeOrigin: true
       },
       '/ai-api': {
         target: 'http://192.168.244.201:9091',

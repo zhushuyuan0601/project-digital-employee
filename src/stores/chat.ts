@@ -78,8 +78,6 @@ export const useChatStore = defineStore('chat', () => {
 
   // 处理连接挑战响应
   async function handleConnectChallenge(payload: { nonce: string; ts: number }) {
-    console.log('[WebSocket] Received challenge:', payload)
-
     if (!ws.value || !settings.value.token) {
       console.error('[WebSocket] No token to respond to challenge')
       return
@@ -119,7 +117,6 @@ export const useChatStore = defineStore('chat', () => {
     }
 
     ws.value.send(JSON.stringify(responseMsg))
-    console.log('[WebSocket] Challenge response sent')
   }
 
   // Actions
@@ -179,15 +176,11 @@ export const useChatStore = defineStore('chat', () => {
       : ''
     const wsUrl = `${settings.value.wsUrl}${tokenParam}`
 
-    console.log('[WebSocket] Connecting to:', wsUrl)
-
     try {
       ws.value = new WebSocket(wsUrl)
       ws.value.onopen = () => {
-        console.log('[WebSocket] Connected')
         isConnecting.value = false
         isConnected.value = true
-        console.log('[WebSocket] State updated: isConnected =', isConnected.value, 'isConnecting =', isConnecting.value)
         // Send connect request
         sendConnectRequest()
       }
@@ -200,7 +193,6 @@ export const useChatStore = defineStore('chat', () => {
         }
       }
       ws.value.onclose = (event) => {
-        console.log('[WebSocket] Closed:', event.code, event.reason)
         isConnected.value = false
         isConnecting.value = false
         isTyping.value = false
@@ -233,6 +225,7 @@ export const useChatStore = defineStore('chat', () => {
 
   function sendConnectRequest() {
     if (!ws.value) return
+    const agentIdShort = settings.value.sessionKey.split(':')[1] || 'ceo'
     const msg = {
       type: 'req',
       id: `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -242,7 +235,7 @@ export const useChatStore = defineStore('chat', () => {
         maxProtocol: 10,
         client: {
           id: 'webchat',
-          displayName: '小呦',
+          displayName: agentIdShort,
           version: '1.0.0',
           platform: 'web',
           mode: 'webchat',
@@ -284,15 +277,13 @@ export const useChatStore = defineStore('chat', () => {
         agentId: agentIdShort,
         message: text.trim(),
         idempotencyKey: `ik-${Date.now()}`,
-        deliver: false,
+        deliver: true,
       },
     }
-    console.log('[WebSocket] Sending agent request:', agentIdShort)
     ws.value.send(JSON.stringify(msg))
   }
 
   function handleMessage(msg: any) {
-    console.log('[WebSocket] Message:', msg)
     if (msg.type === 'res') {
       // Handle response
       return
@@ -303,8 +294,6 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   async function handleEvent(event: string, payload: any) {
-    console.log('[Event]', event, payload)
-
     // 通知所有事件监听器
     eventListeners.value.forEach(listener => {
       try {
@@ -343,9 +332,7 @@ export const useChatStore = defineStore('chat', () => {
 
     // Handle cron events - 定时任务状态
     if (event === 'cron') {
-      const task = payload?.task || payload?.name
-      const status = payload?.status
-      console.log('[cron] task:', task, 'status:', status)
+      // Cron event - ignored
       return
     }
 
@@ -387,7 +374,6 @@ export const useChatStore = defineStore('chat', () => {
 
     // Handle health events - 心跳
     if (event === 'health') {
-      console.log('[health] heartbeat')
       return
     }
 
@@ -396,8 +382,7 @@ export const useChatStore = defineStore('chat', () => {
       return
     }
 
-    // Unknown event
-    console.log('Unknown event:', event, payload)
+    // Unknown event - ignored
   }
 
   function handleAgentEvent(payload: any) {
@@ -455,8 +440,6 @@ export const useChatStore = defineStore('chat', () => {
     const toolCallId = data.toolCallId || data.id || `tool-${Date.now()}`
     const name = data.name || 'unknown'
     const phase = data.phase || data.type
-
-    console.log('[agent.tool] phase:', phase, 'toolCallId:', toolCallId, 'name:', name)
 
     if (phase === 'start' || phase === 'call') {
       const args = data.args || data.arguments || {}

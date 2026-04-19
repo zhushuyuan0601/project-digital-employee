@@ -127,9 +127,6 @@ export const useTaskBoardStore = defineStore('taskBoard', () => {
       projects.value = projectsRes.projects
       agents.value = agentsRes.agents
 
-      console.log('[TaskBoard] Agent 数据:', agentsRes.agents)
-      console.log('[TaskBoard] 任务数据:', tasksRes.tasks.length, '条')
-
       // 加载目标 Agent 的消息
       await loadAgentMessages()
     } catch (err) {
@@ -172,7 +169,7 @@ export const useTaskBoardStore = defineStore('taskBoard', () => {
         })
         messages.value[agent.name] = res.messages
       } catch (err) {
-        console.warn(`[TaskBoard] 加载 ${agent.name} 消息失败:`, err)
+        // 忽略消息加载错误
       }
     }
   }

@@ -153,7 +153,6 @@ const participatingAgents = computed(() => {
       isConnected: agentState?.isConnected || false
     }
   })
-  console.log('[GroupChat] participatingAgents computed:', result)
   return result
 })
 
@@ -189,12 +188,10 @@ const getAgentName = (agentId: string) => {
 
 // 监听多 Agent Store 的连接状态变化（由于 participatingAgents 是 computed from multiAgentStore，所以自动响应式）
 const setupAgentStatusWatcher = () => {
-  console.log('[GroupChat] Setting up agent status watcher...')
   // watch participatingAgents 变化，更新 groupStore 内部状态用于消息处理
   return watch(
     () => participatingAgents.value,
     (agents) => {
-      console.log('[GroupChat] Agent status changed:', agents)
       agents.forEach(agent => {
         groupStore.updateAgentStatus(agent.id, {
           isConnected: agent.isConnected,
@@ -274,7 +271,6 @@ const handleSend = async () => {
       const data = await response.json()
 
       if (data.success || data.message) {
-        console.log(`[GroupChat] Message sent to ${coreAgentName} via HTTP API`)
         // 在本地添加用户消息
         multiAgentStore.agents[agentId]?.messages.push({
           id: `msg-${Date.now()}`,
@@ -341,7 +337,6 @@ const stopAgentWatch = setupAgentStatusWatcher()
 const cleanupListener = setupMessageListener()
 
 onMounted(() => {
-  console.log('[GroupChat] Mounted, participatingAgents:', participatingAgents.value)
   groupStore.loadMessages()
   scrollToBottom()
   // 连接状态由 App.vue 统一管理，页面切换时不断开

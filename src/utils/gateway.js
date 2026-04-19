@@ -23,7 +23,6 @@ export class GatewayClient {
       this.ws = new WebSocket(this.url)
       
       this.ws.addEventListener('open', () => {
-        console.log('[Gateway] Connected')
         this.connected = true
         this.backoffMs = 800
         this.sendConnect()
@@ -35,7 +34,6 @@ export class GatewayClient {
       })
       
       this.ws.addEventListener('close', (event) => {
-        console.log('[Gateway] Closed:', event.code, event.reason)
         this.connected = false
         this.ws = null
         this.rejectAllPending(new Error(`Connection closed: ${event.reason}`))
@@ -77,27 +75,29 @@ export class GatewayClient {
   }
 
   sendConnect() {
+    // Gateway 协议版本（与服务端保持一致）
+    const PROTOCOL_VERSION = 3
     const connectMsg = {
       type: 'req',
       id: this.generateId(),
       method: 'connect',
       params: {
-        minProtocol: 3,
-        maxProtocol: 3,
+        minProtocol: PROTOCOL_VERSION,
+        maxProtocol: PROTOCOL_VERSION,
         client: {
-          id: 'openclaw-unicom-ui',
+          id: 'openclaw-control-ui',  // 必须使用这个 ID 才能被识别为 Control UI
           version: '1.0.0',
           platform: navigator?.platform || 'web',
         },
-        role: 'webchat',
-        scopes: [],
+        role: 'operator',  // 必须指定 operator，dangerouslyDisableDeviceAuth 只对 operator 生效
+        scopes: ['operator.admin', 'operator.write', 'operator.read'],
         caps: [],
         auth: this.token ? { token: this.token } : undefined,
         userAgent: navigator.userAgent,
         locale: navigator.language
       }
     }
-    
+
     this.ws.send(JSON.stringify(connectMsg))
   }
 
@@ -119,11 +119,11 @@ export class GatewayClient {
     const seq = message.seq
     if (seq !== null && seq !== undefined) {
       if (this.lastSeq !== null && this.lastSeq !== undefined && seq > this.lastSeq + 1) {
-        console.warn('[Gateway] Message gap detected')
+        // Message gap detected
       }
       this.lastSeq = seq
     }
-    
+
     this.onEvent(message.event, message.payload)
   }
 

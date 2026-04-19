@@ -154,7 +154,6 @@ export const useAgentChatStore = defineStore('agentChat', () => {
       startStatusCheck()
 
       isConnected.value = true
-      console.log('[AgentChat] 连接成功')
     } catch (err) {
       connectionError.value = err instanceof Error ? err.message : '连接失败'
       console.error('[AgentChat] 连接失败:', err)
@@ -211,8 +210,6 @@ export const useAgentChatStore = defineStore('agentChat', () => {
       // 将完整名称转换为 Gateway 接受的简化名称
       const gatewayAgentName = toGatewayAgentName(agentName)
 
-      console.log('[AgentChat] 发送消息给:', gatewayAgentName, '(原始:', agentName, ')')
-
       const result = await agentChatAPI.sendMessage({
         to: gatewayAgentName, // 使用简化名称
         content,
@@ -250,7 +247,7 @@ export const useAgentChatStore = defineStore('agentChat', () => {
     eventSource.value = es
 
     es.onopen = () => {
-      console.log('[AgentChat] SSE 连接已建立')
+      // SSE 连接已建立
     }
 
     es.onmessage = (event) => {
@@ -293,7 +290,7 @@ export const useAgentChatStore = defineStore('agentChat', () => {
         handleTokenUsage(event.data)
         break
       case 'connected':
-        console.log('[AgentChat] 服务器连接确认')
+        // 服务器连接确认
         break
     }
   }

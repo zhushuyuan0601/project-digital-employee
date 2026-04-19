@@ -21,10 +21,10 @@ const PING_INTERVAL_MS = 30000
 const MAX_MISSED_PONGS = 3
 
 // Gateway 连接配置
-// 使用 Vite 代理路径，而不是直接连接
-const GATEWAY_WS_PATH = import.meta.env.VITE_GATEWAY_WS_PATH || '/ws'
-const GATEWAY_HOST = import.meta.env.VITE_GATEWAY_HOST || ''
-const GATEWAY_PORT = import.meta.env.VITE_GATEWAY_PORT || ''
+// 直接连接 Gateway，不走 Vite 代理
+// 这样 Gateway 能正确识别为本地连接，避免 scopes 被清空
+const GATEWAY_HOST = import.meta.env.VITE_GATEWAY_HOST || '127.0.0.1'
+const GATEWAY_PORT = import.meta.env.VITE_GATEWAY_PORT || '18789'
 const GATEWAY_CLIENT_ID = 'cli'
 
 // Token 存储键
@@ -120,27 +120,19 @@ export const useGatewayStore = defineStore('gateway', () => {
 
   /**
    * 构建 WebSocket URL
-   * 优先使用代理路径，支持直接连接作为备选
+   * 直接连接 Gateway，不走 Vite 代理
+   * 这样 Gateway 能正确识别为本地连接，避免 scopes 被清空
    */
   function buildWebSocketUrl(): string {
-    // 如果配置了代理路径，使用代理
-    if (GATEWAY_WS_PATH) {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      return `${protocol}//${window.location.host}${GATEWAY_WS_PATH}`
-    }
-
-    // 否则直接连接 Gateway（仅在本地开发或特殊场景）
+    // 优先使用环境变量配置
     if (GATEWAY_HOST && GATEWAY_PORT) {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      // localhost 始终使用 ws://（无 TLS）
       const isLocal = GATEWAY_HOST === 'localhost' || GATEWAY_HOST === '127.0.0.1'
-      const wsProtocol = isLocal ? 'ws:' : protocol
+      const wsProtocol = isLocal ? 'ws:' : (window.location.protocol === 'https:' ? 'wss:' : 'ws:')
       return `${wsProtocol}//${GATEWAY_HOST}:${GATEWAY_PORT}`
     }
 
-    // 默认使用当前页面的 ws 代理
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    return `${protocol}//${window.location.host}/ws`
+    // 默认直接连接 Gateway（不走代理）
+    return 'ws://127.0.0.1:18789'
   }
 
   /**
@@ -150,7 +142,6 @@ export const useGatewayStore = defineStore('gateway', () => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return
 
     const token = getStoredToken()
-    console.log('[Gateway] Token from storage:', token ? `${token.slice(0, 20)}...` : '(empty)')
 
     // 强制禁用设备签名，只使用 token 认证
     let device: any = undefined
@@ -172,20 +163,20 @@ export const useGatewayStore = defineStore('gateway', () => {
         minProtocol: PROTOCOL_VERSION,
         maxProtocol: PROTOCOL_VERSION,
         client: {
-          id: 'webchat',
+          id: 'openclaw-control-ui',  // 必须使用这个 ID 才能被识别为 Control UI
           displayName: 'Unicom Mission Control',
           version: '1.0.0',
           platform: 'web',
           mode: 'webchat',
           instanceId: `mc-${Date.now()}`
         },
+        role: 'operator',  // 必须指定 role，dangerouslyDisableDeviceAuth 只对 operator 生效
         scopes: ['operator.admin', 'operator.write', 'operator.read'],
         caps: ['tool-events'],
         auth: { token },
       }
     }
 
-    console.log('[Gateway] Sending connect handshake (token-only mode)')
     ws.send(JSON.stringify(connectRequest))
   }
 
@@ -238,23 +229,32 @@ export const useGatewayStore = defineStore('gateway', () => {
 
     // 处理连接挑战
     if (frame.type === 'event' && frame.event === 'connect.challenge') {
-      console.log('[Gateway] Received connect challenge')
       sendConnectHandshake(frame.payload?.nonce)
       return
     }
 
     // 处理连接响应
     if (frame.type === 'res' && frame.ok && !handshakeComplete) {
-      console.log('[Gateway] Handshake complete')
       handshakeComplete = true
       reconnectAttempts = 0
       isConnected.value = true
       isConnecting.value = false
       reconnectAttemptCount.value = 0
 
+      // 打印服务端实际授予的 scopes（hello-ok 响应）
+      const result = frame.result || frame.payload || {}
+      console.log('[Gateway] 连接握手成功 (hello-ok):', JSON.stringify(result, null, 2))
+      const grantedScopes = result.scopes || result.grantedScopes || result.granted_scopes
+      if (grantedScopes) {
+        console.log('[Gateway] 服务端授予的 scopes:', JSON.stringify(grantedScopes))
+        if (!grantedScopes.includes('operator.write')) {
+          console.error('[Gateway] ⚠️ 缺少 operator.write scope！写入操作将被拒绝。请检查 Gateway token 权限。')
+        }
+      }
+
       // 缓存设备令牌
-      if (frame.result?.deviceToken) {
-        cacheDeviceToken(frame.result.deviceToken)
+      if (result.deviceToken) {
+        cacheDeviceToken(result.deviceToken)
       }
 
       startHeartbeat()
@@ -269,16 +269,14 @@ export const useGatewayStore = defineStore('gateway', () => {
 
     // 处理 agent 方法的响应
     if (frame.type === 'res' && frame.ok && frame.result) {
-      console.log('[Gateway] Response received:', frame.id, frame.result)
-
       // agent 方法返回 runId 和 sessionId
       if (frame.result.runId || frame.result.sessionId) {
-        console.log('[Gateway] Agent invoked, runId:', frame.result.runId, 'sessionId:', frame.result.sessionId)
+        // Agent invoked
       }
 
       // chat.send 方法返回状态
       if (frame.result.status) {
-        console.log('[Gateway] Chat send status:', frame.result.status)
+        // Chat send status
       }
 
       return
@@ -290,7 +288,6 @@ export const useGatewayStore = defineStore('gateway', () => {
 
       // 忽略 ping 方法的错误（Gateway 可能不支持）
       if (frame.id?.startsWith('ping-') || errorMsg.includes('unknown method: ping')) {
-        console.log('[Gateway] Ping not supported, ignoring error:', errorMsg)
         missedPongs = 0 // 重置 missedPongs，避免触发重连
         return
       }
@@ -303,7 +300,6 @@ export const useGatewayStore = defineStore('gateway', () => {
                                     errorMsg.toLowerCase().includes('secure context')
 
       if (isDeviceIdentityError && !tokenOnlyFallback && !handshakeComplete) {
-        console.log('[Gateway] Device identity rejected, retrying with token-only mode')
         tokenOnlyFallback = true
         clearDeviceIdentity()
 
@@ -350,7 +346,6 @@ export const useGatewayStore = defineStore('gateway', () => {
 
       case 'health':
         // 健康检查事件
-        console.log('[Gateway] Health check:', payload?.ok ? 'OK' : 'Failed')
         break
 
       case 'agent':
@@ -462,7 +457,7 @@ export const useGatewayStore = defineStore('gateway', () => {
         break
 
       default:
-        console.log('[Gateway] Unknown event:', event, payload)
+        // Unknown event - ignored
     }
   }
 
@@ -476,12 +471,9 @@ export const useGatewayStore = defineStore('gateway', () => {
     const { stream, data, sessionKey, runId, seq } = payload
     const agentName = extractAgentFromKey(sessionKey) || 'agent'
 
-    console.log('[Gateway] handleAgentStreamEvent:', stream, 'agentName:', agentName, 'sessionKey:', sessionKey)
-
     switch (stream) {
       case 'lifecycle':
         // 生命周期事件 (start, end)
-        console.log(`[Gateway] Agent ${agentName} lifecycle:`, data?.phase)
         if (data?.phase === 'start') {
           // Agent 开始处理
           updateAgentStreaming(agentName, true, runId)
@@ -568,7 +560,7 @@ export const useGatewayStore = defineStore('gateway', () => {
         break
 
       default:
-        console.log('[Gateway] Unknown agent stream type:', stream, payload)
+        // Unknown stream type - ignored
     }
   }
 
@@ -580,8 +572,6 @@ export const useGatewayStore = defineStore('gateway', () => {
 
     const { sessionKey, message, state } = payload
     const agentName = extractAgentFromKey(sessionKey) || 'agent'
-
-    console.log('[Gateway] handleChatEvent:', state, 'agentName:', agentName, message?.role)
 
     if (message && message.content) {
       // 解析消息内容
@@ -652,8 +642,6 @@ export const useGatewayStore = defineStore('gateway', () => {
    * 追加 Agent 消息到消息流
    */
   function appendAgentMessage(agentName: string, messagePart: any) {
-    console.log('[Gateway] appendAgentMessage:', agentName, messagePart.type, messagePart.text?.slice(0, 50) || messagePart.thinking?.slice(0, 50) || '')
-
     // 查找或创建 Agent 的消息缓冲区
     const existingMsg = agentStreamBuffer[agentName]
 
@@ -682,7 +670,6 @@ export const useGatewayStore = defineStore('gateway', () => {
 
     // 通知 UI 更新
     lastMessageAt.value = Date.now()
-    console.log('[Gateway] Buffer updated:', Object.keys(agentStreamBuffer))
   }
 
   /**
@@ -701,7 +688,6 @@ export const useGatewayStore = defineStore('gateway', () => {
    */
   function connect() {
     if (ws?.readyState === WebSocket.OPEN || ws?.readyState === WebSocket.CONNECTING) {
-      console.log('[Gateway] Already connected or connecting')
       return
     }
 
@@ -717,19 +703,17 @@ export const useGatewayStore = defineStore('gateway', () => {
     connectionError.value = null
 
     const url = buildWebSocketUrl()
-    console.log('[Gateway] Connecting to:', url)
 
     try {
       ws = new WebSocket(url)
 
       ws.onopen = () => {
-        console.log('[Gateway] WebSocket opened, waiting for challenge')
+        // WebSocket opened
       }
 
       ws.onmessage = (event) => {
         try {
           const frame = JSON.parse(event.data)
-          console.log('[Gateway] Received frame:', frame.type, frame.event || '')
           handleGatewayFrame(frame)
         } catch (err) {
           console.error('[Gateway] Failed to parse message:', err)
@@ -737,7 +721,6 @@ export const useGatewayStore = defineStore('gateway', () => {
       }
 
       ws.onclose = (event) => {
-        console.log(`[Gateway] Disconnected: ${event.code} ${event.reason}`)
         isConnected.value = false
         isConnecting.value = false
         handshakeComplete = false
@@ -745,7 +728,6 @@ export const useGatewayStore = defineStore('gateway', () => {
 
         if (reconnectAttempts < 10) {
           const timeout = Math.min(1000 * Math.pow(1.5, reconnectAttempts), 15000)
-          console.log(`[Gateway] Reconnecting in ${timeout}ms`)
           reconnectAttempts++
           reconnectAttemptCount.value = reconnectAttempts
 
@@ -808,7 +790,6 @@ export const useGatewayStore = defineStore('gateway', () => {
    * 发送聊天消息到指定 Session
    */
   function sendChatMessage(sessionKey: string, message: string, from: string = 'human'): boolean {
-    console.log('[Gateway] Sending chat message to session:', sessionKey)
     return sendMessage({
       type: 'req',
       method: 'chat.send',
@@ -825,7 +806,6 @@ export const useGatewayStore = defineStore('gateway', () => {
    * 发送聊天消息到指定 Agent（创建新 session）
    */
   function sendChatToAgent(agentId: string, message: string, from: string = 'human'): boolean {
-    console.log('[Gateway] Sending chat message to agent (new session):', agentId)
     return sendMessage({
       type: 'req',
       method: 'agent',
@@ -834,7 +814,7 @@ export const useGatewayStore = defineStore('gateway', () => {
         agentId,
         message: `Message from ${from}: ${message}`,
         idempotencyKey: `mc-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-        deliver: false,
+        deliver: true,
       }
     })
   }

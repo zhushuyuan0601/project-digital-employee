@@ -82,167 +82,297 @@
       <div class="task-center__right">
         <div class="agents-list">
           <!-- 小呦 -->
-          <div class="agent-panel" :class="[`agent-panel--xiaomu`, { 'is-busy': isAgentBusy('xiaomu') }]" @click="showAgentDetail('xiaomu')">
-            <div class="agent-panel-header">
-              <div class="agent-info-large">
-                <div class="agent-avatar-large">
-                  <img :src="AGENT_CONFIG['xiaomu'].icon" alt="小呦" />
-                  <span class="connection-dot" :class="{ connected: agents['xiaomu']?.isConnected }"></span>
+          <div class="agent-card" :class="[`agent-card--xiaomu`, { 'is-busy': isAgentBusy('xiaomu') }]" @click="showAgentDetail('xiaomu')">
+            <div class="agent-card-top-accent"></div>
+            <div class="agent-card-content">
+              <div class="agent-card-header">
+                <div class="agent-profile">
+                  <div class="agent-avatar">
+                    <img :src="AGENT_CONFIG['xiaomu'].icon" alt="小呦" />
+                    <span class="avatar-status" :class="{ connected: agents['xiaomu']?.isConnected }"></span>
+                  </div>
+                  <div class="agent-info">
+                    <h3 class="agent-name">小呦</h3>
+                    <span class="agent-role-tag">项目统筹</span>
+                  </div>
                 </div>
-                <div class="agent-details">
-                  <div class="agent-name-large">小呦</div>
-                  <div class="agent-role-large">项目统筹 · agent:ceo:main</div>
+                <div class="status-badge" :class="`status--${getAgentStatus('xiaomu')}`">
+                  <i class="status-icon" :class="getAgentStatus('xiaomu') === 'busy' ? 'ri-loader-4-line ri-spin' : 'ri-checkbox-circle-line'"></i>
+                  <span class="status-text">{{ getAgentStatus('xiaomu') === 'busy' ? '工作中' : '空闲' }}</span>
                 </div>
               </div>
-              <div class="status-badge" :class="`status--${getAgentStatus('xiaomu')}`">
-                <span class="status-dot"></span>
-                <span class="status-text">{{ getAgentStatus('xiaomu') === 'busy' ? '工作中' : '空闲' }}</span>
+
+              <div class="agent-card-body">
+                <div class="info-section">
+                  <div class="section-title"><i class="ri-terminal-box-line"></i> 实时输出</div>
+                  <div class="terminal-log" :ref="(el) => logBoxRefs['xiaomu'] = el">
+                    <div v-if="agents['xiaomu']?.messages.length === 0" class="log-empty">
+                      <span class="empty-hint">暂无输出</span>
+                    </div>
+                    <div v-for="msg in agents['xiaomu']?.messages" :key="msg.id" class="terminal-line" :class="`type-${msg.role}`">
+                      <span class="prompt">&gt;</span>
+                      <span class="log-role">{{ msg.role === 'user' ? '用户' : msg.role === 'assistant' ? '小呦' : '系统' }}</span>
+                      <span class="log-content" v-html="renderMarkdown(msg.content)"></span>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div class="agent-log-box" :ref="(el) => logBoxRefs['xiaomu'] = el">
-              <div v-if="agents['xiaomu']?.messages.length === 0" class="log-empty">
-                <span>暂无输出</span>
+
+              <div class="agent-card-footer">
+                <div class="footer-metrics">
+                  <div class="footer-metric">
+                    <i class="ri-file-list-line"></i>
+                    <span class="metric-label">产出文件</span>
+                    <span class="metric-value">{{ getAgentFiles('xiaomu').length }}</span>
+                  </div>
+                  <div class="footer-metric">
+                    <i class="ri-message-3-line"></i>
+                    <span class="metric-label">消息数</span>
+                    <span class="metric-value">{{ agents['xiaomu']?.messages.length || 0 }}</span>
+                  </div>
+                </div>
+                <div class="action-btns">
+                  <button type="button" class="btn-icon-action" aria-label="查看详情" @click.stop="showAgentDetail('xiaomu')">
+                    <i class="ri-eye-line"></i>
+                  </button>
+                </div>
               </div>
-              <div v-for="msg in agents['xiaomu']?.messages" :key="msg.id" class="log-item" :class="`type-${msg.role}`">
-                <div class="log-role">{{ msg.role === 'user' ? '用户' : msg.role === 'assistant' ? '小呦' : '系统' }}</div>
-                <div class="log-content" v-html="renderMarkdown(msg.content)"></div>
-              </div>
-            </div>
-            <div class="agent-panel-footer">
-              <span class="footer-label">产出文件</span>
-              <span class="footer-value">{{ getAgentFiles('xiaomu').length }} 个</span>
             </div>
           </div>
 
           <!-- 研究员 -->
-          <div class="agent-panel" :class="[`agent-panel--xiaoyan`, { 'is-busy': isAgentBusy('xiaoyan') }]" @click="showAgentDetail('xiaoyan')">
-            <div class="agent-panel-header">
-              <div class="agent-info-large">
-                <div class="agent-avatar-large">
-                  <img :src="AGENT_CONFIG['xiaoyan'].icon" alt="研究员" />
-                  <span class="connection-dot" :class="{ connected: agents['xiaoyan']?.isConnected }"></span>
+          <div class="agent-card" :class="[`agent-card--xiaoyan`, { 'is-busy': isAgentBusy('xiaoyan') }]" @click="showAgentDetail('xiaoyan')">
+            <div class="agent-card-top-accent agent-card-top-accent--xiaoyan"></div>
+            <div class="agent-card-content">
+              <div class="agent-card-header">
+                <div class="agent-profile">
+                  <div class="agent-avatar">
+                    <img :src="AGENT_CONFIG['xiaoyan'].icon" alt="研究员" />
+                    <span class="avatar-status" :class="{ connected: agents['xiaoyan']?.isConnected }"></span>
+                  </div>
+                  <div class="agent-info">
+                    <h3 class="agent-name">研究员</h3>
+                    <span class="agent-role-tag">调研分析</span>
+                  </div>
                 </div>
-                <div class="agent-details">
-                  <div class="agent-name-large">研究员</div>
-                  <div class="agent-role-large">调研分析 · agent:researcher:main</div>
+                <div class="status-badge" :class="`status--${getAgentStatus('xiaoyan')}`">
+                  <i class="status-icon" :class="getAgentStatus('xiaoyan') === 'busy' ? 'ri-loader-4-line ri-spin' : 'ri-checkbox-circle-line'"></i>
+                  <span class="status-text">{{ getAgentStatus('xiaoyan') === 'busy' ? '工作中' : '空闲' }}</span>
                 </div>
               </div>
-              <div class="status-badge" :class="`status--${getAgentStatus('xiaoyan')}`">
-                <span class="status-dot"></span>
-                <span class="status-text">{{ getAgentStatus('xiaoyan') === 'busy' ? '工作中' : '空闲' }}</span>
+
+              <div class="agent-card-body">
+                <div class="info-section">
+                  <div class="section-title"><i class="ri-terminal-box-line"></i> 实时输出</div>
+                  <div class="terminal-log" :ref="(el) => logBoxRefs['xiaoyan'] = el">
+                    <div v-if="agents['xiaoyan']?.messages.length === 0" class="log-empty">
+                      <span class="empty-hint">暂无输出</span>
+                    </div>
+                    <div v-for="msg in agents['xiaoyan']?.messages" :key="msg.id" class="terminal-line" :class="`type-${msg.role}`">
+                      <span class="prompt">&gt;</span>
+                      <span class="log-role">{{ msg.role === 'user' ? '用户' : msg.role === 'assistant' ? '研究员' : '系统' }}</span>
+                      <span class="log-content" v-html="renderMarkdown(msg.content)"></span>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div class="agent-log-box" :ref="(el) => logBoxRefs['xiaoyan'] = el">
-              <div v-if="agents['xiaoyan']?.messages.length === 0" class="log-empty">
-                <span>暂无输出</span>
+
+              <div class="agent-card-footer">
+                <div class="footer-metrics">
+                  <div class="footer-metric">
+                    <i class="ri-file-list-line"></i>
+                    <span class="metric-label">产出文件</span>
+                    <span class="metric-value">{{ getAgentFiles('xiaoyan').length }}</span>
+                  </div>
+                  <div class="footer-metric">
+                    <i class="ri-message-3-line"></i>
+                    <span class="metric-label">消息数</span>
+                    <span class="metric-value">{{ agents['xiaoyan']?.messages.length || 0 }}</span>
+                  </div>
+                </div>
+                <div class="action-btns">
+                  <button type="button" class="btn-icon-action" aria-label="查看详情" @click.stop="showAgentDetail('xiaoyan')">
+                    <i class="ri-eye-line"></i>
+                  </button>
+                </div>
               </div>
-              <div v-for="msg in agents['xiaoyan']?.messages" :key="msg.id" class="log-item" :class="`type-${msg.role}`">
-                <div class="log-role">{{ msg.role === 'user' ? '用户' : msg.role === 'assistant' ? '研究员' : '系统' }}</div>
-                <div class="log-content" v-html="renderMarkdown(msg.content)"></div>
-              </div>
-            </div>
-            <div class="agent-panel-footer">
-              <span class="footer-label">产出文件</span>
-              <span class="footer-value">{{ getAgentFiles('xiaoyan').length }} 个</span>
             </div>
           </div>
 
           <!-- 产品经理 -->
-          <div class="agent-panel" :class="[`agent-panel--xiaochan`, { 'is-busy': isAgentBusy('xiaochan') }]" @click="showAgentDetail('xiaochan')">
-            <div class="agent-panel-header">
-              <div class="agent-info-large">
-                <div class="agent-avatar-large">
-                  <img :src="AGENT_CONFIG['xiaochan'].icon" alt="产品经理" />
-                  <span class="connection-dot" :class="{ connected: agents['xiaochan']?.isConnected }"></span>
+          <div class="agent-card" :class="[`agent-card--xiaochan`, { 'is-busy': isAgentBusy('xiaochan') }]" @click="showAgentDetail('xiaochan')">
+            <div class="agent-card-top-accent agent-card-top-accent--xiaochan"></div>
+            <div class="agent-card-content">
+              <div class="agent-card-header">
+                <div class="agent-profile">
+                  <div class="agent-avatar">
+                    <img :src="AGENT_CONFIG['xiaochan'].icon" alt="产品经理" />
+                    <span class="avatar-status" :class="{ connected: agents['xiaochan']?.isConnected }"></span>
+                  </div>
+                  <div class="agent-info">
+                    <h3 class="agent-name">产品经理</h3>
+                    <span class="agent-role-tag">产品设计</span>
+                  </div>
                 </div>
-                <div class="agent-details">
-                  <div class="agent-name-large">产品经理</div>
-                  <div class="agent-role-large">产品设计 · agent:pm:main</div>
+                <div class="status-badge" :class="`status--${getAgentStatus('xiaochan')}`">
+                  <i class="status-icon" :class="getAgentStatus('xiaochan') === 'busy' ? 'ri-loader-4-line ri-spin' : 'ri-checkbox-circle-line'"></i>
+                  <span class="status-text">{{ getAgentStatus('xiaochan') === 'busy' ? '工作中' : '空闲' }}</span>
                 </div>
               </div>
-              <div class="status-badge" :class="`status--${getAgentStatus('xiaochan')}`">
-                <span class="status-dot"></span>
-                <span class="status-text">{{ getAgentStatus('xiaochan') === 'busy' ? '工作中' : '空闲' }}</span>
+
+              <div class="agent-card-body">
+                <div class="info-section">
+                  <div class="section-title"><i class="ri-terminal-box-line"></i> 实时输出</div>
+                  <div class="terminal-log" :ref="(el) => logBoxRefs['xiaochan'] = el">
+                    <div v-if="agents['xiaochan']?.messages.length === 0" class="log-empty">
+                      <span class="empty-hint">暂无输出</span>
+                    </div>
+                    <div v-for="msg in agents['xiaochan']?.messages" :key="msg.id" class="terminal-line" :class="`type-${msg.role}`">
+                      <span class="prompt">&gt;</span>
+                      <span class="log-role">{{ msg.role === 'user' ? '用户' : msg.role === 'assistant' ? '产品经理' : '系统' }}</span>
+                      <span class="log-content" v-html="renderMarkdown(msg.content)"></span>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div class="agent-log-box" :ref="(el) => logBoxRefs['xiaochan'] = el">
-              <div v-if="agents['xiaochan']?.messages.length === 0" class="log-empty">
-                <span>暂无输出</span>
+
+              <div class="agent-card-footer">
+                <div class="footer-metrics">
+                  <div class="footer-metric">
+                    <i class="ri-file-list-line"></i>
+                    <span class="metric-label">产出文件</span>
+                    <span class="metric-value">{{ getAgentFiles('xiaochan').length }}</span>
+                  </div>
+                  <div class="footer-metric">
+                    <i class="ri-message-3-line"></i>
+                    <span class="metric-label">消息数</span>
+                    <span class="metric-value">{{ agents['xiaochan']?.messages.length || 0 }}</span>
+                  </div>
+                </div>
+                <div class="action-btns">
+                  <button type="button" class="btn-icon-action" aria-label="查看详情" @click.stop="showAgentDetail('xiaochan')">
+                    <i class="ri-eye-line"></i>
+                  </button>
+                </div>
               </div>
-              <div v-for="msg in agents['xiaochan']?.messages" :key="msg.id" class="log-item" :class="`type-${msg.role}`">
-                <div class="log-role">{{ msg.role === 'user' ? '用户' : msg.role === 'assistant' ? '产品经理' : '系统' }}</div>
-                <div class="log-content" v-html="renderMarkdown(msg.content)"></div>
-              </div>
-            </div>
-            <div class="agent-panel-footer">
-              <span class="footer-label">产出文件</span>
-              <span class="footer-value">{{ getAgentFiles('xiaochan').length }} 个</span>
             </div>
           </div>
 
           <!-- 研发工程师 -->
-          <div class="agent-panel" :class="[`agent-panel--xiaokai`, { 'is-busy': isAgentBusy('xiaokai') }]" @click="showAgentDetail('xiaokai')">
-            <div class="agent-panel-header">
-              <div class="agent-info-large">
-                <div class="agent-avatar-large">
-                  <img :src="AGENT_CONFIG['xiaokai'].icon" alt="研发工程师" />
-                  <span class="connection-dot" :class="{ connected: agents['xiaokai']?.isConnected }"></span>
+          <div class="agent-card" :class="[`agent-card--xiaokai`, { 'is-busy': isAgentBusy('xiaokai') }]" @click="showAgentDetail('xiaokai')">
+            <div class="agent-card-top-accent agent-card-top-accent--xiaokai"></div>
+            <div class="agent-card-content">
+              <div class="agent-card-header">
+                <div class="agent-profile">
+                  <div class="agent-avatar">
+                    <img :src="AGENT_CONFIG['xiaokai'].icon" alt="研发工程师" />
+                    <span class="avatar-status" :class="{ connected: agents['xiaokai']?.isConnected }"></span>
+                  </div>
+                  <div class="agent-info">
+                    <h3 class="agent-name">研发工程师</h3>
+                    <span class="agent-role-tag">技术开发</span>
+                  </div>
                 </div>
-                <div class="agent-details">
-                  <div class="agent-name-large">研发工程师</div>
-                  <div class="agent-role-large">技术开发 · agent:tech-lead:main</div>
+                <div class="status-badge" :class="`status--${getAgentStatus('xiaokai')}`">
+                  <i class="status-icon" :class="getAgentStatus('xiaokai') === 'busy' ? 'ri-loader-4-line ri-spin' : 'ri-checkbox-circle-line'"></i>
+                  <span class="status-text">{{ getAgentStatus('xiaokai') === 'busy' ? '工作中' : '空闲' }}</span>
                 </div>
               </div>
-              <div class="status-badge" :class="`status--${getAgentStatus('xiaokai')}`">
-                <span class="status-dot"></span>
-                <span class="status-text">{{ getAgentStatus('xiaokai') === 'busy' ? '工作中' : '空闲' }}</span>
+
+              <div class="agent-card-body">
+                <div class="info-section">
+                  <div class="section-title"><i class="ri-terminal-box-line"></i> 实时输出</div>
+                  <div class="terminal-log" :ref="(el) => logBoxRefs['xiaokai'] = el">
+                    <div v-if="agents['xiaokai']?.messages.length === 0" class="log-empty">
+                      <span class="empty-hint">暂无输出</span>
+                    </div>
+                    <div v-for="msg in agents['xiaokai']?.messages" :key="msg.id" class="terminal-line" :class="`type-${msg.role}`">
+                      <span class="prompt">&gt;</span>
+                      <span class="log-role">{{ msg.role === 'user' ? '用户' : msg.role === 'assistant' ? '研发工程师' : '系统' }}</span>
+                      <span class="log-content" v-html="renderMarkdown(msg.content)"></span>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div class="agent-log-box" :ref="(el) => logBoxRefs['xiaokai'] = el">
-              <div v-if="agents['xiaokai']?.messages.length === 0" class="log-empty">
-                <span>暂无输出</span>
+
+              <div class="agent-card-footer">
+                <div class="footer-metrics">
+                  <div class="footer-metric">
+                    <i class="ri-file-list-line"></i>
+                    <span class="metric-label">产出文件</span>
+                    <span class="metric-value">{{ getAgentFiles('xiaokai').length }}</span>
+                  </div>
+                  <div class="footer-metric">
+                    <i class="ri-message-3-line"></i>
+                    <span class="metric-label">消息数</span>
+                    <span class="metric-value">{{ agents['xiaokai']?.messages.length || 0 }}</span>
+                  </div>
+                </div>
+                <div class="action-btns">
+                  <button type="button" class="btn-icon-action" aria-label="查看详情" @click.stop="showAgentDetail('xiaokai')">
+                    <i class="ri-eye-line"></i>
+                  </button>
+                </div>
               </div>
-              <div v-for="msg in agents['xiaokai']?.messages" :key="msg.id" class="log-item" :class="`type-${msg.role}`">
-                <div class="log-role">{{ msg.role === 'user' ? '用户' : msg.role === 'assistant' ? '研发工程师' : '系统' }}</div>
-                <div class="log-content" v-html="renderMarkdown(msg.content)"></div>
-              </div>
-            </div>
-            <div class="agent-panel-footer">
-              <span class="footer-label">产出文件</span>
-              <span class="footer-value">{{ getAgentFiles('xiaokai').length }} 个</span>
             </div>
           </div>
 
           <!-- 测试员 -->
-          <div class="agent-panel" :class="[`agent-panel--xiaoce`, { 'is-busy': isAgentBusy('xiaoce') }]" @click="showAgentDetail('xiaoce')">
-            <div class="agent-panel-header">
-              <div class="agent-info-large">
-                <div class="agent-avatar-large">
-                  <img :src="AGENT_CONFIG['xiaoce'].icon" alt="测试员" />
-                  <span class="connection-dot" :class="{ connected: agents['xiaoce']?.isConnected }"></span>
+          <div class="agent-card" :class="[`agent-card--xiaoce`, { 'is-busy': isAgentBusy('xiaoce') }]" @click="showAgentDetail('xiaoce')">
+            <div class="agent-card-top-accent agent-card-top-accent--xiaoce"></div>
+            <div class="agent-card-content">
+              <div class="agent-card-header">
+                <div class="agent-profile">
+                  <div class="agent-avatar">
+                    <img :src="AGENT_CONFIG['xiaoce'].icon" alt="测试员" />
+                    <span class="avatar-status" :class="{ connected: agents['xiaoce']?.isConnected }"></span>
+                  </div>
+                  <div class="agent-info">
+                    <h3 class="agent-name">测试员</h3>
+                    <span class="agent-role-tag">质量检查</span>
+                  </div>
                 </div>
-                <div class="agent-details">
-                  <div class="agent-name-large">测试员</div>
-                  <div class="agent-role-large">质量检查 · agent:team-qa:main</div>
+                <div class="status-badge" :class="`status--${getAgentStatus('xiaoce')}`">
+                  <i class="status-icon" :class="getAgentStatus('xiaoce') === 'busy' ? 'ri-loader-4-line ri-spin' : 'ri-checkbox-circle-line'"></i>
+                  <span class="status-text">{{ getAgentStatus('xiaoce') === 'busy' ? '工作中' : '空闲' }}</span>
                 </div>
               </div>
-              <div class="status-badge" :class="`status--${getAgentStatus('xiaoce')}`">
-                <span class="status-dot"></span>
-                <span class="status-text">{{ getAgentStatus('xiaoce') === 'busy' ? '工作中' : '空闲' }}</span>
+
+              <div class="agent-card-body">
+                <div class="info-section">
+                  <div class="section-title"><i class="ri-terminal-box-line"></i> 实时输出</div>
+                  <div class="terminal-log" :ref="(el) => logBoxRefs['xiaoce'] = el">
+                    <div v-if="agents['xiaoce']?.messages.length === 0" class="log-empty">
+                      <span class="empty-hint">暂无输出</span>
+                    </div>
+                    <div v-for="msg in agents['xiaoce']?.messages" :key="msg.id" class="terminal-line" :class="`type-${msg.role}`">
+                      <span class="prompt">&gt;</span>
+                      <span class="log-role">{{ msg.role === 'user' ? '用户' : msg.role === 'assistant' ? '测试员' : '系统' }}</span>
+                      <span class="log-content" v-html="renderMarkdown(msg.content)"></span>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-            <div class="agent-log-box" :ref="(el) => logBoxRefs['xiaoce'] = el">
-              <div v-if="agents['xiaoce']?.messages.length === 0" class="log-empty">
-                <span>暂无输出</span>
+
+              <div class="agent-card-footer">
+                <div class="footer-metrics">
+                  <div class="footer-metric">
+                    <i class="ri-file-list-line"></i>
+                    <span class="metric-label">产出文件</span>
+                    <span class="metric-value">{{ getAgentFiles('xiaoce').length }}</span>
+                  </div>
+                  <div class="footer-metric">
+                    <i class="ri-message-3-line"></i>
+                    <span class="metric-label">消息数</span>
+                    <span class="metric-value">{{ agents['xiaoce']?.messages.length || 0 }}</span>
+                  </div>
+                </div>
+                <div class="action-btns">
+                  <button type="button" class="btn-icon-action" aria-label="查看详情" @click.stop="showAgentDetail('xiaoce')">
+                    <i class="ri-eye-line"></i>
+                  </button>
+                </div>
               </div>
-              <div v-for="msg in agents['xiaoce']?.messages" :key="msg.id" class="log-item" :class="`type-${msg.role}`">
-                <div class="log-role">{{ msg.role === 'user' ? '用户' : msg.role === 'assistant' ? '测试员' : '系统' }}</div>
-                <div class="log-content" v-html="renderMarkdown(msg.content)"></div>
-              </div>
-            </div>
-            <div class="agent-panel-footer">
-              <span class="footer-label">产出文件</span>
-              <span class="footer-value">{{ getAgentFiles('xiaoce').length }} 个</span>
             </div>
           </div>
 
@@ -561,7 +691,6 @@ const fetchClaudeCodeSessions = async () => {
     const data = await response.json()
     if (data.success && data.sessions) {
       claudeCodeSessions.value = data.sessions
-      console.log('[TaskCenter2] Fetched ClaudeCode sessions:', data.sessions.length)
     }
   } catch (err) {
     console.error('[TaskCenter2] Failed to fetch ClaudeCode sessions:', err)
@@ -607,7 +736,6 @@ const fetchClaudeTranscript = async (sessionId: string) => {
     const data = await response.json()
     if (data.success && data.messages) {
       claudeTranscript.value = data.messages
-      console.log('[TaskCenter2] Fetched transcript:', data.messages.length, 'messages')
     }
   } catch (err) {
     console.error('[TaskCenter2] Failed to fetch transcript:', err)
@@ -652,7 +780,6 @@ const sendClaudeMessage = async () => {
       claudeSendError.value = data.error || '发送失败'
     }
   } catch (err) {
-    console.error('[TaskCenter2] Failed to send message:', err)
     claudeSendError.value = '发送失败，请稍后重试'
   } finally {
     claudeSending.value = false
@@ -761,7 +888,6 @@ const getAgentFiles = (agentId: string) => {
   const cacheKey = `files_${agentId}_${dateStr}`
   const cached = fileCache.value[cacheKey]
   if (cached && Date.now() - cached.timestamp < 5000) {
-    console.log(`[TaskCenter2] Cache hit for ${agentId}, files:`, cached.files.length)
     return cached.files
   }
 
@@ -771,12 +897,10 @@ const getAgentFiles = (agentId: string) => {
 
   // 调用后端 API 获取文件列表 - 不传时间范围，避免过滤掉文件
   const endTime = taskEndTime.value > 0 ? taskEndTime.value : Date.now()
-  console.log(`[TaskCenter2] Fetching files for ${agentId}, roleId=${roleId}, startTime=${taskStartTime.value}, endTime=${endTime}`)
 
   fetch(`/api/files/role?roleId=${roleId}&date=${dateStr}`)
     .then(res => res.json())
     .then(data => {
-      console.log(`[TaskCenter2] Fetched files for ${agentId}:`, data)
       if (data.success && data.files) {
         // 更新缓存
         fileCache.value[cacheKey] = {
@@ -807,10 +931,8 @@ const getAgentFiles = (agentId: string) => {
 
         // 强制触发 Vue 响应式更新
         forceRefresh.value++
-        console.log(`[TaskCenter2] Updated cache for ${agentId}, files:`, fileCache.value[cacheKey].files.length)
       } else if (data.files && data.files.length === 0) {
         // 空文件列表也缓存
-        console.log(`[TaskCenter2] No files found for ${agentId}`)
         fileCache.value[cacheKey] = {
           files: [],
           timestamp: Date.now()
@@ -1000,53 +1122,22 @@ const sendTask = async () => {
   }
 
   isSending.value = true
-
-  // 记录任务开始时间
   taskStartTime.value = Date.now()
   taskEndTime.value = 0
 
+  const content = taskInput.value.trim()
+
   try {
-    // 使用 HTTP API 发送消息（与 Mission-control 一致）
-    // 使用完整的 agent 名称作为 sessionKey
-    const targetAgentName = 'agent:ceo:main'  // 小呦的完整 agent 名称
+    // 通过 WebSocket 发送消息（复用 multiAgentChat 连接）
+    multiAgentStore.sendMessage('xiaomu', content)
 
-    const response = await fetch('/api/chat/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from: 'human',
-        to: targetAgentName,
-        content: taskInput.value.trim(),
-        message_type: 'text',
-        conversation_id: targetAgentName
-      })
-    })
-
-    const data = await response.json()
-
-    if (data.success || data.message) {
-      console.log('[TaskCenter2] Message sent via HTTP API:', data)
-      // 在本地添加用户消息
-      multiAgentStore.agents['xiaomu']?.messages.push({
-        id: `msg-${Date.now()}`,
-        role: 'user',
-        content: taskInput.value.trim(),
-        timestamp: Date.now(),
-        agentId: 'xiaomu'
-      })
-      ElMessage.success('任务已发送给小呦')
-    } else {
-      throw new Error(data.error || '发送失败')
-    }
+    ElMessage.success('任务已发送给小呦')
+    taskInput.value = ''
   } catch (err) {
     console.error('[TaskCenter2] Send message error:', err)
-    ElMessage.error('发送失败：' + err.message)
+    ElMessage.error('发送失败：' + (err instanceof Error ? err.message : '未知错误'))
   } finally {
-    // 清空输入
-    setTimeout(() => {
-      taskInput.value = ''
-      isSending.value = false
-    }, 500)
+    isSending.value = false
   }
 }
 
@@ -1124,7 +1215,6 @@ watch(
 // 监听每个 Agent 日志框的滚动事件，检测用户是否手动向上滚动
 onMounted(() => {
   multiAgentStore.loadMessages()
-  console.log('[TaskCenter2] Mounted, allConnected:', allConnected.value)
 
   // 初始化滚动到底部
   nextTick(() => {
@@ -1192,7 +1282,7 @@ onUnmounted(() => {
   font-size: 26px;
   font-weight: 700;
   color: var(--color-primary);
-  text-shadow: 0 0 10px rgba(74, 157, 156, 0.3);
+  text-shadow: var(--text-shadow-primary);
   letter-spacing: 0.1em;
   margin: 0;
 }
@@ -1226,7 +1316,7 @@ onUnmounted(() => {
 }
 
 .ai-status.status--connected {
-  background: rgba(91, 168, 140, 0.1);
+  background: var(--badge-bg-idle);
   border-color: var(--color-success);
   color: var(--color-success);
 }
@@ -1240,7 +1330,7 @@ onUnmounted(() => {
 
 .ai-status.status--connected .status-dot {
   background: var(--color-success);
-  box-shadow: 0 0 6px rgba(91, 168, 140, 0.4);
+  box-shadow: 0 0 6px var(--color-success-glow);
   animation: pulse 1.5s ease-in-out infinite;
 }
 
@@ -1255,8 +1345,8 @@ onUnmounted(() => {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.95); }
 }
 
 .task-center__main {
@@ -1316,9 +1406,10 @@ onUnmounted(() => {
 .task-input-section {
   flex: 1;
   background: var(--bg-panel);
-  border: 1px solid var(--grid-line);
-  border-radius: 12px;
+  border: none;
+  border-radius: var(--radius-md);
   padding: 12px 16px;
+  box-shadow: var(--shadow-sm);
 }
 
 .task-input-row {
@@ -1326,7 +1417,7 @@ onUnmounted(() => {
 }
 
 .task-input :deep(.el-textarea__inner) {
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--gray-900);
   border: 1px solid var(--border-default);
   color: var(--text-primary);
   font-size: 13px;
@@ -1336,7 +1427,7 @@ onUnmounted(() => {
 
 .task-input :deep(.el-textarea__inner):focus {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(74, 157, 156, 0.1);
+  box-shadow: 0 0 0 2px var(--color-primary-bg);
 }
 
 .send-btn-row {
@@ -1371,7 +1462,7 @@ onUnmounted(() => {
 
 .connection-hint.connected .hint-dot {
   background: var(--color-success);
-  box-shadow: 0 0 6px rgba(91, 168, 140, 0.4);
+  box-shadow: 0 0 6px var(--color-success-glow);
   animation: pulse 1.5s ease-in-out infinite;
 }
 
@@ -1380,9 +1471,10 @@ onUnmounted(() => {
   width: min(280px, 100%);
   flex-shrink: 0;
   background: var(--bg-panel);
-  border: 1px solid var(--grid-line);
-  border-radius: 12px;
+  border: none;
+  border-radius: var(--radius-md);
   padding: 12px 16px;
+  box-shadow: var(--shadow-sm);
 }
 
 .info-title {
@@ -1405,6 +1497,356 @@ onUnmounted(() => {
   line-height: 1.6;
 }
 
+/* Agent 卡片 - 央视风格 */
+.agents-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.agent-card {
+  position: relative;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(20px);
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.agent-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.3);
+  border-color: rgba(52, 211, 153, 0.4);
+}
+
+.agent-card.is-busy {
+  border-color: rgba(251, 146, 60, 0.4);
+  box-shadow: 0 0 30px rgba(251, 146, 60, 0.15);
+}
+
+/* 顶部装饰条 */
+.agent-card-top-accent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: linear-gradient(90deg, var(--color-success), var(--color-cyan));
+  opacity: 0.6;
+}
+
+.agent-card-top-accent--xiaoyan {
+  background: linear-gradient(90deg, var(--agent-xiaoyan), var(--agent-xiaochan));
+}
+
+.agent-card-top-accent--xiaochan {
+  background: linear-gradient(90deg, var(--agent-xiaochan), var(--agent-xiaokai));
+}
+
+.agent-card-top-accent--xiaokai {
+  background: linear-gradient(90deg, var(--agent-xiaokai), var(--color-primary));
+}
+
+.agent-card-top-accent--xiaoce {
+  background: linear-gradient(90deg, var(--agent-xiaoce), var(--agent-xiaoyan));
+}
+
+.agent-card-content {
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* 卡片头部 */
+.agent-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.agent-profile {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.agent-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.agent-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 14px;
+}
+
+.avatar-status {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  background: var(--text-tertiary);
+  border: 3px solid var(--bg-panel);
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+
+.avatar-status.connected {
+  background: var(--color-success);
+  box-shadow: 0 0 10px var(--color-success-glow);
+  animation: pulse-avatar 2s infinite;
+}
+
+@keyframes pulse-avatar {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.1); opacity: 0.8; }
+}
+
+.agent-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agent-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  letter-spacing: 0.5px;
+}
+
+.agent-role-tag {
+  font-size: 12px;
+  color: var(--color-cyan);
+  font-weight: 500;
+  background: rgba(34, 211, 238, 0.1);
+  padding: 4px 10px;
+  border-radius: 8px;
+  display: inline-block;
+  width: fit-content;
+}
+
+/* 状态徽章 */
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.status-badge.status--idle {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.status-badge.status--busy {
+  background: var(--badge-bg-busy);
+  color: var(--color-accent);
+  border: 1px solid rgba(251, 146, 60, 0.3);
+}
+
+.status-icon {
+  font-size: 16px;
+}
+
+.status-badge.status--idle .status-icon {
+  color: var(--color-success);
+}
+
+.status-badge.status--busy .status-icon {
+  color: var(--color-accent);
+}
+
+.status-text {
+  white-space: nowrap;
+}
+
+/* 卡片主体 */
+.agent-card-body {
+  flex: 1;
+  min-height: 0;
+  margin-bottom: 16px;
+}
+
+.info-section {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 16px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.section-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.section-title i {
+  color: var(--color-cyan);
+  font-size: 14px;
+}
+
+.terminal-log {
+  flex: 1;
+  max-height: 140px;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.terminal-log::-webkit-scrollbar {
+  width: 4px;
+}
+
+.terminal-log::-webkit-scrollbar-thumb {
+  background: var(--gray-700);
+  border-radius: 2px;
+}
+
+.terminal-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+}
+
+.terminal-line:last-child {
+  margin-bottom: 0;
+}
+
+.terminal-line.type-user {
+  color: var(--color-blue);
+}
+
+.terminal-line.type-assistant {
+  color: var(--text-primary);
+}
+
+.prompt {
+  color: var(--color-success);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.log-role {
+  font-weight: 600;
+  flex-shrink: 0;
+  min-width: 50px;
+  opacity: 0.8;
+}
+
+.log-content {
+  flex: 1;
+  word-break: break-word;
+  line-height: 1.6;
+}
+
+.log-empty {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 60px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+/* 卡片底部 */
+.agent-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.footer-metrics {
+  display: flex;
+  gap: 20px;
+}
+
+.footer-metric {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.footer-metric i {
+  color: var(--color-cyan);
+  font-size: 14px;
+}
+
+.metric-label {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.metric-value {
+  font-size: 16px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.action-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-icon-action {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-icon-action:hover {
+  background: rgba(34, 211, 238, 0.15);
+  border-color: var(--color-cyan);
+  color: var(--color-cyan);
+}
+
 /* Agent 列表 */
 .agents-list {
   display: grid;
@@ -1412,12 +1854,21 @@ onUnmounted(() => {
   gap: 16px;
 }
 
-@media (max-width: 1024px) {
+/* 超大屏幕 */
+@media (min-width: 1280px) {
   .agents-list {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, 1fr);
   }
 }
 
+/* 大屏幕 */
+@media (max-width: 1024px) {
+  .agents-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* 中等屏幕 */
 @media (max-width: 768px) {
   .task-center__header {
     flex-direction: column;
@@ -1431,227 +1882,46 @@ onUnmounted(() => {
   .info-panel {
     width: 100%;
   }
+
+  .task-center__title h1 {
+    font-size: 22px;
+  }
 }
 
-.agent-panel {
-  background: var(--bg-panel);
-  border: 1px solid var(--grid-line);
-  border-radius: 12px;
-  overflow: hidden;
-  cursor: pointer;
-  transition: all 0.2s;
-  contain: layout paint;
+/* 小屏幕 */
+@media (max-width: 640px) {
+  .task-center__title h1 {
+    font-size: 20px;
+  }
+
+  .agent-log-box {
+    height: 120px;
+  }
+
+  .agents-list {
+    grid-template-columns: 1fr;
+  }
 }
 
-.agent-panel:hover {
-  border-color: rgba(74, 157, 156, 0.25);
-  box-shadow: 0 0 10px rgba(74, 157, 156, 0.08);
+/* 触摸设备优化 */
+@media (hover: none) and (pointer: coarse) {
+  .agent-card {
+    border-radius: 28px;
+  }
+
+  .btn {
+    min-height: 44px;
+  }
 }
 
-.agent-panel.is-busy {
-  border-color: rgba(255, 107, 50, 0.5);
-  box-shadow: 0 0 20px rgba(255, 107, 50, 0.2);
-  animation: busy-glow 2s ease-in-out infinite;
-  will-change: box-shadow;
-}
-
-@keyframes busy-glow {
-  0%, 100% { box-shadow: 0 0 20px rgba(255, 107, 50, 0.2); }
-  50% { box-shadow: 0 0 30px rgba(255, 107, 50, 0.4); }
-}
-
-.agent-panel--xiaomu { background: linear-gradient(to right, rgba(91, 168, 140, 0.15) 0%, transparent 4px); }
-.agent-panel--xiaoyan { background: linear-gradient(to right, rgba(212, 121, 74, 0.15) 0%, transparent 4px); }
-.agent-panel--xiaochan { background: linear-gradient(to right, rgba(107, 123, 168, 0.15) 0%, transparent 4px); }
-.agent-panel--xiaokai { background: linear-gradient(to right, rgba(74, 157, 156, 0.15) 0%, transparent 4px); }
-.agent-panel--xiaoce { background: linear-gradient(to right, rgba(255, 77, 79, 0.15) 0%, transparent 4px); }
-
-.agent-panel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  background: var(--bg-surface);
-  border-bottom: 1px solid var(--grid-line);
-}
-
-.agent-info-large {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.agent-avatar-large {
-  position: relative;
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-}
-
-.agent-avatar-large img {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid var(--grid-line);
-}
-
-.connection-dot {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--text-tertiary);
-  border: 2px solid var(--bg-surface);
-}
-
-.connection-dot.connected {
-  background: var(--color-success);
-  box-shadow: 0 0 6px rgba(91, 168, 140, 0.4);
-}
-
-.agent-details {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.agent-name-large {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.agent-role-large {
-  font-size: 10px;
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-}
-
-.status-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: 16px;
-  font-size: 11px;
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.status-badge.status--idle {
-  background: rgba(91, 168, 140, 0.1);
-}
-
-.status-badge.status--idle .status-dot {
-  background: var(--color-success);
-  box-shadow: 0 0 6px rgba(91, 168, 140, 0.4);
-}
-
-.status-badge.status--busy {
-  background: rgba(212, 121, 74, 0.12);
-}
-
-.status-badge.status--busy .status-dot {
-  background: var(--color-warning);
-  box-shadow: 0 0 6px rgba(212, 121, 74, 0.4);
-  animation: pulse 1s ease-in-out infinite;
-}
-
-.status-badge.status--offline {
-  background: rgba(136, 144, 168, 0.1);
-}
-
-.status-badge.status--offline .status-dot {
-  background: var(--text-tertiary);
-}
-
-.status-text {
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.status-badge.status--idle .status-text {
-  color: var(--color-success);
-}
-
-.status-badge.status--busy .status-text {
-  color: var(--color-warning);
-}
-
-.status-badge.status--offline .status-text {
-  color: var(--text-tertiary);
-}
-
-/* 日志框 */
-.agent-log-box {
-  height: 200px;
-  overflow-y: auto;
-  padding: 12px;
-  background: rgba(0, 0, 0, 0.2);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.agent-log-box::-webkit-scrollbar {
-  width: 6px;
-}
-
-.agent-log-box::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.agent-log-box::-webkit-scrollbar-thumb {
-  background: var(--color-primary-dim);
-  border-radius: 3px;
-}
-
-.log-empty {
-  text-align: center;
-  padding: 20px;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-.log-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 8px 10px;
-  background: var(--bg-surface);
-  border-radius: 6px;
-  border: 1px solid var(--border-default);
-}
-
-.log-item.type-user {
-  border-color: var(--color-secondary);
-  background: rgba(107, 123, 168, 0.05);
-}
-
-.log-item.type-assistant {
-  border-color: var(--color-primary);
-  background: rgba(74, 157, 156, 0.05);
-}
-
-.log-item.type-system {
-  border-color: var(--text-muted);
-  background: rgba(136, 144, 168, 0.05);
-}
-
-.log-role {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+/* 超大屏幕 */
+@media (min-width: 1280px) {
+  .agents-list {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
 .log-content {
-  font-size: 12px;
-  color: var(--text-primary);
-  line-height: 1.6;
   word-break: break-word;
 }
 
@@ -1660,8 +1930,8 @@ onUnmounted(() => {
 }
 
 .log-content :deep(pre) {
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid var(--grid-line);
+  background: var(--gray-900);
+  border: none;
   padding: 8px 12px;
   border-radius: 6px;
   overflow-x: auto;
@@ -1680,7 +1950,7 @@ onUnmounted(() => {
 /* 正在输入指示器 */
 .log-item.typing-indicator {
   border-left-color: var(--color-primary);
-  background: rgba(74, 157, 156, 0.05);
+  background: var(--color-primary-bg);
 }
 
 .typing-content {
@@ -1729,7 +1999,7 @@ onUnmounted(() => {
   align-items: center;
   padding: 8px 16px;
   background: var(--bg-surface);
-  border-top: 1px solid var(--grid-line);
+  border-top: 1px solid var(--border-subtle);
   font-size: 11px;
 }
 
@@ -1774,8 +2044,9 @@ onUnmounted(() => {
   gap: 16px;
   padding: 16px;
   background: var(--bg-surface);
-  border-radius: 12px;
-  border: 1px solid var(--grid-line);
+  border-radius: var(--radius-md);
+  border: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .agent-info-header .agent-avatar-large {
@@ -1817,7 +2088,7 @@ onUnmounted(() => {
   font-weight: 600;
   color: var(--text-primary);
   padding-bottom: 8px;
-  border-bottom: 1px solid var(--grid-line);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .agent-files-list {
@@ -1832,14 +2103,15 @@ onUnmounted(() => {
   gap: 10px;
   padding: 10px 12px;
   background: var(--bg-surface);
-  border: 1px solid var(--grid-line);
-  border-radius: 8px;
+  border: none;
+  border-radius: 6px;  /* Linear 精准几何 */
+  box-shadow: var(--shadow-sm);
   transition: all 0.2s;
 }
 
 .agent-file-item:hover {
-  border-color: var(--color-primary);
-  background: rgba(74, 157, 156, 0.05);
+  box-shadow: var(--shadow-md), 0 0 0 1px var(--color-primary-light);
+  transform: translateY(-1px);
 }
 
 .file-icon {
@@ -1850,8 +2122,8 @@ onUnmounted(() => {
 .file-icon.icon-markdown { color: var(--color-primary); }
 .file-icon.icon-text { color: var(--text-secondary); }
 .file-icon.icon-html { color: var(--color-warning); }
-.file-icon.icon-word { color: #2b579a; }
-.file-icon.icon-ppt { color: #d24726; }
+.file-icon.icon-word { color: var(--agent-xiaochan); }
+.file-icon.icon-ppt { color: var(--agent-xiaoyan); }
 
 .git-link {
   display: flex;
@@ -1894,24 +2166,22 @@ onUnmounted(() => {
   display: flex;
   gap: 10px;
   padding: 8px 10px;
-  background: var(--bg-surface);
+  background: var(--gray-900);
   border-radius: 6px;
   font-size: 12px;
+  border: none;
 }
 
 .agent-log-item--user {
-  background: rgba(107, 123, 168, 0.05);
-  border: 1px solid var(--color-secondary);
+  background: var(--color-primary-bg);
 }
 
 .agent-log-item--assistant {
-  background: rgba(74, 157, 156, 0.05);
-  border: 1px solid var(--color-primary);
+  background: var(--gray-900);
 }
 
 .agent-log-item--system {
-  background: rgba(136, 144, 168, 0.05);
-  border: 1px solid var(--text-muted);
+  background: var(--gray-800);
 }
 
 .log-time {
@@ -1954,10 +2224,10 @@ onUnmounted(() => {
 }
 
 .preview-content pre {
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid var(--grid-line);
+  background: var(--gray-950);
+  border: none;
   padding: 16px;
-  border-radius: 8px;
+  border-radius: 6px;
   overflow-x: auto;
   font-family: var(--font-mono);
   font-size: 12px;
@@ -1990,13 +2260,13 @@ onUnmounted(() => {
 .preview-content .markdown-rendered :deep(h1) {
   font-size: 24px;
   padding-bottom: 0.3em;
-  border-bottom: 1px solid var(--grid-line);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .preview-content .markdown-rendered :deep(h2) {
   font-size: 20px;
   padding-bottom: 0.25em;
-  border-bottom: 1px solid var(--grid-line);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .preview-content .markdown-rendered :deep(h3) {
@@ -2031,9 +2301,9 @@ onUnmounted(() => {
   overflow: auto;
   font-size: 85%;
   line-height: 1.45;
-  background-color: rgba(0, 0, 0, 0.6);
+  background-color: var(--gray-950);
   border-radius: 6px;
-  border: 1px solid var(--grid-line);
+  border: none;
 }
 
 .preview-content .markdown-rendered :deep(pre code) {
@@ -2049,7 +2319,7 @@ onUnmounted(() => {
 .preview-content .markdown-rendered :deep(blockquote) {
   padding: 0 1em;
   color: var(--text-secondary);
-  border-left: 0.25em solid var(--grid-line);
+  border-left: 0.25em solid var(--border-subtle);
   margin: 0;
   margin-bottom: 16px;
 }
@@ -2069,7 +2339,7 @@ onUnmounted(() => {
   height: 0.25em;
   padding: 0;
   margin: 24px 0;
-  background-color: var(--grid-line);
+  background-color: var(--border-subtle);
   border: 0;
 }
 
@@ -2084,7 +2354,7 @@ onUnmounted(() => {
 .preview-content .markdown-rendered :deep(table th),
 .preview-content .markdown-rendered :deep(table td) {
   padding: 6px 13px;
-  border: 1px solid var(--grid-line);
+  border: 1px solid var(--border-subtle);
 }
 
 .preview-content .markdown-rendered :deep(table tr) {
@@ -2120,170 +2390,169 @@ onUnmounted(() => {
   font-family: var(--font-mono);
 }
 
-/* ========== 亮色主题样式 - 飞书风格 ========== */
+/* ========== 亮色主题样式 - 奶油白风格 ========== */
 :root.light-theme .task-center__header {
-  border-bottom-color: #dee0e3;
+  border-bottom-color: var(--border-default);
 }
 
 :root.light-theme .task-center__title h1 {
-  color: #1f2329;
+  color: var(--text-primary);
   font-weight: 600;
   text-shadow: none;
 }
 
 :root.light-theme .task-center__title p {
-  color: #8f959e;
+  color: var(--text-tertiary);
 }
 
 :root.light-theme .ai-status {
-  background: #ffffff;
-  border-color: #dee0e3;
+  background: var(--bg-surface);
+  border-color: var(--border-default);
 }
 
 :root.light-theme .ai-status.status--connected {
-  background: rgba(0, 179, 101, 0.08);
-  border-color: #00b365;
-  color: #00b365;
+  background: var(--badge-bg-idle);
+  border-color: var(--color-success);
+  color: var(--color-success);
 }
 
 :root.light-theme .status-dot {
-  background: #c2c8d1;
+  background: var(--text-muted);
 }
 
 :root.light-theme .ai-status.status--connected .status-dot {
-  background: #00b365;
-  box-shadow: 0 0 8px rgba(0, 179, 101, 0.4);
+  background: var(--color-success);
+  box-shadow: 0 0 8px var(--color-success-glow);
 }
 
 :root.light-theme .status-label {
-  color: #646a73;
+  color: var(--text-secondary);
 }
 
 :root.light-theme .ai-status.status--connected .status-label {
-  color: #00b365;
+  color: var(--color-success);
 }
 
 :root.light-theme .section-title {
-  color: #1f2329;
+  color: var(--text-primary);
 }
 
 :root.light-theme .section-title::before {
-  background: linear-gradient(180deg, #3370ff, #4d82ff);
+  background: linear-gradient(180deg, var(--color-primary), var(--color-secondary));
 }
 
 :root.light-theme .section-title span:last-child {
-  color: #1f2329;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 :root.light-theme .task-input-section {
-  background: #ffffff;
-  border-color: #dee0e3;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+  border: none;
 }
 
 :root.light-theme .task-input :deep(.el-textarea__inner) {
-  background: #ffffff;
-  border-color: #dee0e3;
-  color: #1f2329;
+  background: var(--bg-surface);
+  border-color: var(--border-default);
+  color: var(--text-primary);
 }
 
 :root.light-theme .task-input :deep(.el-textarea__inner):focus {
-  border-color: #3370ff;
-  box-shadow: 0 0 0 2px rgba(51, 112, 255, 0.1);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-bg);
 }
 
 :root.light-theme .send-btn-task {
-  background: linear-gradient(135deg, #3370ff 0%, #4d82ff 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
   border: none;
-  color: #ffffff;
+  color: var(--text-inverse);
   box-shadow:
-    0 2px 8px rgba(51, 112, 255, 0.3),
-    0 1px 3px rgba(51, 112, 255, 0.15);
+    0 2px 8px var(--color-primary-glow),
+    0 1px 3px var(--color-primary-bg);
 }
 
 :root.light-theme .send-btn-task:hover:not(:disabled) {
-  background: linear-gradient(135deg, #2860e1 0%, #3370ff 100%);
+  background: linear-gradient(135deg, var(--color-primary-dim) 0%, var(--color-primary) 100%);
   box-shadow:
-    0 4px 12px rgba(51, 112, 255, 0.35),
-    0 2px 6px rgba(51, 112, 255, 0.2);
+    0 4px 12px var(--color-primary-glow),
+    0 2px 6px var(--color-primary-bg);
   transform: translateY(-1px);
 }
 
 :root.light-theme .connection-hint {
-  color: #8f959e;
+  color: var(--text-tertiary);
 }
 
 :root.light-theme .connection-hint.connected {
-  color: #00b365;
+  color: var(--color-success);
 }
 
 :root.light-theme .agent-status-section {
-  background: #ffffff;
-  border-color: #dee0e3;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  background: var(--bg-surface);
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-sm);
 }
 
 :root.light-theme .agent-card {
-  background: #ffffff;
-  border-color: #dee0e3;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  background: var(--bg-surface);
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-sm);
 }
 
 :root.light-theme .agent-card__header {
-  border-bottom-color: #f5f6f7;
+  border-bottom-color: var(--border-subtle);
 }
 
 :root.light-theme .agent-card__name {
-  color: #1f2329;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 :root.light-theme .agent-card__id {
-  color: #8f959e;
+  color: var(--text-tertiary);
 }
 
 :root.light-theme .agent-card__icon {
-  background: linear-gradient(135deg, rgba(51, 112, 255, 0.08) 0%, rgba(77, 130, 255, 0.06) 100%);
-  border-color: #e8ecf1;
+  background: linear-gradient(135deg, var(--color-primary-bg) 0%, var(--color-secondary-bg) 100%);
+  border-color: var(--border-subtle);
 }
 
 :root.light-theme .status-badge {
-  background: rgba(0, 179, 101, 0.08);
-  border-color: #00b365;
-  color: #00b365;
+  background: transparent;
+  border: none;
 }
 
 :root.light-theme .status-badge .status-dot {
-  background: #00b365;
-  box-shadow: 0 0 8px rgba(0, 179, 101, 0.4);
+  background: var(--color-success);
+  box-shadow: 0 0 0 2px var(--badge-bg-idle);
 }
 
 :root.light-theme .agent-card__body {
-  border-bottom-color: #f5f6f7;
+  border-bottom-color: var(--border-subtle);
 }
 
 :root.light-theme .detail-label {
-  color: #8f959e;
+  color: var(--text-tertiary);
 }
 
 :root.light-theme .detail-value {
-  color: #646a73;
+  color: var(--text-secondary);
 }
 
 :root.light-theme .agent-logs {
-  background: #fafbfc;
-  border-top-color: #f5f6f7;
+  background: var(--bg-surface);
+  border-top-color: var(--border-subtle);
 }
 
 :root.light-theme .log-entry {
-  color: #646a73;
+  color: var(--text-secondary);
 }
 
 :root.light-theme .execution-progress {
-  background: #ffffff;
-  border-color: #dee0e3;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  background: var(--bg-surface);
+  border-color: var(--border-default);
+  box-shadow: var(--shadow-sm);
 }
 
 :root.light-theme .progress-title {
@@ -2292,7 +2561,7 @@ onUnmounted(() => {
 }
 
 :root.light-theme .progress-value {
-  color: #3370ff;
+  color: var(--color-primary);
   font-weight: 600;
 }
 
@@ -2303,9 +2572,9 @@ onUnmounted(() => {
 }
 
 :root.light-theme .phase-item.active {
-  background: rgba(51, 112, 255, 0.08);
-  border-color: #3370ff;
-  color: #1f2329;
+  background: var(--color-primary-bg);
+  border-color: var(--color-primary);
+  color: var(--text-primary);
 }
 
 :root.light-theme .complete-card {
@@ -2361,17 +2630,12 @@ onUnmounted(() => {
 
 :root.light-theme .preview-content .markdown-rendered :deep(pre) {
   background: #1f2329;
-  border-color: #444852;
+  border: none;
 }
 
 :root.light-theme .preview-content .markdown-rendered :deep(blockquote) {
   color: #646a73;
   border-left-color: #dee0e3;
-}
-
-:root.light-theme .preview-content .markdown-rendered :deep(table th),
-:root.light-theme .preview-content .markdown-rendered :deep(table td) {
-  border-color: #dee0e3;
 }
 
 :root.light-theme .preview-content .markdown-rendered :deep(table tr) {
@@ -2416,12 +2680,12 @@ onUnmounted(() => {
 }
 
 :root.light-theme :deep(.el-input__wrapper) {
-  background: #ffffff;
-  box-shadow: 0 0 0 1px #dee0e3 inset;
+  background: var(--bg-surface);
+  box-shadow: 0 0 0 1px var(--border-default) inset;
 }
 
 :root.light-theme :deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px #3370ff inset;
+  box-shadow: 0 0 0 1px var(--color-primary) inset;
 }
 
 :root.light-theme :deep(.el-input__inner) {
@@ -2429,45 +2693,42 @@ onUnmounted(() => {
 }
 
 :root.light-theme :deep(.el-select-dropdown__item.selected) {
-  color: #3370ff;
+  color: var(--color-primary);
   font-weight: 600;
 }
 
 :root.light-theme :deep(.el-button--primary) {
-  background: linear-gradient(135deg, #3370ff 0%, #4d82ff 100%);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
   border: none;
 }
 
 :root.light-theme :deep(.el-button--success) {
-  background: #00b365;
+  background: var(--color-success);
   border: none;
 }
 
 :root.light-theme :deep(.el-button--danger) {
-  background: #ff4d4f;
+  background: var(--color-error);
   border: none;
 }
 
 /* ========== 日志项样式 - 飞书风格 ========== */
 :root.light-theme .log-item {
   background: #ffffff;
-  border-radius: 8px;
-  border-left: 3px solid transparent;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  border: none;
 }
 
 :root.light-theme .log-item.type-user {
-  border-left-color: #6aa1ff;
   background: rgba(106, 161, 255, 0.06);
 }
 
 :root.light-theme .log-item.type-assistant {
-  border-left-color: #3370ff;
-  background: rgba(51, 112, 255, 0.06);
+  background: #ffffff;
 }
 
 :root.light-theme .log-item.type-system {
-  border-left-color: #c2c8d1;
   background: rgba(194, 200, 209, 0.06);
 }
 
@@ -2485,13 +2746,13 @@ onUnmounted(() => {
 }
 
 :root.light-theme .log-content :deep(strong) {
-  color: #3370ff;
+  color: var(--color-primary);
   font-weight: 600;
 }
 
 :root.light-theme .log-content :deep(pre) {
   background: #f5f6f7;
-  border-color: #dee0e3;
+  border: none;
 }
 
 :root.light-theme .log-content :deep(code) {
@@ -2501,39 +2762,44 @@ onUnmounted(() => {
 }
 
 :root.light-theme .log-item.typing-indicator {
-  border-left-color: #3370ff;
-  background: rgba(51, 112, 255, 0.06);
+  border-left-color: var(--color-primary);
+  background: var(--color-primary-bg);
 }
 
 :root.light-theme .typing-dot {
-  background: #3370ff;
+  background: var(--color-primary);
 }
 
 :root.light-theme .log-empty {
   color: #c2c8d1;
 }
 
-/* ClaudeCode 动态角色样式 */
+/* ClaudeCode 动态角色样式 - VoltAgent 风格 */
 .agent-panel--claudecode {
-  border: 1px solid rgba(139, 92, 246, 0.3);
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%);
+  background: var(--agent-gradient-claude), var(--bg-panel);
+  box-shadow: var(--shadow-sm);
 }
 
 .agent-panel--claudecode:hover {
-  border-color: rgba(139, 92, 246, 0.5);
-  box-shadow: 0 0 20px rgba(139, 92, 246, 0.2);
+  box-shadow: var(--shadow-md), 0 0 0 1px var(--agent-claude);
+  transform: translateY(-2px);
 }
 
 .agent-panel--claudecode.is-busy {
-  border-color: rgba(139, 92, 246, 0.6);
-  box-shadow: 0 0 25px rgba(139, 92, 246, 0.3);
+  box-shadow: 0 0 0 1px var(--agent-claude), var(--shadow-lg);
   animation: claude-busy-glow 2s ease-in-out infinite;
   will-change: box-shadow;
 }
 
 @keyframes claude-busy-glow {
-  0%, 100% { box-shadow: 0 0 25px rgba(139, 92, 246, 0.3); }
-  50% { box-shadow: 0 0 40px rgba(139, 92, 246, 0.5); }
+  0%, 100% {
+    box-shadow: 0 0 0 1px var(--agent-claude),
+                0 4px 25px rgba(139, 92, 246, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 2px var(--agent-claude),
+                0 6px 40px rgba(139, 92, 246, 0.3);
+  }
 }
 
 .claude-avatar {
@@ -2549,7 +2815,7 @@ onUnmounted(() => {
 }
 
 .claude-log-box {
-  background: rgba(139, 92, 246, 0.05);
+  background: var(--agent-gradient-claude);
 }
 
 .claude-session-item {
@@ -2557,9 +2823,9 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 8px;
   padding: 10px 12px;
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 8px;
-  border: 1px solid rgba(139, 92, 246, 0.3);
+  background: var(--gray-900);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--agent-claude);
 }
 
 .session-header {
@@ -2584,8 +2850,8 @@ onUnmounted(() => {
 
 .session-model {
   font-size: 10px;
-  color: #8b5cf6;
-  background: rgba(139, 92, 246, 0.2);
+  color: var(--agent-claude);
+  background: var(--agent-gradient-claude);
   padding: 2px 6px;
   border-radius: 4px;
   font-family: var(--font-mono);
@@ -2619,7 +2885,7 @@ onUnmounted(() => {
   gap: 6px;
   font-size: 10px;
   color: var(--text-tertiary);
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--gray-800);
   padding: 4px 8px;
   border-radius: 4px;
 }
@@ -2672,15 +2938,15 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 6px;
   padding: 10px 12px;
-  background: rgba(139, 92, 246, 0.1);
-  border-radius: 8px;
-  border: 1px solid rgba(139, 92, 246, 0.3);
+  background: var(--agent-gradient-claude);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--agent-claude);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .claude-session-item-mini:hover {
-  background: rgba(139, 92, 246, 0.15);
+  background: var(--agent-gradient-claude);
   transform: translateX(2px);
 }
 
@@ -2692,8 +2958,8 @@ onUnmounted(() => {
 
 .session-model-badge {
   font-size: 10px;
-  color: #a78bfa;
-  background: rgba(139, 92, 246, 0.3);
+  color: var(--agent-claude);
+  background: var(--agent-gradient-claude);
   padding: 2px 6px;
   border-radius: 4px;
   font-family: var(--font-mono);
@@ -2734,8 +3000,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  background: rgba(139, 92, 246, 0.1);
-  border-bottom: 1px solid rgba(139, 92, 246, 0.2);
+  background: var(--agent-gradient-claude);
+  border-bottom: 1px solid var(--agent-claude);
 }
 
 .session-info-left {
@@ -2748,7 +3014,7 @@ onUnmounted(() => {
   padding: 4px 10px;
   font-size: 11px;
   color: var(--text-secondary);
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--gray-800);
   border: none;
   border-radius: 4px;
   cursor: pointer;
@@ -2756,7 +3022,7 @@ onUnmounted(() => {
 }
 
 .back-btn:hover {
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--gray-700);
   color: var(--text-primary);
 }
 
@@ -2817,7 +3083,7 @@ onUnmounted(() => {
   flex: 1;
   overflow-y: auto;
   padding: 12px;
-  background: rgba(0, 0, 0, 0.1);
+  background: var(--bg-panel);
 }
 
 .transcript-loading,
@@ -2838,24 +3104,24 @@ onUnmounted(() => {
 
 .transcript-msg {
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   font-size: 11px;
   line-height: 1.5;
 }
 
 .transcript-msg.msg-user {
-  background: rgba(59, 130, 246, 0.15);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: var(--color-primary-bg);
+  border: 1px solid var(--color-primary-light);
 }
 
 .transcript-msg.msg-assistant {
-  background: rgba(139, 92, 246, 0.15);
-  border: 1px solid rgba(139, 92, 246, 0.3);
+  background: var(--agent-gradient-claude);
+  border: 1px solid var(--agent-claude);
 }
 
 .transcript-msg.msg-system {
-  background: rgba(100, 100, 100, 0.15);
-  border: 1px solid rgba(100, 100, 100, 0.3);
+  background: var(--gray-800);
+  border: 1px solid var(--border-default);
 }
 
 .msg-role-badge {
@@ -2878,7 +3144,7 @@ onUnmounted(() => {
   color: var(--text-tertiary);
   font-style: italic;
   padding: 4px 8px;
-  background: rgba(0, 0, 0, 0.1);
+  background: var(--bg-surface);
   border-radius: 4px;
   margin: 4px 0;
 }
@@ -2886,13 +3152,13 @@ onUnmounted(() => {
 .msg-tool {
   margin: 4px 0;
   padding: 6px 8px;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--gray-800);
   border-radius: 4px;
 }
 
 .tool-name {
   font-size: 10px;
-  color: #f59e0b;
+  color: var(--color-warning);
   font-weight: 600;
 }
 
@@ -2910,7 +3176,7 @@ onUnmounted(() => {
 .msg-tool-result {
   margin: 4px 0;
   padding: 6px 8px;
-  background: rgba(0, 0, 0, 0.15);
+  background: var(--gray-900);
   border-radius: 4px;
   font-family: var(--font-mono);
   font-size: 9px;
@@ -2922,8 +3188,8 @@ onUnmounted(() => {
 }
 
 .msg-tool-result.is-error {
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid var(--color-error);
+  background: var(--color-error);
 }
 
 /* 输入区域样式 */
@@ -2931,8 +3197,8 @@ onUnmounted(() => {
   display: flex;
   gap: 8px;
   padding: 10px 12px;
-  background: rgba(0, 0, 0, 0.2);
-  border-top: 1px solid rgba(139, 92, 246, 0.2);
+  background: var(--bg-surface);
+  border-top: 1px solid var(--agent-claude);
 }
 
 .claude-input {
@@ -2940,15 +3206,15 @@ onUnmounted(() => {
   padding: 8px 12px;
   font-size: 11px;
   color: var(--text-primary);
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(139, 92, 246, 0.3);
+  background: var(--gray-900);
+  border: 1px solid var(--agent-claude);
   border-radius: 6px;
   outline: none;
   transition: border-color 0.2s ease;
 }
 
 .claude-input:focus {
-  border-color: #8b5cf6;
+  border-color: var(--agent-claude);
 }
 
 .claude-input::placeholder {
@@ -2964,8 +3230,8 @@ onUnmounted(() => {
   padding: 8px 16px;
   font-size: 11px;
   font-weight: 600;
-  color: #fff;
-  background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%);
+  color: var(--text-inverse);
+  background: linear-gradient(135deg, var(--agent-claude) 0%, var(--color-primary) 100%);
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -2974,7 +3240,7 @@ onUnmounted(() => {
 
 .send-btn:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+  box-shadow: 0 4px 12px var(--color-primary-glow);
 }
 
 .send-btn:disabled {
@@ -2985,9 +3251,9 @@ onUnmounted(() => {
 .send-error {
   padding: 6px 12px;
   font-size: 10px;
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
-  border-top: 1px solid rgba(239, 68, 68, 0.2);
+  color: var(--color-error);
+  background: var(--color-error);
+  border-top: 1px solid var(--color-error);
 }
 
 /* 减少动画偏好支持 */
