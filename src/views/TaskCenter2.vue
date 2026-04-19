@@ -2,9 +2,11 @@
   <div class="task-center-2">
     <!-- 顶部标题 -->
     <div class="task-center__header">
-      <div class="task-center__title">
-        <h1>任务指挥中心 II</h1>
-        <p>多 Agent 实时协作平台 - Gateway 直连模式</p>
+      <div class="task-center__title-wrap">
+        <div class="task-center__title">
+          <h1>任务指挥中心 II</h1>
+          <span class="task-center__mode">多 Agent 协作 · Gateway 直连</span>
+        </div>
       </div>
       <div class="header-actions">
         <div class="ai-status" :class="`status--${aiStatus}`">
@@ -69,28 +71,70 @@
         </div>
 
         <div class="agent-list" ref="agentListRef">
-          <div
+          <el-popover
             v-for="agent in agentList"
             :key="agent.id"
-            class="agent-card-mini"
-            :class="{ active: selectedAgent === agent.id }"
-            @click="selectAgent(agent.id)"
+            trigger="hover"
+            placement="right-start"
+            :width="320"
+            :show-after="300"
+            :hide-after="0"
+            popper-class="agent-tip-popper"
           >
-            <div class="agent-avatar-mini">
-              <img :src="getAgentIcon(agent.id)" :alt="agent.name" />
-              <span class="status-dot-mini" :class="getAgentStatus(agent.id)"></span>
-            </div>
-            <div class="agent-info-mini">
-              <div class="agent-name-mini">{{ agent.name }}</div>
-              <div class="agent-role-mini">{{ agent.role }}</div>
-              <div class="status-badge-mini" :class="getAgentStatus(agent.id)">
-                <i class="ri-checkbox-circle-line"></i>
-                {{ getAgentStatusText(agent.id) }}
+            <template #reference>
+              <div
+                class="agent-card-mini"
+                :class="{ active: selectedAgent === agent.id }"
+                @click="selectAgent(agent.id)"
+              >
+                <div class="agent-avatar-mini">
+                  <img :src="getAgentIcon(agent.id)" :alt="agent.name" />
+                  <span class="status-dot-mini" :class="getAgentStatus(agent.id)"></span>
+                </div>
+                <div class="agent-info-mini">
+                  <div class="agent-name-mini">{{ agent.name }}</div>
+                  <div class="agent-role-mini">{{ agent.role }}</div>
+                  <div class="status-badge-mini" :class="getAgentStatus(agent.id)">
+                    <i class="ri-checkbox-circle-line"></i>
+                    {{ getAgentStatusText(agent.id) }}
+                  </div>
+                </div>
+                <span v-if="hasNewFiles(agent.id)" class="new-file-dot" title="有新文件产出"></span>
+              </div>
+            </template>
+            <!-- Hover 详情卡片 -->
+            <div class="agent-tip-card">
+              <div class="agent-tip-header">
+                <img class="agent-tip-avatar" :src="getAgentIcon(agent.id)" :alt="agent.name" />
+                <div class="agent-tip-title">
+                  <div class="agent-tip-name">{{ agent.name }}</div>
+                  <div class="agent-tip-role">{{ getAgentRole(agent.id) }}</div>
+                </div>
+                <div class="status-badge-mini" :class="getAgentStatus(agent.id)">
+                  <i :class="getAgentStatusIcon(agent.id)"></i>
+                  {{ getAgentStatusText(agent.id) }}
+                </div>
+              </div>
+              <div class="agent-tip-tags">
+                <span class="tag" v-for="tag in agent.tags" :key="tag">{{ tag }}</span>
+              </div>
+              <div class="agent-tip-desc">{{ agent.desc }}</div>
+              <div class="agent-tip-stats">
+                <div class="agent-tip-stat">
+                  <span class="stat-label">消息</span>
+                  <span class="stat-value">{{ agents[agent.id]?.messages.length || 0 }}</span>
+                </div>
+                <div class="agent-tip-stat">
+                  <span class="stat-label">产出文件</span>
+                  <span class="stat-value">{{ getAgentFiles(agent.id).length }}</span>
+                </div>
+                <div class="agent-tip-stat">
+                  <span class="stat-label">状态</span>
+                  <span class="stat-value">{{ getAgentStatusText(agent.id) }}</span>
+                </div>
               </div>
             </div>
-            <!-- 新文件红点提示 -->
-            <span v-if="hasNewFiles(agent.id)" class="new-file-dot" title="有新文件产出"></span>
-          </div>
+          </el-popover>
 
           <!-- ClaudeCode 动态角色 -->
           <div
@@ -118,67 +162,42 @@
       <!-- 右侧：详情面板 -->
       <div class="detail-panel">
         <template v-if="selectedAgent && selectedAgent !== 'claude'">
-          <!-- 详情头部 -->
-          <div class="detail-header">
-            <div class="agent-avatar-large">
-              <img :src="getAgentIcon(selectedAgent)" :alt="getAgentName(selectedAgent)" />
-              <span class="status-dot-large" :class="getAgentStatus(selectedAgent)"></span>
-            </div>
-            <div class="detail-info-core">
-              <div class="detail-title-row">
-                <div class="detail-name">{{ getAgentName(selectedAgent) }}</div>
-                <div class="detail-role">{{ getAgentRole(selectedAgent) }}</div>
-                <div class="status-badge-large" :class="getAgentStatus(selectedAgent)">
-                  <i :class="getAgentStatusIcon(selectedAgent)"></i>
-                  {{ getAgentStatusText(selectedAgent) }}
-                </div>
-                <!-- 产出文件 Tips -->
-                <el-popover
-                  v-if="getAgentFiles(selectedAgent).length > 0"
-                  trigger="click"
-                  placement="bottom-start"
-                  :width="320"
-                  class="file-popover"
+          <!-- 紧凑标题栏 -->
+          <div class="detail-topbar">
+            <img class="detail-topbar-avatar" :src="getAgentIcon(selectedAgent)" :alt="getAgentName(selectedAgent)" />
+            <span class="detail-topbar-name">{{ getAgentName(selectedAgent) }}</span>
+            <span class="detail-topbar-role">{{ getAgentRole(selectedAgent) }}</span>
+            <div class="detail-topbar-spacer"></div>
+            <!-- 产出文件 Tips -->
+            <el-popover
+              v-if="getAgentFiles(selectedAgent).length > 0"
+              trigger="click"
+              placement="bottom-end"
+              :width="320"
+            >
+              <template #reference>
+                <button class="file-tip-btn" :class="{ 'has-new': hasNewFiles(selectedAgent) }">
+                  <i class="ri-folder-zip-line"></i>
+                  <span>{{ getAgentFiles(selectedAgent).length }}</span>
+                  <span v-if="hasNewFiles(selectedAgent)" class="file-red-dot"></span>
+                </button>
+              </template>
+              <div class="file-dropdown">
+                <div
+                  v-for="file in getAgentFiles(selectedAgent)"
+                  :key="file.name"
+                  class="file-dropdown-item"
+                  @click="previewFile(file)"
                 >
-                  <template #reference>
-                    <button class="file-tip-btn" :class="{ 'has-new': hasNewFiles(selectedAgent) }">
-                      <i class="ri-folder-zip-line"></i>
-                      <span>{{ getAgentFiles(selectedAgent).length }}</span>
-                      <span v-if="hasNewFiles(selectedAgent)" class="file-red-dot"></span>
-                    </button>
-                  </template>
-                  <div class="file-dropdown">
-                    <div
-                      v-for="file in getAgentFiles(selectedAgent)"
-                      :key="file.name"
-                      class="file-dropdown-item"
-                      @click="previewFile(file)"
-                    >
-                      <i :class="getFileIcon(file.name)"></i>
-                      <span class="file-dropdown-name">{{ file.name }}</span>
-                      <span class="file-dropdown-meta">{{ file.mtimeStr || '' }}</span>
-                    </div>
-                  </div>
-                </el-popover>
-              </div>
-              <div class="detail-tags">
-                <span class="tag" v-for="tag in getAgentTags(selectedAgent)" :key="tag">{{ tag }}</span>
-              </div>
-              <div class="detail-desc">{{ getAgentDesc(selectedAgent) }}</div>
-              <div class="stats-row">
-                <div class="stat-item">
-                  <span class="stat-label">消息数</span>
-                  <span class="stat-value">{{ agents[selectedAgent]?.messages.length || 0 }}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-label">产出文件</span>
-                  <span class="stat-value">{{ getAgentFiles(selectedAgent).length }}</span>
-                </div>
-                <div class="stat-item">
-                  <span class="stat-label">状态</span>
-                  <span class="stat-value">{{ getAgentStatusText(selectedAgent) }}</span>
+                  <i :class="getFileIcon(file.name)"></i>
+                  <span class="file-dropdown-name">{{ file.name }}</span>
+                  <span class="file-dropdown-meta">{{ file.mtimeStr || '' }}</span>
                 </div>
               </div>
+            </el-popover>
+            <div class="status-badge-mini" :class="getAgentStatus(selectedAgent)">
+              <i :class="getAgentStatusIcon(selectedAgent)"></i>
+              {{ getAgentStatusText(selectedAgent) }}
             </div>
           </div>
 
@@ -914,10 +933,11 @@ onUnmounted(() => {
 .task-center-2 {
   max-width: 1600px;
   margin: 0 auto;
-  padding: 0 24px 12px;
-  height: 100vh;
+  padding: 0 20px 12px;
   display: flex;
   flex-direction: column;
+  height: 100%;
+  overflow: hidden;
 }
 
 /* Header */
@@ -925,47 +945,61 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--grid-line);
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 2px 0 8px;
+  border-bottom: 1px solid color-mix(in oklab, var(--border-subtle) 84%, transparent);
   flex-shrink: 0;
 }
 
+.task-center__title-wrap {
+  min-width: 0;
+}
+
 .task-center__title h1 {
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 700;
-  color: var(--color-primary);
-  text-shadow: var(--text-shadow-primary);
-  letter-spacing: 0.1em;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
   margin: 0;
 }
 
-.task-center__title p {
+.task-center__title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.task-center__mode {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--color-primary-bg) 80%, transparent);
+  color: var(--text-tertiary);
   font-size: 11px;
-  color: var(--color-secondary);
-  margin: 4px 0 0 0;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .ai-status {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 10px;
-  border-radius: 4px;
+  padding: 7px 11px;
+  border-radius: 999px;
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
-  font-family: var(--font-mono);
   font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  white-space: nowrap;
 }
 
 .ai-status.status--connected {
@@ -988,7 +1022,7 @@ onUnmounted(() => {
 }
 
 .ai-status .status-label {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-secondary);
 }
@@ -1002,13 +1036,13 @@ onUnmounted(() => {
   flex-shrink: 0;
   background: var(--bg-panel);
   border-radius: var(--radius-lg);
-  padding: 10px 14px;
+  padding: 10px 12px;
   box-shadow: var(--shadow-sm);
   margin-bottom: 10px;
 }
 
 .task-input-row {
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .task-input :deep(.el-textarea__inner) {
@@ -1029,7 +1063,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
 }
 
 .send-btn-task {
@@ -1040,8 +1074,9 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-tertiary);
+  white-space: nowrap;
 }
 
 .connection-hint.connected {
@@ -1072,7 +1107,6 @@ onUnmounted(() => {
   gap: 10px;
   flex: 1;
   min-height: 0;
-  overflow: hidden;
 }
 
 /* Sidebar */
@@ -1083,7 +1117,6 @@ onUnmounted(() => {
   border-radius: 20px;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
   box-shadow: var(--shadow-sm);
 }
 
@@ -1123,6 +1156,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-height: 400px;
 }
 
 .agent-list::-webkit-scrollbar {
@@ -1297,45 +1331,124 @@ onUnmounted(() => {
 /* Detail Panel */
 .detail-panel {
   flex: 1;
-  min-height: 0;
   background: var(--bg-panel);
   border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
   box-shadow: var(--shadow-sm);
 }
 
-/* Detail Header */
-.detail-header {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-subtle);
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  background: linear-gradient(180deg, rgba(37, 41, 50, 0.3) 0%, transparent 100%);
-  flex-shrink: 0;
-}
-
-.agent-avatar-large {
-  width: 60px;
-  height: 60px;
-  border-radius: var(--radius-md);
-  background: var(--bg-surface);
+/* Compact Topbar (replaces old detail-header) */
+.detail-topbar {
   display: flex;
   align-items: center;
-  justify-content: center;
-  border: 2px solid var(--border-subtle);
-  position: relative;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
 
-.agent-avatar-large img {
-  width: 100%;
-  height: 100%;
+.detail-topbar-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
   object-fit: cover;
-  border-radius: calc(var(--radius-md) - 2px);
+  border: 1.5px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.detail-topbar-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.detail-topbar-role {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-cyan);
+  background: rgba(34, 211, 238, 0.1);
+  padding: 2px 8px;
+  border-radius: 20px;
+  border: 1px solid rgba(34, 211, 238, 0.2);
+}
+
+.detail-topbar-spacer {
+  flex: 1;
+}
+
+/* Agent Hover Tip Card */
+.agent-tip-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.agent-tip-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.agent-tip-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.agent-tip-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-tip-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.agent-tip-role {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--color-cyan);
+}
+
+.agent-tip-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.agent-tip-tags .tag {
+  padding: 2px 7px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.agent-tip-desc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.agent-tip-stats {
+  display: flex;
+  gap: 14px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.agent-tip-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .claude-avatar-large {
@@ -1348,91 +1461,6 @@ onUnmounted(() => {
   justify-content: center;
   color: white;
   font-size: 24px;
-}
-
-.status-dot-large {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  position: absolute;
-  bottom: -3px;
-  right: -3px;
-  border: 3px solid var(--bg-panel);
-}
-
-.status-dot-large.idle { background: var(--color-success); }
-.status-dot-large.busy { background: var(--color-accent); }
-.status-dot-large.offline { background: var(--text-tertiary); }
-
-.detail-info-core {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.detail-title-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.detail-name {
-  font-family: var(--font-bold, var(--font-mono));
-  font-size: 20px;
-  color: #fff;
-  letter-spacing: 0.5px;
-}
-
-.detail-role {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  color: var(--color-cyan);
-  background: rgba(34, 211, 238, 0.1);
-  padding: 4px 12px;
-  border-radius: 20px;
-  border: 1px solid rgba(34, 211, 238, 0.2);
-}
-
-.status-badge-large {
-  font-size: 11px;
-  padding: 4px 10px;
-  border-radius: 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-family: var(--font-mono);
-}
-
-.status-badge-large.idle {
-  background: rgba(139, 146, 165, 0.1);
-  color: var(--text-secondary);
-  border: 1px solid rgba(139, 146, 165, 0.2);
-}
-
-.status-badge-large.busy {
-  background: rgba(251, 146, 60, 0.1);
-  color: var(--color-accent);
-  border: 1px solid rgba(251, 146, 60, 0.2);
-}
-
-/* 能力标签（名字下面） */
-.detail-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.detail-tags .tag {
-  padding: 3px 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border-subtle);
-  border-radius: 4px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
 }
 
 /* 产出文件 Tips 按钮 */
@@ -1568,7 +1596,6 @@ onUnmounted(() => {
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  overflow: hidden;
 }
 
 /* Chat section: full width */
@@ -1578,7 +1605,6 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
 }
 
 /* Module Title */
@@ -1958,6 +1984,22 @@ onUnmounted(() => {
   min-height: 0;
 }
 
+.claude-messages-container {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.claude-messages-container::-webkit-scrollbar {
+  width: 4px;
+}
+
+.claude-messages-container::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 4px;
+}
+
 /* ClaudeCode Input Area */
 .claude-input-area {
   display: flex;
@@ -2137,6 +2179,25 @@ onUnmounted(() => {
   .task-center-2 {
     padding: 0 12px 20px;
     height: auto;
+  }
+
+  .task-center__header,
+  .send-btn-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .task-center__title {
+    align-items: flex-start;
+  }
+
+  .connection-hint {
+    justify-content: flex-start;
   }
 
   .detail-header {

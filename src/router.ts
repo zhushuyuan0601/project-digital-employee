@@ -21,11 +21,6 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/DigitalEmployee.vue')
   },
   {
-    path: '/task-center',
-    name: 'task-center',
-    component: () => import('@/views/TaskCenter.vue')
-  },
-  {
     path: '/task-center-2',
     name: 'task-center-2',
     component: () => import('@/views/TaskCenter2.vue')
@@ -94,16 +89,6 @@ const routes: RouteRecordRaw[] = [
     path: '/webhooks',
     name: 'webhooks',
     component: () => import('@/views/Webhooks.vue')
-  },
-  {
-    path: '/mission-control',
-    name: 'mission-control',
-    component: () => import('@/views/MissionControl.vue')
-  },
-  {
-    path: '/task-board',
-    name: 'task-board',
-    component: () => import('@/views/TaskBoard.vue')
   }
 ]
 

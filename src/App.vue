@@ -1,405 +1,159 @@
 <template>
-  <div id="app" class="app-container">
-    <!-- 战术网格背景 -->
-    <div class="tactical-grid-bg"></div>
-    <div class="interface-container">
-      <!-- 左侧导航栏 -->
-      <aside class="sidebar">
-        <!-- 品牌区域 -->
-        <div class="sidebar-header">
-          <div class="logo-container">
-            <div class="logo-symbol">
-              <span class="logo-icon">🦞</span>
-              <div class="logo-text-block">
-                <span class="logo-brand">OPENCLAW</span>
-                <span class="logo-subtext">人工智能产品部</span>
-                <span class="logo-subtext2">24 小时自动办公系统</span>
-              </div>
+  <div class="app-shell">
+    <div class="app-shell__glow app-shell__glow--left"></div>
+    <div class="app-shell__glow app-shell__glow--right"></div>
+
+    <div class="app-frame">
+      <aside class="app-sidebar">
+        <div class="brand-panel">
+          <div class="brand-mark">
+            <div class="brand-mark__orb">U</div>
+            <div class="brand-copy">
+              <strong>OpenClaw Unicom</strong>
+              <span>多 Agent 协作管理平台</span>
             </div>
           </div>
-          <div class="system-id">
-            <span class="system-label">SYSTEM:</span>
-            <span class="system-value">OPENCLAW.UI // TACTICAL</span>
-          </div>
+
+          <p class="brand-description">
+            以更轻盈的工作台视角查看协作、调度与运行状态，让复杂系统的信息层次更容易读懂。
+          </p>
         </div>
 
-        <!-- 主导航 -->
-        <nav class="sidebar-nav">
-          <div class="nav-section-label">
-            <span class="section-bracket">[</span>
-            主菜单
-            <span class="section-bracket">]</span>
-          </div>
+        <div class="nav-scroll">
+          <section
+            v-for="section in navigationSections"
+            :key="section.label"
+            class="nav-section"
+          >
+            <p class="nav-section__label">{{ section.label }}</p>
 
-          <router-link to="/dashboard" custom v-slot="{ navigate, isActive }">
-            <button :class="['nav-item', { active: isActive }]" @click="navigate">
-              <span class="nav-bracket">[</span>
-              <span class="nav-icon">◈</span>
-              <span class="nav-label">系统仪表盘</span>
-              <span class="nav-indicator"></span>
-              <span class="nav-bracket-close">]</span>
-            </button>
-          </router-link>
+            <router-link
+              v-for="item in section.items"
+              :key="item.to"
+              :to="item.to"
+              custom
+              v-slot="{ navigate, isActive }"
+            >
+              <button
+                type="button"
+                :class="['nav-link', { 'is-active': isActive }]"
+                @click="navigate"
+              >
+                <span class="nav-link__icon">
+                  <component :is="item.icon" />
+                </span>
+                <span class="nav-link__body">
+                  <span class="nav-link__title">{{ item.label }}</span>
+                  <span class="nav-link__meta">{{ item.meta }}</span>
+                </span>
+                <span class="nav-link__arrow">
+                  <ArrowRight />
+                </span>
+              </button>
+            </router-link>
+          </section>
+        </div>
 
-          <router-link to="/agents" custom v-slot="{ navigate, isActive }">
-            <button :class="['nav-item', { active: isActive }]" @click="navigate">
-              <span class="nav-bracket">[</span>
-              <span class="nav-icon">◰</span>
-              <span class="nav-label">团队成员</span>
-              <span class="nav-indicator"></span>
-              <span class="nav-bracket-close">]</span>
-            </button>
-          </router-link>
-
-          <router-link to="/digital-employee" custom v-slot="{ navigate, isActive }">
-            <button :class="['nav-item', { active: isActive }]" @click="navigate">
-              <span class="nav-bracket">[</span>
-              <span class="nav-icon">◈</span>
-              <span class="nav-label">数字员工监控中心</span>
-              <span class="nav-indicator"></span>
-              <span class="nav-bracket-close">]</span>
-            </button>
-          </router-link>
-
-          <router-link to="/task-center" custom v-slot="{ navigate, isActive }">
-            <button :class="['nav-item', { active: isActive }]" @click="navigate">
-              <span class="nav-bracket">[</span>
-              <span class="nav-icon">▣</span>
-              <span class="nav-label">任务指挥</span>
-              <span class="nav-indicator"></span>
-              <span class="nav-bracket-close">]</span>
-            </button>
-          </router-link>
-
-          <router-link to="/task-center-2" custom v-slot="{ navigate, isActive }">
-            <button :class="['nav-item', { active: isActive }]" @click="navigate">
-              <span class="nav-bracket">[</span>
-              <span class="nav-icon">▣</span>
-              <span class="nav-label">任务指挥中心 II</span>
-              <span class="nav-indicator"></span>
-              <span class="nav-bracket-close">]</span>
-            </button>
-          </router-link>
-
-          <router-link to="/mission-control" custom v-slot="{ navigate, isActive }">
-            <button :class="['nav-item', { active: isActive }]" @click="navigate">
-              <span class="nav-bracket">[</span>
-              <span class="nav-icon">◈</span>
-              <span class="nav-label">Mission Control</span>
-              <span class="nav-indicator"></span>
-              <span class="nav-bracket-close">]</span>
-            </button>
-          </router-link>
-
-          <router-link to="/task-board" custom v-slot="{ navigate, isActive }">
-            <button :class="['nav-item', { active: isActive }]" @click="navigate">
-              <span class="nav-bracket">[</span>
-              <span class="nav-icon">◫</span>
-              <span class="nav-label">任务看板</span>
-              <span class="nav-indicator"></span>
-              <span class="nav-bracket-close">]</span>
-            </button>
-          </router-link>
-
-          <router-link to="/chat" custom v-slot="{ navigate, isActive }">
-            <button :class="['nav-item', { active: isActive }]" @click="navigate">
-              <span class="nav-bracket">[</span>
-              <span class="nav-icon">◆</span>
-              <span class="nav-label">团队对话</span>
-              <span class="nav-indicator"></span>
-              <span class="nav-bracket-close">]</span>
-            </button>
-          </router-link>
-
-          <router-link to="/group-chat" custom v-slot="{ navigate, isActive }">
-            <button :class="['nav-item', { active: isActive }]" @click="navigate">
-              <span class="nav-bracket">[</span>
-              <span class="nav-icon">◉</span>
-              <span class="nav-label">群聊会话</span>
-              <span class="nav-indicator"></span>
-              <span class="nav-bracket-close">]</span>
-            </button>
-          </router-link>
-
-          <div class="nav-divider"></div>
-
-          <div class="nav-section-label">
-            <span class="section-bracket">[</span>
-            系统
-            <span class="section-bracket">]</span>
-          </div>
-
-          <router-link to="/logs" custom v-slot="{ navigate, isActive }">
-            <button :class="['nav-item', { active: isActive }]" @click="navigate">
-              <span class="nav-bracket">[</span>
-              <span class="nav-icon">▤</span>
-              <span class="nav-label">行动日志</span>
-              <span class="nav-indicator"></span>
-              <span class="nav-bracket-close">]</span>
-            </button>
-          </router-link>
-
-          <router-link to="/status" custom v-slot="{ navigate, isActive }">
-            <button :class="['nav-item', { active: isActive }]" @click="navigate">
-              <span class="nav-bracket">[</span>
-              <span class="nav-icon">◬</span>
-              <span class="nav-label">系统状态</span>
-              <span class="nav-indicator"></span>
-              <span class="nav-bracket-close">]</span>
-            </button>
-          </router-link>
-
-          <router-link to="/tools" custom v-slot="{ navigate, isActive }">
-            <button :class="['nav-item', { active: isActive }]" @click="navigate">
-              <span class="nav-bracket">[</span>
-              <span class="nav-icon">⚙</span>
-              <span class="nav-label">工具箱</span>
-              <span class="nav-indicator"></span>
-              <span class="nav-bracket-close">]</span>
-            </button>
-          </router-link>
-
-          <router-link to="/configs" custom v-slot="{ navigate, isActive }">
-            <button :class="['nav-item', { active: isActive }]" @click="navigate">
-              <span class="nav-bracket">[</span>
-              <span class="nav-icon">⚡</span>
-              <span class="nav-label">系统配置</span>
-              <span class="nav-indicator"></span>
-              <span class="nav-bracket-close">]</span>
-            </button>
-          </router-link>
-
-          <div class="nav-divider"></div>
-
-          <div class="nav-section-label">
-            <span class="section-bracket">[</span>
-            高级功能
-            <span class="section-bracket">]</span>
-          </div>
-
-          <router-link to="/skills" custom v-slot="{ navigate, isActive }">
-            <button :class="['nav-item', { active: isActive }]" @click="navigate">
-              <span class="nav-bracket">[</span>
-              <span class="nav-icon">◈</span>
-              <span class="nav-label">技能中心</span>
-              <span class="nav-indicator"></span>
-              <span class="nav-bracket-close">]</span>
-            </button>
-          </router-link>
-
-          <router-link to="/tokens" custom v-slot="{ navigate, isActive }">
-            <button :class="['nav-item', { active: isActive }]" @click="navigate">
-              <span class="nav-bracket">[</span>
-              <span class="nav-icon">◈</span>
-              <span class="nav-label">成本追踪</span>
-              <span class="nav-indicator"></span>
-              <span class="nav-bracket-close">]</span>
-            </button>
-          </router-link>
-
-          <router-link to="/memory" custom v-slot="{ navigate, isActive }">
-            <button :class="['nav-item', { active: isActive }]" @click="navigate">
-              <span class="nav-bracket">[</span>
-              <span class="nav-icon">🧠</span>
-              <span class="nav-label">内存图谱</span>
-              <span class="nav-indicator"></span>
-              <span class="nav-bracket-close">]</span>
-            </button>
-          </router-link>
-
-          <router-link to="/security" custom v-slot="{ navigate, isActive }">
-            <button :class="['nav-item', { active: isActive }]" @click="navigate">
-              <span class="nav-bracket">[</span>
-              <span class="nav-icon">🛡️</span>
-              <span class="nav-label">安全审计</span>
-              <span class="nav-indicator"></span>
-              <span class="nav-bracket-close">]</span>
-            </button>
-          </router-link>
-
-          <router-link to="/cron" custom v-slot="{ navigate, isActive }">
-            <button :class="['nav-item', { active: isActive }]" @click="navigate">
-              <span class="nav-bracket">[</span>
-              <span class="nav-icon">⏰</span>
-              <span class="nav-label">定时任务</span>
-              <span class="nav-indicator"></span>
-              <span class="nav-bracket-close">]</span>
-            </button>
-          </router-link>
-
-          <router-link to="/webhooks" custom v-slot="{ navigate, isActive }">
-            <button :class="['nav-item', { active: isActive }]" @click="navigate">
-              <span class="nav-bracket">[</span>
-              <span class="nav-icon">⚡</span>
-              <span class="nav-label">Webhook 管理</span>
-              <span class="nav-indicator"></span>
-              <span class="nav-bracket-close">]</span>
-            </button>
-          </router-link>
-        </nav>
-
-        <!-- 底部状态区 -->
         <div class="sidebar-footer">
-          <div class="connection-panel">
-            <div class="panel-label">
-              <span class="bracket">[</span>
-              网关连接
-              <span class="bracket">]</span>
+          <div class="sidebar-status">
+            <div class="status-chip" :class="`status-chip--${connectionStatus}`">
+              <span class="status-chip__dot"></span>
+              <span>{{ statusText }}</span>
             </div>
-            <div class="status-row">
-              <span class="status-dot" :class="connectionStatus"></span>
-              <span class="status-text">{{ statusText }}</span>
-              <span class="status-code">{{ connectionStatus.toUpperCase() }}</span>
-            </div>
+            <span class="sidebar-build">Build v1.0.0</span>
           </div>
-          <div class="version-info">
-            <span class="version-label">BUILD</span>
-            <span class="version-value">v1.0.0 // TACTICAL</span>
-          </div>
+
+          <button type="button" class="theme-toggle" @click="toggleTheme">
+            <span class="theme-toggle__icon">
+              <Sunny v-if="isLight" />
+              <MoonNight v-else />
+            </span>
+            <span class="theme-toggle__text">
+              <strong>{{ themeLabel }}</strong>
+              <span>点击切换界面模式</span>
+            </span>
+          </button>
         </div>
       </aside>
 
-      <!-- 主内容区 -->
-      <main class="main-content">
-        <!-- 顶部状态栏 -->
-        <header class="top-bar">
-          <div class="top-bar-left">
-            <div class="breadcrumb">
-              <span class="breadcrumb-item">HOME</span>
-              <span class="breadcrumb-sep">/</span>
-              <span class="breadcrumb-item current">{{ currentPageTitle }}</span>
-            </div>
-          </div>
-          <div class="top-bar-right">
-            <div class="status-widgets">
-              <div class="widget">
-                <span class="widget-label">SYS_STATUS</span>
-                <span class="widget-value" :class="connectionStatus">{{ systemStatus }}</span>
-              </div>
-              <div class="widget-sep"></div>
-              <div class="widget">
-                <span class="widget-label">TIME</span>
-                <span class="widget-value">{{ currentTime }}</span>
-              </div>
-              <div class="widget-sep"></div>
-              <div class="widget">
-                <span class="widget-label">SECURITY</span>
-                <span class="widget-value">ENCRYPTED</span>
-              </div>
-              <div class="widget-sep"></div>
-              <div class="widget">
-                <button class="theme-toggle" @click="toggleTheme" :title="isLight ? '切换到暗色主题' : '切换到亮色主题'">
-                  <span class="theme-icon">{{ isLight ? '🌙' : '☀️' }}</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <!-- 内容区域 -->
-        <div class="content-area">
-          <router-view></router-view>
-        </div>
+      <main class="app-stage">
+        <section class="stage-content">
+          <router-view />
+        </section>
       </main>
     </div>
-
-    <!-- Mission Control 登录对话框 -->
-    <MCAuthDialog
-      v-model="showMCAuthDialog"
-      @success="onMCAuthSuccess"
-    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, markRaw, onMounted, ref, watch } from 'vue'
+import {
+  ArrowRight,
+  ChatLineRound,
+  Coin,
+  Collection,
+  Connection,
+  DataBoard,
+  Document,
+  Link,
+  MagicStick,
+  MoonNight,
+  OfficeBuilding,
+  Operation,
+  Setting,
+  Sunny,
+  Timer,
+  Tools,
+  User,
+  WarningFilled
+} from '@element-plus/icons-vue'
 import { useChatStore } from '@/stores/chat'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
 import { useThemeStore } from '@/stores/theme'
-import { useMCAuthStore } from '@/stores/mcAuth'
 import { storeToRefs } from 'pinia'
-import MCAuthDialog from '@/components/MCAuthDialog.vue'
 
-const route = useRoute()
 const chatStore = useChatStore()
 const multiAgentStore = useMultiAgentChatStore()
 const themeStore = useThemeStore()
-const mcAuthStore = useMCAuthStore()
 
-// MC 认证对话框
-const showMCAuthDialog = ref(false)
+const { currentTheme, isLight } = storeToRefs(themeStore)
+const chatRefs = storeToRefs(chatStore)
 
-// 需要 MC 认证的路由
-const mcRequiredRoutes = ['/mission-control', '/task-board']
-
-// 检查是否需要 MC 认证
-function checkMCAuth() {
-  const needsAuth = mcRequiredRoutes.some(path => route.path.startsWith(path))
-  if (needsAuth && !mcAuthStore.isAuthenticated) {
-    // 先尝试自动检查
-    mcAuthStore.checkAuth().then((isAuthed) => {
-      if (!isAuthed) {
-        showMCAuthDialog.value = true
-      }
-    })
-  }
-}
-
-// 登录成功回调
-function onMCAuthSuccess() {
-  // 重新加载当前页面数据
-  window.location.reload()
-}
-
-// 监听路由变化
-watch(() => route.path, () => {
-  checkMCAuth()
-})
-
-// 应用启动时检查一次
-checkMCAuth()
-
-// 使用 storeToRefs 保持响应式连接
-const { isConnected, isConnecting } = storeToRefs(chatStore)
-const { currentTheme } = storeToRefs(themeStore)
-
-// 是否是亮色主题
-const isLight = computed(() => themeStore.isLight)
-
-// 主题切换
-function toggleTheme() {
-  themeStore.toggle()
-}
-
-// 状态
 const connectionStatus = ref('disconnected')
-const currentTime = ref('')
 
-// 更新时间
-const updateTime = () => {
-  const now = new Date()
-  currentTime.value = now.toLocaleTimeString('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  })
-}
-
-// 监听 chatStore 连接状态
-watch(
-  [isConnected, isConnecting],
-  ([connected, connecting]) => {
-    if (connecting) {
-      connectionStatus.value = 'connecting'
-    } else if (connected) {
-      connectionStatus.value = 'connected'
-    } else {
-      connectionStatus.value = 'disconnected'
-    }
+const navigationSections = [
+  {
+    label: '核心工作台',
+    items: [
+      { to: '/dashboard', label: '系统仪表盘', meta: '总览与态势', icon: markRaw(DataBoard) },
+      { to: '/agents', label: '团队成员', meta: '协作角色与状态', icon: markRaw(User) },
+      { to: '/digital-employee', label: '数字员工监控中心', meta: '产出与项目跟踪', icon: markRaw(OfficeBuilding) },
+      { to: '/task-center-2', label: '任务指挥中心 II', meta: '派发与执行流', icon: markRaw(Operation) },
+      { to: '/chat', label: '团队对话', meta: '单聊工作流', icon: markRaw(ChatLineRound) },
+      { to: '/group-chat', label: '群聊会话', meta: '多人协作频道', icon: markRaw(Connection) }
+    ]
   },
-  { immediate: true }
-)
+  {
+    label: '系统管理',
+    items: [
+      { to: '/logs', label: '行动日志', meta: '运行轨迹', icon: markRaw(Document) },
+      { to: '/status', label: '系统状态', meta: '资源与健康度', icon: markRaw(Connection) },
+      { to: '/tools', label: '工具箱', meta: '能力开关', icon: markRaw(Tools) },
+      { to: '/configs', label: '系统配置', meta: '环境与参数', icon: markRaw(Setting) }
+    ]
+  },
+  {
+    label: '高级能力',
+    items: [
+      { to: '/skills', label: '技能中心', meta: '扩展能力管理', icon: markRaw(MagicStick) },
+      { to: '/tokens', label: '成本追踪', meta: 'Token 与请求', icon: markRaw(Coin) },
+      { to: '/memory', label: '内存图谱', meta: '知识与上下文', icon: markRaw(Collection) },
+      { to: '/security', label: '安全审计', meta: '风险巡检', icon: markRaw(WarningFilled) },
+      { to: '/cron', label: '定时任务', meta: '自动化调度', icon: markRaw(Timer) },
+      { to: '/webhooks', label: 'Webhook 管理', meta: '外部联动', icon: markRaw(Link) }
+    ]
+  }
+]
 
 const statusText = computed(() => {
   const statusMap = {
@@ -410,575 +164,445 @@ const statusText = computed(() => {
   return statusMap[connectionStatus.value] || '未知'
 })
 
-const systemStatus = computed(() => {
-  return connectionStatus.value === 'connected' ? '正常' : '--'
-})
+const themeLabel = computed(() => (currentTheme.value === 'light' ? '浅色模式' : '深色模式'))
 
-const currentPageTitle = computed(() => {
-  const titles = {
-    '/dashboard': '仪表盘',
-    '/agents': '团队成员',
-    '/digital-employee': '数字员工监控中心',
-    '/task-center': '任务指挥',
-    '/task-center-2': '任务指挥中心 II',
-    '/mission-control': 'Mission Control',
-    '/task-board': '任务看板',
-    '/configs': '系统配置',
-    '/logs': '行动日志',
-    '/status': '系统状态',
-    '/tools': '工具箱',
-    '/chat': '团队对话',
-    '/group-chat': '群聊会话',
-    '/skills': '技能中心',
-    '/tokens': '成本追踪',
-    '/memory': '内存图谱',
-    '/security': '安全审计',
-    '/cron': '定时任务',
-    '/webhooks': 'Webhook 管理'
-  }
-  return titles[route.path] || 'OPENCLAW'
-})
+function toggleTheme() {
+  themeStore.toggle()
+}
 
-// 生命周期 - 应用启动时连接 Gateway
+watch(
+  [chatRefs.isConnected, chatRefs.isConnecting],
+  ([connected, connecting]) => {
+    if (connecting) {
+      connectionStatus.value = 'connecting'
+      return
+    }
+    connectionStatus.value = connected ? 'connected' : 'disconnected'
+  },
+  { immediate: true }
+)
+
 let hasConnected = false
 
-// 监听自定义事件显示登录对话框
 onMounted(() => {
-  window.addEventListener('show-mc-auth', () => {
-    showMCAuthDialog.value = true
-  })
-
-  updateTime()
-  setInterval(updateTime, 1000)
-
-  // 只连接一次，避免重复连接
   if (!hasConnected) {
-    // 连接群聊会话的 Agent（多 Agent 聊天）
-    console.log('[App] 连接群聊会话 Agent...')
     multiAgentStore.connectAll()
-
     hasConnected = true
-    console.log('[App] Gateway 已连接')
   }
 })
 </script>
 
 <style scoped>
-/* ========== AI 作战指挥中心主题 ========== */
-.app-container {
-  width: 100vw;
-  height: 100vh;
+.app-shell {
   position: relative;
-  overflow: hidden;
-  background: var(--bg-base);
+  min-height: 100vh;
+  padding: 20px;
+  overflow: visible;
 }
 
-/* 战术网格背景 */
-.tactical-grid-bg {
+.app-shell__glow {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-image:
-    linear-gradient(var(--grid-line-dim) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line-dim) 1px, transparent 1px);
-  background-size: 40px 40px;
-  background-position: 0 0;
-  opacity: 0.15;
+  inset: auto;
+  width: 34rem;
+  height: 34rem;
+  border-radius: 50%;
+  filter: blur(48px);
   pointer-events: none;
-  z-index: 0;
-  animation: grid-scroll 20s linear infinite;
+  opacity: 0.5;
 }
 
-@keyframes grid-scroll {
-  0% { background-position: 0 0; }
-  100% { background-position: 40px 40px; }
+.app-shell__glow--left {
+  top: -12rem;
+  left: -8rem;
+  background:
+    radial-gradient(circle, color-mix(in oklab, var(--color-primary) 24%, transparent) 0%, transparent 70%);
 }
 
-.interface-container {
+.app-shell__glow--right {
+  right: -10rem;
+  bottom: -16rem;
+  background:
+    radial-gradient(circle, color-mix(in oklab, var(--color-secondary) 28%, transparent) 0%, transparent 72%);
+}
+
+.app-frame {
   position: relative;
   z-index: 1;
-  width: 100%;
-  height: 100%;
-  display: flex;
+  display: grid;
+  grid-template-columns: 318px minmax(0, 1fr);
+  align-items: start;
+  gap: 18px;
+  min-height: calc(100vh - 40px);
 }
 
-/* ========== 侧边栏 ========== */
-.sidebar {
-  width: 280px;
+.app-sidebar {
+  position: sticky;
+  top: 20px;
   display: flex;
   flex-direction: column;
-  background: var(--bg-sidebar);
-  border-right: 1px solid var(--grid-line);
-  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(10px);
+  min-height: calc(100vh - 40px);
+  padding: 22px 18px 18px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 30px;
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--bg-surface) 92%, white 8%) 0%, var(--bg-panel) 100%);
+  box-shadow: var(--shadow-lg);
 }
 
-/* 侧边栏头部 */
-.sidebar-header {
-  padding: 24px 20px;
-  border-bottom: 1px solid var(--grid-line);
-  background: linear-gradient(135deg, rgba(0, 240, 255, 0.15) 0%, rgba(189, 0, 255, 0.1) 100%);
-  position: relative;
-  overflow: hidden;
+.brand-panel {
+  display: grid;
+  gap: 12px;
+  padding: 4px 8px 18px;
 }
 
-.sidebar-header::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, var(--color-primary), var(--color-secondary), transparent);
-  animation: scan-line 3s ease-in-out infinite;
-}
-
-@keyframes scan-line {
-  0%, 100% { transform: translateX(-100%); opacity: 0.5; }
-  50% { transform: translateX(100%); opacity: 1; }
-}
-
-.logo-container {
-  margin-bottom: 16px;
-}
-
-.logo-symbol {
+.brand-mark {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 8px;
+  gap: 12px;
 }
 
-.logo-icon {
-  font-size: 56px;
-  line-height: 1;
-  filter: drop-shadow(0 0 10px rgba(0, 240, 255, 0.5));
-  animation: icon-pulse 2s ease-in-out infinite;
+.brand-mark__orb {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 1.1rem;
+  background:
+    linear-gradient(145deg, color-mix(in oklab, var(--color-primary) 84%, white 16%) 0%, color-mix(in oklab, var(--color-secondary) 72%, white 28%) 100%);
+  color: white;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 800;
+  box-shadow: 0 12px 24px color-mix(in oklab, var(--color-primary) 24%, transparent);
 }
 
-.logo-text-block {
+.brand-copy {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.logo-brand {
-  font-size: 22px;
-  font-weight: 800;
-  color: var(--color-primary);
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  text-shadow: 0 0 15px rgba(0, 240, 255, 0.6);
+.brand-copy strong {
+  font-family: var(--font-display);
+  font-size: 1.12rem;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--text-primary);
 }
 
-.logo-subtext {
-  font-size: 11px;
+.brand-copy span {
   color: var(--text-secondary);
-  letter-spacing: 0.05em;
+  font-size: 0.82rem;
+  line-height: 1.35;
 }
 
-.logo-subtext2 {
-  font-size: 10px;
-  color: var(--color-secondary);
-  letter-spacing: 0.1em;
+.brand-description {
+  max-width: 26ch;
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 0.82rem;
+  line-height: 1.62;
+}
+
+.nav-scroll {
+  flex: 1;
+  min-height: 0;
+  padding-right: 4px;
+  overflow: auto;
+}
+
+.nav-section + .nav-section {
+  margin-top: 20px;
+}
+
+.nav-section__label {
+  margin: 0 0 10px;
+  padding-left: 10px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
-@keyframes icon-pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.8; transform: scale(1.05); }
+.nav-link {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid transparent;
+  border-radius: 22px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  transition: transform var(--transition-base), background var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
 }
 
-.system-id {
-  display: flex;
-  gap: 8px;
-  font-size: 10px;
-  opacity: 0.7;
-  font-family: var(--font-mono);
+.nav-link + .nav-link {
+  margin-top: 6px;
 }
 
-.system-label {
-  color: var(--text-tertiary);
+.nav-link:hover {
+  transform: translateY(-1px);
+  background: color-mix(in oklab, var(--color-primary-bg) 54%, transparent);
+  border-color: color-mix(in oklab, var(--color-primary) 14%, var(--border-subtle));
 }
 
-.system-value {
+.nav-link.is-active {
+  background:
+    linear-gradient(135deg, color-mix(in oklab, var(--color-primary-bg) 78%, white 22%) 0%, color-mix(in oklab, var(--color-secondary) 8%, var(--bg-surface)) 100%);
+  border-color: color-mix(in oklab, var(--color-primary) 20%, var(--border-default));
+  box-shadow: 0 14px 30px color-mix(in oklab, var(--color-primary) 12%, transparent);
+}
+
+.nav-link__icon,
+.nav-link__arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.nav-link__icon {
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--bg-surface) 72%, var(--color-primary-bg) 28%);
   color: var(--color-primary);
+}
+
+.nav-link__icon :deep(svg),
+.nav-link__arrow :deep(svg) {
+  width: 1.08rem;
+  height: 1.08rem;
+}
+
+.nav-link__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 3px;
+}
+
+.nav-link__title {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
   font-weight: 600;
 }
 
-/* 侧边栏导航 */
-.sidebar-nav {
-  flex: 1;
-  padding: 16px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  background: linear-gradient(180deg, rgba(0, 240, 255, 0.02) 0%, transparent 100%);
-}
-
-.nav-section-label {
-  font-size: 10px;
-  font-weight: 700;
+.nav-link__meta {
   color: var(--text-tertiary);
-  letter-spacing: 0.2em;
-  padding: 16px 0 10px;
-  margin-top: 8px;
-  border-top: 1px solid var(--grid-line-dim);
-  text-transform: uppercase;
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  font-size: 0.75rem;
 }
 
-.section-bracket {
-  color: var(--color-primary-dim);
-}
-
-.nav-section-label:first-child {
-  margin-top: 0;
-  border-top: none;
-}
-
-.nav-item {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 12px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: 6px;
-  position: relative;
-  font-family: var(--font-mono);
-  letter-spacing: 0.05em;
-}
-
-.nav-item::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--color-primary);
-  transform: scaleY(0);
-  transition: transform 0.2s;
-}
-
-.nav-item:hover {
-  background: rgba(0, 240, 255, 0.08);
-  color: var(--color-primary);
-  border-color: rgba(0, 240, 255, 0.2);
-  transform: translateX(4px);
-}
-
-.nav-item:hover::before {
-  transform: scaleY(1);
-}
-
-.nav-item.active {
-  background: linear-gradient(135deg, rgba(0, 240, 255, 0.2) 0%, rgba(189, 0, 255, 0.15) 100%);
-  color: var(--color-primary);
-  border: 1px solid rgba(0, 240, 255, 0.3);
-  box-shadow: 0 0 20px rgba(0, 240, 255, 0.2), inset 0 0 10px rgba(0, 240, 255, 0.05);
-}
-
-.nav-item.active::before {
-  transform: scaleY(1);
-}
-
-.nav-bracket,
-.nav-bracket-close {
-  color: var(--color-primary-dim);
-  font-family: var(--font-mono);
-  font-weight: 300;
-}
-
-.nav-icon {
-  min-width: 18px;
-  text-align: center;
-  font-size: 15px;
-  color: var(--color-primary);
-  text-shadow: 0 0 8px rgba(0, 240, 255, 0.5);
-}
-
-.nav-label {
-  flex: 1;
-  text-align: left;
-}
-
-.nav-indicator {
-  width: 6px;
-  height: 6px;
+.nav-link__arrow {
+  width: 1.9rem;
+  height: 1.9rem;
   border-radius: 50%;
-  background: transparent;
-  transition: all 0.2s;
+  color: var(--text-muted);
 }
 
-.nav-item.active .nav-indicator {
-  background: var(--color-primary);
-  box-shadow: 0 0 8px var(--color-primary);
+.nav-link.is-active .nav-link__arrow {
+  background: color-mix(in oklab, var(--color-primary) 14%, transparent);
+  color: var(--color-primary);
 }
 
-.nav-item:hover .nav-indicator {
-  background: var(--color-primary-dim);
-}
-
-.nav-divider {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--grid-line), transparent);
-  margin: 20px 0;
-}
-
-/* 侧边栏底部 */
 .sidebar-footer {
-  padding: 16px;
-  border-top: 1px solid var(--grid-line);
-  background: var(--bg-panel);
+  padding: 18px 8px 4px;
+  border-top: 1px solid var(--border-subtle);
 }
 
-.connection-panel {
+.sidebar-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
-.panel-label {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text-tertiary);
-  margin-bottom: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.panel-label .bracket {
-  color: var(--color-primary-dim);
-}
-
-.status-row {
-  display: flex;
+.status-chip {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-family: var(--font-mono);
-}
-
-.status-code {
-  font-size: 9px;
-  color: var(--color-primary-dim);
-  padding: 2px 6px;
-  border: 1px solid rgba(0, 240, 255, 0.3);
-  border-radius: 3px;
-  margin-left: auto;
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text-tertiary);
-  transition: all 0.3s;
-}
-
-.status-dot.connected {
-  background: var(--color-success);
-  box-shadow: 0 0 12px rgba(0, 255, 136, 0.6);
-  animation: pulse 2s infinite;
-}
-
-.status-dot.connecting {
-  background: var(--color-warning);
-  animation: pulse 1s infinite;
-}
-
-.status-dot.disconnected {
-  background: var(--color-error);
-  box-shadow: 0 0 8px rgba(255, 51, 102, 0.4);
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(0.85); }
-}
-
-.status-text {
-  font-size: 11px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--bg-surface) 80%, var(--color-primary-bg) 20%);
   color: var(--text-secondary);
-  flex: 1;
+  font-size: var(--text-xs);
+  font-weight: 600;
 }
 
-.version-info {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-top: 12px;
-  border-top: 1px solid var(--grid-line-dim);
+.status-chip__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--text-muted);
 }
 
-.version-label {
-  font-size: 10px;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+.status-chip--connected .status-chip__dot {
+  background: var(--color-success);
+  box-shadow: 0 0 0 6px color-mix(in oklab, var(--color-success) 14%, transparent);
 }
 
-.version-value {
-  font-size: 10px;
-  color: var(--color-primary);
-  font-family: var(--font-mono);
-  padding: 2px 8px;
-  border: 1px solid rgba(0, 240, 255, 0.3);
-  border-radius: 3px;
+.status-chip--connecting .status-chip__dot {
+  background: var(--color-warning);
+  box-shadow: 0 0 0 6px color-mix(in oklab, var(--color-warning) 16%, transparent);
 }
 
-/* ========== 主内容区 ========== */
-.main-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: linear-gradient(180deg, rgba(0, 240, 255, 0.02) 0%, transparent 100%);
+.status-chip--disconnected .status-chip__dot {
+  background: var(--color-error);
+  box-shadow: 0 0 0 6px color-mix(in oklab, var(--color-error) 12%, transparent);
 }
 
-/* ========== 顶部状态栏 ========== */
-.top-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--grid-line);
-  background: var(--bg-surface);
-  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.4);
-  position: relative;
+.sidebar-build {
+  color: var(--text-muted);
+  font-size: 0.72rem;
 }
 
-.top-bar::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--color-primary-dim), transparent);
-}
-
-.breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 12px;
-  font-family: var(--font-mono);
-  letter-spacing: 0.05em;
-}
-
-.breadcrumb-item {
-  color: var(--text-tertiary);
-}
-
-.breadcrumb-item.current {
-  color: var(--color-primary);
-  font-weight: 700;
-  text-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
-}
-
-.breadcrumb-sep {
-  color: var(--grid-line);
-}
-
-.status-widgets {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-}
-
-.widget {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.widget-label {
-  font-size: 10px;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-family: var(--font-mono);
-}
-
-.widget-value {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--color-primary);
-  font-family: var(--font-mono);
-  text-shadow: 0 0 8px rgba(0, 240, 255, 0.3);
-}
-
-.widget-value.connected {
-  color: var(--color-success);
-  text-shadow: 0 0 8px rgba(0, 255, 136, 0.3);
-}
-
-.widget-sep {
-  width: 1px;
-  height: 20px;
-  background: linear-gradient(180deg, transparent, var(--grid-line), transparent);
-}
-
-/* ========== 主题切换按钮 ========== */
 .theme-toggle {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 8px 12px;
-  background: transparent;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition-fast);
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 22px;
+  background: color-mix(in oklab, var(--bg-surface) 88%, transparent);
+  color: inherit;
+  transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
 }
 
 .theme-toggle:hover {
-  background: var(--bg-panel-hover);
-  border-color: var(--color-primary);
+  transform: translateY(-1px);
+  border-color: color-mix(in oklab, var(--color-primary) 20%, var(--border-default));
+  box-shadow: 0 12px 24px color-mix(in oklab, var(--color-primary) 10%, transparent);
 }
 
-.theme-icon {
-  font-size: 16px;
-  line-height: 1;
+.theme-toggle__icon {
+  display: grid;
+  place-items: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 1rem;
+  background: color-mix(in oklab, var(--color-primary-bg) 74%, var(--bg-surface) 26%);
+  color: var(--color-primary);
 }
 
-/* ========== 内容区域 ========== */
-.content-area {
-  flex: 1;
+.theme-toggle__icon :deep(svg) {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.theme-toggle__text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.theme-toggle__text strong {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.theme-toggle__text span {
+  color: var(--text-tertiary);
+  font-size: 0.76rem;
+}
+
+.app-stage {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: calc(100vh - 40px);
+  padding: 18px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 34px;
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--bg-surface) 78%, white 22%) 0%, color-mix(in oklab, var(--bg-base) 92%, var(--bg-surface) 8%) 100%);
+  box-shadow: var(--shadow-lg);
+}
+
+.stage-content {
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
-  padding: 24px;
-  background: var(--bg-base);
+  padding: 0;
 }
 
-.content-area::-webkit-scrollbar {
-  width: 8px;
+@media (max-width: 1180px) {
+  .app-frame {
+    grid-template-columns: 1fr;
+  }
+
+  .app-sidebar {
+    position: static;
+    min-height: auto;
+    max-height: none;
+    gap: 18px;
+  }
+
+  .app-stage {
+    height: auto;
+    min-height: auto;
+  }
+
+  .nav-scroll {
+    overflow: visible;
+  }
+
+  .nav-section {
+    display: grid;
+    gap: 8px;
+  }
 }
 
-.content-area::-webkit-scrollbar-track {
-  background: var(--bg-base);
+@media (max-width: 820px) {
+  .app-shell {
+    padding: 12px;
+  }
+
+  .app-frame {
+    gap: 12px;
+  }
+
+  .app-sidebar,
+  .app-stage {
+    border-radius: 26px;
+  }
+
 }
 
-.content-area::-webkit-scrollbar-thumb {
-  background: var(--color-primary-dim);
-  border-radius: 4px;
-}
+@media (max-width: 620px) {
+  .app-shell {
+    padding: 10px;
+  }
 
-.content-area::-webkit-scrollbar-thumb:hover {
-  background: var(--color-primary);
-  box-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+  .app-sidebar,
+  .app-stage {
+    padding: 14px;
+    border-radius: 22px;
+  }
+
+  .brand-panel,
+  .sidebar-footer {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .nav-link {
+    padding: 11px;
+  }
+
+  .nav-link__meta {
+    display: none;
+  }
+
+  .stage-content {
+    padding-left: 0;
+    padding-right: 0;
+  }
 }
 </style>

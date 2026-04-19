@@ -5,9 +5,28 @@ export const useThemeStore = defineStore('theme', () => {
   // 主题状态：'dark' | 'light'
   const currentTheme = ref<'dark' | 'light'>('dark')
 
+  function applyTheme(theme: 'dark' | 'light') {
+    if (typeof document === 'undefined') {
+      return
+    }
+
+    const root = document.documentElement
+    const body = document.body
+
+    root.classList.remove('light-theme', 'dark-theme')
+    root.classList.add(theme === 'light' ? 'light-theme' : 'dark-theme')
+    root.dataset.theme = theme
+
+    if (body) {
+      body.classList.remove('theme-light', 'theme-dark')
+      body.classList.add(theme === 'light' ? 'theme-light' : 'theme-dark')
+      body.dataset.theme = theme
+    }
+  }
+
   // 初始化主题
   function initTheme() {
-    if (typeof localStorage !== 'undefined') {
+    if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
       const saved = localStorage.getItem('theme')
       if (saved === 'light' || saved === 'dark') {
         currentTheme.value = saved
@@ -49,14 +68,7 @@ export const useThemeStore = defineStore('theme', () => {
       if (typeof localStorage !== 'undefined') {
         localStorage.setItem('theme', newTheme)
       }
-      // 更新 HTML 元素的 class
-      if (newTheme === 'light') {
-        document.documentElement.classList.add('light-theme')
-        document.documentElement.classList.remove('dark-theme')
-      } else {
-        document.documentElement.classList.add('dark-theme')
-        document.documentElement.classList.remove('light-theme')
-      }
+      applyTheme(newTheme)
     },
     { immediate: true }
   )

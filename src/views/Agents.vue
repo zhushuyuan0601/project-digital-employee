@@ -70,11 +70,11 @@
         <div class="agent-card__footer">
           <button
             v-if="agent.status === 'idle'"
-            class="btn btn-primary btn-sm btn-full"
-            @click="goToTaskCenter(agent.id)"
+            class="btn btn-secondary btn-sm btn-full"
+            disabled
           >
-            <span class="btn-icon">▣</span>
-            分配任务
+            <span class="btn-icon">◉</span>
+            待命
           </button>
           <button
             v-else-if="agent.status === 'busy'"
@@ -100,10 +100,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
 import { useAgentsStore } from '@/stores/agents'
 
-const router = useRouter()
 const agentsStore = useAgentsStore()
 
 const loading = ref(false)
@@ -137,10 +135,6 @@ const refreshAgents = () => {
   setTimeout(() => {
     loading.value = false
   }, 500)
-}
-
-const goToTaskCenter = (agentId: string) => {
-  router.push(`/task-center?agent=${agentId}`)
 }
 
 onMounted(() => {
