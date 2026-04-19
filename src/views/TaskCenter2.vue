@@ -235,20 +235,15 @@
 
         <!-- ClaudeCode 详情 -->
         <template v-else-if="selectedAgent === 'claude'">
-          <div class="detail-header">
-            <div class="agent-avatar-large">
-              <div class="claude-avatar-large"><i class="fas fa-robot"></i></div>
-            </div>
-            <div class="detail-info-core">
-              <div class="detail-title-row">
-                <div class="detail-name">ClaudeCode</div>
-                <div class="detail-role">代码执行者</div>
-                <div class="status-badge-large busy">
-                  <i class="ri-loader-4-line ri-spin"></i>
-                  执行中
-                </div>
-              </div>
-              <div class="detail-desc">{{ claudeCodeSessions.length }} 个活跃会话</div>
+          <div class="detail-topbar">
+            <div class="claude-avatar-topbar"><i class="fas fa-robot"></i></div>
+            <span class="detail-topbar-name">ClaudeCode</span>
+            <span class="detail-topbar-role" style="background: rgba(139, 92, 246, 0.1); color: var(--agent-claude); border-color: rgba(139, 92, 246, 0.2);">代码执行者</span>
+            <div class="detail-topbar-spacer"></div>
+            <span style="font-size: 11px; color: var(--text-tertiary);">{{ claudeCodeSessions.length }} 个活跃会话</span>
+            <div class="status-badge-mini busy">
+              <i class="ri-loader-4-line ri-spin"></i>
+              执行中
             </div>
           </div>
 
@@ -1463,6 +1458,19 @@ onUnmounted(() => {
   font-size: 24px;
 }
 
+.claude-avatar-topbar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
 /* 产出文件 Tips 按钮 */
 .file-tip-btn {
   display: inline-flex;
@@ -1554,25 +1562,6 @@ onUnmounted(() => {
   color: var(--text-tertiary);
   font-family: var(--font-mono);
   flex-shrink: 0;
-}
-
-.detail-desc {
-  font-size: 14px;
-  line-height: 1.5;
-  color: var(--text-secondary);
-  max-width: 600px;
-}
-
-.stats-row {
-  display: flex;
-  gap: 16px;
-  margin-top: 2px;
-}
-
-.stat-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 
 .stat-label {
@@ -1859,8 +1848,6 @@ onUnmounted(() => {
   color: var(--text-tertiary);
   font-size: 13px;
 }
-
-/* Tags (used in detail-header) already styled via .detail-tags */
 
 /* Execution Overview (legacy, kept for compatibility) */
 .exec-overview {
@@ -2200,22 +2187,24 @@ onUnmounted(() => {
     justify-content: flex-start;
   }
 
-  .detail-header {
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
+  .detail-topbar {
+    flex-wrap: wrap;
   }
+}
+</style>
 
-  .detail-title-row {
-    justify-content: center;
-  }
+<style>
+/* Popover rendered outside scoped component — needs global style */
+.agent-tip-popper.el-popper {
+  background: var(--bg-panel) !important;
+  border: 1px solid var(--border-subtle) !important;
+  border-radius: 14px !important;
+  box-shadow: var(--shadow-md) !important;
+  padding: 14px !important;
+}
 
-  .stats-row {
-    justify-content: center;
-  }
-
-  .detail-desc {
-    text-align: center;
-  }
+.agent-tip-popper .el-popper__arrow::before {
+  background: var(--bg-panel) !important;
+  border-color: var(--border-subtle) !important;
 }
 </style>
