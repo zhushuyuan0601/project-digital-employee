@@ -47,8 +47,7 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/chat',
-    name: 'chat',
-    component: () => import('@/views/Chat.vue')
+    redirect: '/dashboard'
   },
   {
     path: '/group-chat',

@@ -9,19 +9,9 @@
         </div>
       </div>
       <div class="nav-tabs">
-        <button
-          :class="['tab-btn', activeTab === 'dashboard' ? 'active' : '']"
-          @click="activeTab = 'dashboard'"
-        >
+        <button class="tab-btn active" type="button">
           <span class="tab-icon">📊</span>
           服务仪表盘
-        </button>
-        <button
-          :class="['tab-btn', activeTab === 'chat' ? 'active' : '']"
-          @click="activeTab = 'chat'"
-        >
-          <span class="tab-icon">💬</span>
-          团队对话
         </button>
       </div>
       <div class="nav-right">
@@ -30,7 +20,7 @@
     </div>
 
     <!-- 服务仪表盘 -->
-    <div v-if="activeTab === 'dashboard'" class="dashboard-content">
+    <div class="dashboard-content">
       <!-- 服务状态卡片 -->
       <div class="service-cards">
         <div class="service-card card-blue">
@@ -203,107 +193,11 @@
       </div>
     </div>
 
-    <!-- 团队对话 -->
-    <div v-if="activeTab === 'chat'" class="chat-content">
-      <div class="chat-layout">
-        <!-- 联系人列表 -->
-        <div class="contact-panel">
-          <div class="contact-header">
-            <div class="search-box">
-              <span class="search-icon">🔍</span>
-              <input type="text" placeholder="搜索联系人..." class="search-input" />
-            </div>
-          </div>
-          <div class="contact-list">
-            <div
-              v-for="contact in contacts"
-              :key="contact.id"
-              :class="['contact-item', selectedContact === contact.id ? 'active' : '']"
-              @click="selectedContact = contact.id"
-            >
-              <div class="contact-avatar" :style="{ background: contact.color }">
-                {{ contact.avatar }}
-              </div>
-              <div class="contact-info">
-                <div class="contact-name">{{ contact.name }}</div>
-                <div class="contact-status">
-                  <span :class="['status-dot', contact.online ? 'online' : 'offline']"></span>
-                  <span class="status-text">{{ contact.online ? '在线' : '离线' }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 聊天窗口 -->
-        <div class="chat-panel">
-          <div class="chat-header">
-            <div class="chat-user-info">
-              <div class="chat-user-avatar" :style="{ background: currentContact?.color }">
-                {{ currentContact?.avatar }}
-              </div>
-              <div class="chat-user-detail">
-                <span class="chat-user-name">{{ currentContact?.name }}</span>
-                <span class="chat-user-role">{{ currentContact?.role }}</span>
-              </div>
-            </div>
-            <div class="chat-actions">
-              <button class="action-btn" title="刷新">⟳</button>
-              <button class="action-btn" title="导出">⤓</button>
-              <button class="action-btn" title="设置">⚙</button>
-            </div>
-          </div>
-
-          <div class="chat-messages" ref="messagesContainer">
-            <div
-              v-for="message in currentMessages"
-              :key="message.id"
-              :class="['message-item', message.type]"
-            >
-              <div class="message-avatar" v-if="message.type === 'receive'" :style="{ background: currentContact?.color }">
-                {{ currentContact?.avatar }}
-              </div>
-              <div class="message-bubble" :class="message.type">
-                <div class="message-meta">
-                  <span class="message-sender">{{ message.sender }}</span>
-                  <span class="message-time">{{ message.time }}</span>
-                </div>
-                <div class="message-content">{{ message.content }}</div>
-              </div>
-              <div class="message-avatar" v-if="message.type === 'send'" :style="{ background: currentUserColor }">
-                我
-              </div>
-            </div>
-          </div>
-
-          <div class="chat-input-area">
-            <div class="input-toolbar">
-              <button class="tool-btn" title="表情">😊</button>
-              <button class="tool-btn" title="文件">📎</button>
-              <button class="tool-btn" title="截图">📷</button>
-            </div>
-            <textarea
-              v-model="inputMessage"
-              class="message-input"
-              placeholder="输入消息... (Enter 发送)"
-              @keydown.enter.exact.prevent="sendMessage"
-              rows="3"
-            ></textarea>
-            <div class="input-footer">
-              <button class="send-btn" @click="sendMessage">
-                发送
-                <span class="send-icon">➤</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed } from 'vue'
 
 // 状态数据
 const gatewayStatus = ref('connected')
@@ -321,53 +215,12 @@ setInterval(() => {
   currentTime.value = new Date().toLocaleString('zh-CN')
 }, 1000)
 
-// 标签切换
-const activeTab = ref('dashboard')
-const selectedContact = ref(1)
-
-// 联系人列表
-const contacts = ref([
-  { id: 1, name: '研发工程师', avatar: '开', role: '研发工程师', color: 'linear-gradient(135deg, #34d399, #10b981)', online: true },
-  { id: 2, name: '研究员', avatar: '研', role: '竞品分析师', color: 'linear-gradient(135deg, #fbbf24, #f59e0b)', online: true },
-  { id: 3, name: '产品经理', avatar: '产', role: '产品经理', color: 'linear-gradient(135deg, #f472b6, #ec4899)', online: false },
-  { id: 4, name: '项目管理', avatar: 'U', role: '任务秘书', color: 'linear-gradient(135deg, #818cf8, #6366f1)', online: true },
-  { id: 5, name: 'CEO', avatar: '总', role: '团队主管', color: 'linear-gradient(135deg, #60a5fa, #3b82f6)', online: true },
-])
-
-// 消息列表
-const messagesData = ref({
-  1: [
-    { id: 1, type: 'receive', sender: '研发工程师', time: '09:30', content: '早上好！今天开始开发新功能' },
-    { id: 2, type: 'send', sender: '我', time: '09:32', content: '好的，需求文档已经准备好了吗？' },
-    { id: 3, type: 'receive', sender: '研发工程师', time: '09:35', content: '已经收到了，正在看 PRD，下午开始写代码' },
-    { id: 4, type: 'receive', sender: '研发工程师', time: '10:15', content: '技术选型已经确定了，用 Vue3 + TypeScript' },
-    { id: 5, type: 'send', sender: '我', time: '10:20', content: '好的，有问题随时沟通' },
-  ],
-  2: [
-    { id: 1, type: 'receive', sender: '研究员', time: '08:00', content: '早！今日 AI 情报简报已生成' },
-    { id: 2, type: 'send', sender: '我', time: '08:05', content: '收到，我马上看' },
-  ],
-  3: [],
-  4: [],
-  5: [],
-})
-
-const currentMessages = computed(() => messagesData.value[selectedContact.value] || [])
-const currentContact = computed(() => contacts.value.find(c => c.id === selectedContact.value))
-const currentUserColor = ref('linear-gradient(135deg, #3b82f6, #2563eb)')
-
 // CPU 颜色
 const cpuColor = computed(() => {
   if (cpuUsage.value > 80) return 'value-danger'
   if (cpuUsage.value > 50) return 'value-warning'
   return 'value-success'
 })
-
-// 发送消息
-const sendMessage = () => {
-  const inputMessage = ref('')
-  // TODO: 实现消息发送逻辑
-}
 </script>
 
 <style scoped>

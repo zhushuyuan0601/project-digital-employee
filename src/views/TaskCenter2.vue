@@ -157,6 +157,7 @@
               trigger="click"
               placement="bottom-end"
               :width="320"
+              popper-class="file-list-popper"
             >
               <template #reference>
                 <button class="file-tip-btn" :class="{ 'has-new': hasNewFiles(selectedAgent) }">
@@ -1565,7 +1566,7 @@ onUnmounted(() => {
 
 .file-dropdown-meta {
   font-size: 11px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   font-family: var(--font-mono);
   flex-shrink: 0;
 }
@@ -2313,5 +2314,20 @@ onUnmounted(() => {
 .agent-tip-popper .el-popper__arrow::before {
   background: var(--bg-panel) !important;
   border-color: var(--border-subtle) !important;
+}
+
+/* File list popover */
+.file-list-popper.el-popper {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border-default) !important;
+  border-radius: 8px !important;
+  box-shadow: var(--shadow-md) !important;
+  padding: 8px !important;
+  color: var(--text-primary) !important;
+}
+
+.file-list-popper .el-popper__arrow::before {
+  background: var(--bg-card) !important;
+  border-color: var(--border-default) !important;
 }
 </style>

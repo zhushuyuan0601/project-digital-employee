@@ -249,11 +249,11 @@ import {
   Timer,
   User
 } from '@element-plus/icons-vue'
-import { useChatStore } from '@/stores/chat'
+import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
 import { storeToRefs } from 'pinia'
 
-const chatStore = useChatStore()
-const { isConnected } = storeToRefs(chatStore)
+const multiAgentStore = useMultiAgentChatStore()
+const { anyConnected } = storeToRefs(multiAgentStore)
 
 const currentTime = ref('')
 const currentDate = ref('')
@@ -289,7 +289,7 @@ const activityItems = ref([
   { time: '14:22:05', type: '异常', tone: 'danger', message: 'Agent “researcher” 出现一次短暂连接超时。' }
 ])
 
-const gatewayStatus = computed(() => (isConnected.value ? 'connected' : 'disconnected'))
+const gatewayStatus = computed(() => (anyConnected.value ? 'connected' : 'disconnected'))
 
 const gatewayStatusText = computed(() => {
   return gatewayStatus.value === 'connected' ? '运行正常' : '连接中断'

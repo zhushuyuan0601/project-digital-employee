@@ -82,10 +82,9 @@
 </template>
 
 <script setup>
-import { computed, markRaw, onMounted, ref, watch } from 'vue'
+import { computed, markRaw, onMounted } from 'vue'
 import {
   ArrowRight,
-  ChatLineRound,
   Coin,
   Collection,
   Connection,
@@ -103,19 +102,15 @@ import {
   User,
   WarningFilled
 } from '@element-plus/icons-vue'
-import { useChatStore } from '@/stores/chat'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
 import { useThemeStore } from '@/stores/theme'
 import { storeToRefs } from 'pinia'
 
-const chatStore = useChatStore()
 const multiAgentStore = useMultiAgentChatStore()
 const themeStore = useThemeStore()
 
 const { currentTheme, isLight } = storeToRefs(themeStore)
-const chatRefs = storeToRefs(chatStore)
-
-const connectionStatus = ref('disconnected')
+const multiAgentRefs = storeToRefs(multiAgentStore)
 
 const navigationSections = [
   {
@@ -125,7 +120,6 @@ const navigationSections = [
       { to: '/agents', label: '团队成员', meta: '协作角色与状态', icon: markRaw(User) },
       { to: '/digital-employee', label: '数字员工监控中心', meta: '产出与项目跟踪', icon: markRaw(OfficeBuilding) },
       { to: '/task-center-2', label: '任务指挥中心 II', meta: '派发与执行流', icon: markRaw(Operation) },
-      { to: '/chat', label: '团队对话', meta: '单聊工作流', icon: markRaw(ChatLineRound) },
       { to: '/group-chat', label: '群聊会话', meta: '多人协作频道', icon: markRaw(Connection) }
     ]
   },
@@ -151,6 +145,15 @@ const navigationSections = [
   }
 ]
 
+const connectionStatus = computed(() => {
+  const agentStates = Object.values(multiAgentRefs.agents.value || {})
+  if (agentStates.some(agent => agent.isConnecting)) {
+    return 'connecting'
+  }
+
+  return multiAgentRefs.anyConnected.value ? 'connected' : 'disconnected'
+})
+
 const statusText = computed(() => {
   const statusMap = {
     connected: '在线',
@@ -165,18 +168,6 @@ const themeLabel = computed(() => (currentTheme.value === 'light' ? '浅色模�
 function toggleTheme() {
   themeStore.toggle()
 }
-
-watch(
-  [chatRefs.isConnected, chatRefs.isConnecting],
-  ([connected, connecting]) => {
-    if (connecting) {
-      connectionStatus.value = 'connecting'
-      return
-    }
-    connectionStatus.value = connected ? 'connected' : 'disconnected'
-  },
-  { immediate: true }
-)
 
 let hasConnected = false
 

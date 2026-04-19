@@ -47,7 +47,7 @@
       <div v-else-if="!isConnected" class="disconnected">
         <div class="disconnected-icon">🔌</div>
         <p>未连接到 Gateway</p>
-        <p class="disconnected-hint">请先在"对话"页面连接</p>
+        <p class="disconnected-hint">请先确认 Gateway 与 Agent 连接状态</p>
       </div>
 
       <div v-else class="log-list">
@@ -71,10 +71,10 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
-import { useChatStore } from '@/stores/chat'
+import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
 
-const chatStore = useChatStore()
-const { isConnected } = chatStore
+const multiAgentStore = useMultiAgentChatStore()
+const isConnected = computed(() => multiAgentStore.anyConnected)
 
 const loading = ref(false)
 const searchQuery = ref('')
@@ -281,9 +281,13 @@ watch(isConnected, (connected) => {
   }
 })
 
+const handleMultiAgentEvent = (_agentId: string, event: string, payload: any) => {
+  handleEvent(event, payload)
+}
+
 // 组件挂载时注册事件监听器
 onMounted(() => {
-  chatStore.addEventListener(handleEvent)
+  multiAgentStore.addEventListener(handleMultiAgentEvent)
   console.log('[Logs] Component mounted, event listener registered')
 
   // 如果已连接，添加初始日志
@@ -294,7 +298,7 @@ onMounted(() => {
 
 // 组件卸载时移除事件监听器
 onUnmounted(() => {
-  chatStore.removeEventListener(handleEvent)
+  multiAgentStore.removeEventListener(handleMultiAgentEvent)
   console.log('[Logs] Component unmounted, event listener removed')
 })
 </script>

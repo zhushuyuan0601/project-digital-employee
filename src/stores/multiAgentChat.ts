@@ -529,6 +529,7 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
         // 开始处理，清空旧消息
         console.log(`[MultiAgentChat] [${agentId}] [lifecycle] 清空旧消息`)
         agent.messages = []
+        saveMessages(agentId)
       } else if (state === 'error' || payload?.phase === 'error') {
         const error = payload?.data?.error || payload?.error || '未知错误'
         console.error(`[MultiAgentChat] [${agentId}] [lifecycle] 错误:`, error)
@@ -561,6 +562,7 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
       console.log(`[MultiAgentChat] [${agentId}] [chat] 开始处理 (runId: ${runId})，清空旧消息`)
       // 开始处理，清空旧消息
       agent.messages = []
+      saveMessages(agentId)
     } else if (state === 'delta' || state === 'final' || state === 'committed') {
       const text = extractChatText(payload)
       if (text) {
