@@ -55,23 +55,33 @@
           >
             <template #reference>
               <div
-                class="agent-card-mini"
+                class="agent-card"
                 :class="{ active: selectedAgent === agent.id }"
                 @click="selectAgent(agent.id)"
               >
-                <div class="agent-avatar-mini">
-                  <img :src="getAgentIcon(agent.id)" :alt="agent.name" />
-                  <span class="status-dot-mini" :class="getAgentStatus(agent.id)"></span>
-                </div>
-                <div class="agent-info-mini">
-                  <div class="agent-name-mini">{{ agent.name }}</div>
-                  <div class="agent-role-mini">{{ agent.role }}</div>
+                <div class="agent-card__header">
+                  <div class="agent-card__main">
+                    <div class="agent-card__avatar">
+                      <img :src="getAgentIcon(agent.id)" :alt="agent.name" />
+                    </div>
+                    <div>
+                      <div class="agent-card__name">{{ agent.name }}</div>
+                      <div class="agent-card__role">{{ agent.role }}</div>
+                    </div>
+                  </div>
                   <div class="status-badge-mini" :class="getAgentStatus(agent.id)">
-                    <i class="ri-checkbox-circle-line"></i>
                     {{ getAgentStatusText(agent.id) }}
                   </div>
                 </div>
-                <span v-if="hasNewFiles(agent.id)" class="new-file-dot" title="有新文件产出"></span>
+                <div class="agent-card__desc">{{ agent.desc }}</div>
+                <div class="agent-card__footer">
+                  <div class="agent-card__tags">
+                    <span class="tag" v-for="tag in agent.tags" :key="tag">{{ tag }}</span>
+                  </div>
+                  <div class="agent-card__meta">
+                    <i class="ri-message-3-line"></i> {{ agents[agent.id]?.messages.length || 0 }}
+                  </div>
+                </div>
               </div>
             </template>
             <!-- Hover 详情卡片 -->
@@ -111,22 +121,24 @@
           <!-- ClaudeCode 动态角色 -->
           <div
             v-if="claudeCodeSessions.length > 0"
-            class="agent-card-mini"
+            class="agent-card"
             :class="{ active: selectedAgent === 'claude' }"
             @click="selectAgent('claude')"
           >
-            <div class="agent-avatar-mini">
-              <div class="claude-avatar-small"><i class="fas fa-robot"></i></div>
-              <span class="status-dot-mini online"></span>
-            </div>
-            <div class="agent-info-mini">
-              <div class="agent-name-mini">ClaudeCode</div>
-              <div class="agent-role-mini">代码执行者 · {{ claudeCodeSessions.length }} 个活跃会话</div>
+            <div class="agent-card__header">
+              <div class="agent-card__main">
+                <div class="agent-card__avatar claude-avatar-small"><i class="fas fa-robot"></i></div>
+                <div>
+                  <div class="agent-card__name">ClaudeCode</div>
+                  <div class="agent-card__role">代码执行者</div>
+                </div>
+              </div>
               <div class="status-badge-mini busy">
-                <i class="ri-loader-4-line ri-spin"></i>
                 执行中
               </div>
             </div>
+            <div class="agent-card__desc">{{ claudeCodeSessions.length }} 个活跃会话</div>
+          </div>
           </div>
         </div>
       </div>
