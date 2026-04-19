@@ -12,28 +12,28 @@
 /* ========== CSS 变量系统 - 暗色主题（默认） ========== */
 :root,
 :root.dark-theme {
-  /* 主色调 - 战术蓝绿色 */
-  --color-primary: #00f0ff;
-  --color-primary-dim: #00c8d4;
-  --color-primary-glow: rgba(0, 240, 255, 0.3);
-  --color-primary-bg: rgba(0, 240, 255, 0.08);
-  --color-primary-light: rgba(0, 240, 255, 0.15);
+  /* 主色调 - 柔和蓝青色（降低饱和度，更专业） */
+  --color-primary: #4A9D9C;
+  --color-primary-dim: #3D8584;
+  --color-primary-glow: rgba(74, 157, 156, 0.25);
+  --color-primary-bg: rgba(74, 157, 156, 0.08);
+  --color-primary-light: rgba(74, 157, 156, 0.12);
 
-  /* 次要色 - 战术紫色 */
-  --color-secondary: #bd00ff;
-  --color-secondary-dim: #9a00d4;
-  --color-secondary-glow: rgba(189, 0, 255, 0.3);
-  --color-secondary-bg: rgba(189, 0, 255, 0.08);
+  /* 次要色 - 柔和靛蓝（更优雅，不刺眼） */
+  --color-secondary: #6B7BA8;
+  --color-secondary-dim: #5A6A94;
+  --color-secondary-glow: rgba(107, 123, 168, 0.25);
+  --color-secondary-bg: rgba(107, 123, 168, 0.08);
 
-  /* 强调色 - 警示橙 */
-  --color-accent: #ff6b00;
-  --color-accent-dim: #d45a00;
-  --color-accent-glow: rgba(255, 107, 0, 0.3);
+  /* 强调色 - 柔和橙棕 */
+  --color-accent: #D4794A;
+  --color-accent-dim: #B8683F;
+  --color-accent-glow: rgba(212, 121, 74, 0.25);
 
-  /* 成功色 - 战术绿 */
-  --color-success: #00ff88;
-  --color-success-dim: #00d470;
-  --color-success-glow: rgba(0, 255, 136, 0.3);
+  /* 成功色 - 柔和绿 */
+  --color-success: #5BA88C;
+  --color-success-dim: #4D8F77;
+  --color-success-glow: rgba(91, 168, 140, 0.25);
 
   /* 警告色 */
   --color-warning: #ffaa00;
@@ -68,21 +68,21 @@
   --text-inverse: #0a0e14;
   --text-on-primary: #0a0e14;
 
-  /* 终端色板 - 深色主题 */
+  /* 终端色板 - 深色主题（柔和色调） */
   --terminal-black: #0a0e14;
-  --terminal-red: #ff4757;
-  --terminal-green: #00ff88;
-  --terminal-yellow: #ffaa00;
-  --terminal-blue: #00a8ff;
-  --terminal-magenta: #bd00ff;
-  --terminal-cyan: #00f0ff;
+  --terminal-red: #C97575;
+  --terminal-green: #5BA88C;
+  --terminal-yellow: #C9A86C;
+  --terminal-blue: #5A8DAD;
+  --terminal-magenta: #9B7CB6;
+  --terminal-cyan: #4A9D9C;
   --terminal-white: #e8f0ff;
 
-  /* 光晕效果 - 战术发光 */
-  --glow-primary: 0 0 20px rgba(0, 240, 255, 0.4), 0 0 40px rgba(0, 240, 255, 0.2);
-  --glow-secondary: 0 0 20px rgba(189, 0, 255, 0.4);
-  --glow-success: 0 0 20px rgba(0, 255, 136, 0.4);
-  --glow-error: 0 0 20px rgba(255, 51, 102, 0.4);
+  /* 光晕效果 - 柔和发光（降低强度） */
+  --glow-primary: 0 0 10px rgba(74, 157, 156, 0.3), 0 0 20px rgba(74, 157, 156, 0.15);
+  --glow-secondary: 0 0 10px rgba(107, 123, 168, 0.3);
+  --glow-success: 0 0 10px rgba(91, 168, 140, 0.3);
+  --glow-error: 0 0 10px rgba(201, 117, 117, 0.3);
 
   /* 阴影 - 深色阴影 */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
@@ -243,10 +243,10 @@
   --transition-bounce: 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* 暗色主题的文字发光效果 */
+/* 暗色主题的文字发光效果（柔和） */
 :root.dark-theme {
-  --text-shadow-primary: 0 0 20px rgba(0, 240, 255, 0.4);
-  --text-shadow-glow: 0 0 20px rgba(0, 240, 255, 0.3);
+  --text-shadow-primary: 0 0 10px rgba(74, 157, 156, 0.3);
+  --text-shadow-glow: 0 0 10px rgba(74, 157, 156, 0.2);
 }
 
 /* ========== 全局重置 ========== */
@@ -1585,15 +1585,15 @@ a:hover {
 
 /* ========== 暗色主题恢复发光效果 ========== */
 :root.dark-theme .logo-icon {
-  filter: drop-shadow(0 0 10px rgba(0, 240, 255, 0.5));
+  filter: drop-shadow(0 0 8px rgba(74, 157, 156, 0.4));
 }
 
 :root.dark-theme .title-main {
-  text-shadow: 0 0 20px rgba(0, 240, 255, 0.4);
+  text-shadow: 0 0 10px rgba(74, 157, 156, 0.3);
 }
 
 :root.dark-theme .widget-value {
-  text-shadow: 0 0 8px rgba(0, 240, 255, 0.3);
+  text-shadow: 0 0 6px rgba(74, 157, 156, 0.25);
 }
 
 :root.dark-theme .btn-primary {
@@ -1601,5 +1601,5 @@ a:hover {
 }
 
 :root.dark-theme .progress-fill {
-  box-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+  box-shadow: 0 0 8px rgba(74, 157, 156, 0.35);
 }

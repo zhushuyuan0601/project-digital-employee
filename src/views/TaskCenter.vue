@@ -776,7 +776,7 @@ onMounted(() => {
 }
 
 .ai-status.status--connected {
-  background: rgba(0, 255, 136, 0.1);
+  background: rgba(91, 168, 140, 0.1);
   border-color: var(--color-success);
   color: var(--color-success);
 }
@@ -791,7 +791,7 @@ onMounted(() => {
 
 .ai-status.status--connected .status-dot {
   background: var(--color-success);
-  box-shadow: 0 0 6px rgba(0, 255, 136, 0.4);
+  box-shadow: 0 0 6px rgba(91, 168, 140, 0.35);
   animation: pulse 2s ease-out-quart infinite;
 }
 
@@ -991,8 +991,8 @@ onMounted(() => {
 
 /* 阶段状态 */
 .phase-item.phase--completed {
-  background: rgba(0, 255, 136, 0.1);
-  border-color: rgba(0, 255, 136, 0.3);
+  background: rgba(91, 168, 140, 0.1);
+  border-color: rgba(91, 168, 140, 0.3);
 }
 
 .phase-item.phase--completed .phase-icon {
@@ -1007,17 +1007,17 @@ onMounted(() => {
 
 .phase-item.phase--completed .phase-dot {
   background: var(--color-success);
-  box-shadow: 0 0 4px rgba(0, 255, 136, 0.4);
+  box-shadow: 0 0 4px rgba(91, 168, 140, 0.35);
 }
 
 .phase-item.phase--completed:not(:last-child)::after {
   background: var(--color-success);
-  box-shadow: 0 0 4px rgba(0, 255, 136, 0.5);
+  box-shadow: 0 0 4px rgba(91, 168, 140, 0.4);
 }
 
 .phase-item.phase--active {
-  background: rgba(0, 240, 255, 0.08);
-  border-color: rgba(0, 240, 255, 0.3);
+  background: rgba(74, 157, 156, 0.08);
+  border-color: rgba(74, 157, 156, 0.3);
 }
 
 .phase-item.phase--active .phase-icon {
@@ -1032,12 +1032,12 @@ onMounted(() => {
 
 .phase-item.phase--active .phase-dot {
   background: var(--color-primary);
-  box-shadow: 0 0 6px rgba(0, 240, 255, 0.5);
+  box-shadow: 0 0 6px rgba(74, 157, 156, 0.4);
   animation: dotPulse 2s ease-out-quart infinite;
 }
 
 .phase-item.phase--active:not(:last-child)::after {
-  background: linear-gradient(90deg, var(--color-primary), rgba(0, 240, 255, 0.3));
+  background: linear-gradient(90deg, var(--color-primary), rgba(74, 157, 156, 0.25));
 }
 
 .phase-item.phase--pending .phase-icon {
@@ -1050,10 +1050,10 @@ onMounted(() => {
 
 @keyframes phasePulse {
   0%, 100% {
-    box-shadow: 0 0 0 rgba(0, 240, 255, 0);
+    box-shadow: 0 0 0 rgba(74, 157, 156, 0);
   }
   50% {
-    box-shadow: 0 0 10px rgba(0, 240, 255, 0.15);
+    box-shadow: 0 0 8px rgba(74, 157, 156, 0.12);
   }
 }
 
@@ -1392,8 +1392,8 @@ onMounted(() => {
   gap: 12px;
   margin-bottom: 12px;
   padding: 10px 14px;
-  background: rgba(0, 240, 255, 0.05);
-  border: 1px solid rgba(0, 240, 255, 0.15);
+  background: rgba(74, 157, 156, 0.05);
+  border: 1px solid rgba(74, 157, 156, 0.15);
   border-radius: 8px;
   flex-wrap: nowrap;
   justify-content: flex-start;
@@ -1529,7 +1529,7 @@ onMounted(() => {
 
 .terminal-dots .dot.red { background: var(--color-error); box-shadow: 0 0 4px rgba(255, 51, 102, 0.4); }
 .terminal-dots .dot.yellow { background: var(--color-warning); box-shadow: 0 0 4px rgba(255, 170, 0, 0.4); }
-.terminal-dots .dot.green { background: var(--color-success); box-shadow: 0 0 4px rgba(0, 255, 136, 0.4); }
+.terminal-dots .dot.green { background: var(--color-success); box-shadow: 0 0 4px rgba(91, 168, 140, 0.35); }
 
 .terminal-body {
   max-height: 400px;
@@ -1615,11 +1615,11 @@ onMounted(() => {
   text-transform: uppercase;
 }
 
-.line-agent.agent--xiaomu { background: rgba(0, 255, 136, 0.15); color: var(--color-success); border-color: var(--color-success); }
-.line-agent.agent--xiaokai { background: rgba(0, 240, 255, 0.15); color: var(--color-primary); border-color: var(--color-primary); }
-.line-agent.agent--xiaochan { background: rgba(189, 0, 255, 0.15); color: var(--color-secondary); border-color: var(--color-secondary); }
-.line-agent.agent--xiaoyan { background: rgba(255, 170, 0, 0.15); color: var(--color-warning); border-color: var(--color-warning); }
-.line-agent.agent--xiaoce { background: rgba(255, 51, 102, 0.15); color: #ff3366; border-color: #ff3366; }
+.line-agent.agent--xiaomu { background: rgba(91, 168, 140, 0.12); color: var(--color-success); border-color: var(--color-success); }
+.line-agent.agent--xiaokai { background: rgba(74, 157, 156, 0.12); color: var(--color-primary); border-color: var(--color-primary); }
+.line-agent.agent--xiaochan { background: rgba(107, 123, 168, 0.12); color: var(--color-secondary); border-color: var(--color-secondary); }
+.line-agent.agent--xiaoyan { background: rgba(201, 168, 108, 0.12); color: var(--color-warning); border-color: var(--color-warning); }
+.line-agent.agent--xiaoce { background: rgba(201, 117, 117, 0.12); color: var(--color-error); border-color: var(--color-error); }
 
 .line-content {
   color: var(--text-secondary);
@@ -1742,8 +1742,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, rgba(0, 240, 255, 0.1) 0%, rgba(189, 0, 255, 0.05) 100%);
-  border: 1px solid rgba(0, 240, 255, 0.2);
+  background: linear-gradient(135deg, rgba(74, 157, 156, 0.08) 0%, rgba(107, 123, 168, 0.04) 100%);
+  border: 1px solid rgba(74, 157, 156, 0.18);
   border-radius: 10px;
   overflow: hidden;
 }
@@ -1849,12 +1849,12 @@ onMounted(() => {
 }
 
 .agent-task-item--in_progress {
-  background: rgba(0, 240, 255, 0.08);
-  border-color: rgba(0, 240, 255, 0.3);
+  background: rgba(74, 157, 156, 0.08);
+  border-color: rgba(74, 157, 156, 0.3);
 }
 
 .agent-task-item--completed {
-  background: rgba(0, 255, 136, 0.05);
+  background: rgba(91, 168, 140, 0.05);
   border-color: rgba(0, 255, 136, 0.2);
 }
 
@@ -1945,8 +1945,8 @@ onMounted(() => {
 }
 
 .agent-file-item:hover {
-  background: rgba(0, 240, 255, 0.05);
-  border-color: rgba(0, 240, 255, 0.2);
+  background: rgba(74, 157, 156, 0.05);
+  border-color: rgba(74, 157, 156, 0.2);
 }
 
 .agent-file-item .file-icon {
@@ -2280,7 +2280,12 @@ onMounted(() => {
 
 :root.light-theme .agent-task-item--completed {
   background: rgba(0, 179, 101, 0.06);
-  border-color: #b3ebd1;
+  border-color: rgba(0, 179, 101, 0.3);
+}
+
+:root.light-theme .agent-task-item--error {
+  background: rgba(255, 77, 79, 0.06);
+  border-color: rgba(255, 77, 79, 0.3);
 }
 
 :root.light-theme .task-desc {
@@ -2295,17 +2300,17 @@ onMounted(() => {
 
 :root.light-theme .agent-log-item--success {
   background: rgba(0, 179, 101, 0.08);
-  border-color: #b3ebd1;
+  border-color: rgba(0, 179, 101, 0.3);
 }
 
 :root.light-theme .agent-log-item--warning {
   background: rgba(255, 122, 45, 0.08);
-  border-color: #ffd8bf;
+  border-color: rgba(255, 122, 45, 0.3);
 }
 
 :root.light-theme .agent-log-item--error {
   background: rgba(255, 77, 79, 0.08);
-  border-color: #ffc9c9;
+  border-color: rgba(255, 77, 79, 0.3);
 }
 
 :root.light-theme .log-time {
@@ -2375,7 +2380,7 @@ onMounted(() => {
 
   .phase-item.phase--active {
     animation: none;
-    box-shadow: 0 0 4px rgba(0, 240, 255, 0.3);
+    box-shadow: 0 0 4px rgba(74, 157, 156, 0.25);
   }
 
   .phase-item.phase--active .phase-icon,

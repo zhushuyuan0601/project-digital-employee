@@ -16,25 +16,31 @@
 
     <!-- 执行日志区域 - 仅在任务执行时显示 -->
     <div v-if="logs && logs.length > 0" class="agent-card__logs">
-      <div class="logs-terminal">
-        <div
-          v-for="log in displayedLogs"
-          :key="log.id"
-          class="log-line"
-          :class="[
-            `type--${log.type}`,
-            { 'fade-in': log.id === latestLogId },
-            { 'is-empty': log.message === '' },
-            { 'is-divider': log.message.includes('━━') }
-          ]"
-        >
-          <span class="log-time">{{ formatTime(log.timestamp) }}</span>
-          <span class="log-content">
-            <span class="log-icon">{{ getLogIcon(log.type, log.message) }}</span>
-            {{ log.message }}
-          </span>
+        <div class="logs-header">
+          <span class="logs-title"><i class="fas fa-terminal"></i> 执行日志</span>
+          <span class="logs-count">{{ logs.length }} 条</span>
         </div>
-      </div>
+        <div class="logs-terminal">
+          <div
+            v-for="log in displayedLogs"
+            :key="log.id"
+            class="log-line"
+            :class="[
+              `type--${log.type}`,
+              { 'fade-in': log.id === latestLogId },
+              { 'is-empty': log.message === '' },
+              { 'is-divider': log.message.includes('━━') }
+            ]"
+          >
+            <span class="log-time">{{ formatTime(log.timestamp) }}</span>
+            <span class="log-content">
+              <span class="log-icon" v-if="log.message && !log.message.includes('━━')">
+                <i :class="getLogIconClass(log.type)"></i>
+              </span>
+              <span class="log-message">{{ log.message }}</span>
+            </span>
+          </div>
+        </div>
     </div>
 
     <div class="agent-card__footer">
@@ -92,13 +98,15 @@ const formatTime = (timestamp: number) => {
   return date.toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
-// 获取日志图标
-const getLogIcon = (type: string, message: string) => {
-  if (message === '' || message.includes('━━')) return ''
-  if (type === 'success') return '✅'
-  if (type === 'error') return '❌'
-  if (type === 'warning') return '⚠️'
-  return 'ℹ️'
+// 获取日志图标类名
+const getLogIconClass = (type: string) => {
+  const iconMap: Record<string, string> = {
+    success: 'fas fa-check-circle',
+    error: 'fas fa-times-circle',
+    warning: 'fas fa-exclamation-triangle',
+    info: 'fas fa-info-circle'
+  }
+  return iconMap[type] || 'fas fa-angle-right'
 }
 
 // 监听日志变化，自动滚动到底部
@@ -290,31 +298,67 @@ watch(() => props.logs?.length, () => {
 
 /* 执行日志区域 */
 .agent-card__logs {
-  margin-top: 8px;
-  margin-bottom: 8px;
+  margin-top: 12px;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.logs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.logs-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.logs-title i {
+  color: var(--color-primary);
+  font-size: 10px;
+}
+
+.logs-count {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: var(--font-mono);
 }
 
 .logs-terminal {
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 6px;
-  padding: 8px;
-  max-height: 120px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 10px;
+  max-height: 140px;
   overflow-y: auto;
   scroll-behavior: smooth;
   font-family: var(--font-mono);
-  font-size: 10px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.6;
 }
 
 .log-line {
   display: flex;
   align-items: flex-start;
-  gap: 6px;
-  padding: 3px 6px;
-  margin-bottom: 2px;
-  border-radius: 4px;
-  border-left: 2px solid transparent;
+  gap: 8px;
+  padding: 5px 8px;
+  margin-bottom: 3px;
+  border-radius: 6px;
+  border-left: 3px solid transparent;
   transition: all 0.2s ease;
+}
+
+.log-line:hover {
+  background: rgba(255, 255, 255, 0.05);
 }
 
 /* 淡入动画 */
@@ -339,55 +383,84 @@ watch(() => props.logs?.length, () => {
 
 .log-line.type--success {
   border-left-color: var(--color-success);
-  background: rgba(0, 255, 136, 0.08);
+  background: rgba(0, 255, 136, 0.06);
 }
 
 .log-line.type--warning {
   border-left-color: var(--color-warning);
-  background: rgba(255, 170, 0, 0.08);
+  background: rgba(255, 170, 0, 0.06);
 }
 
 .log-line.type--error {
   border-left-color: var(--color-error);
-  background: rgba(255, 51, 102, 0.08);
+  background: rgba(255, 51, 102, 0.06);
 }
 
 .log-line.is-empty {
-  padding: 2px 6px;
+  padding: 2px 8px;
   background: transparent;
   border-left-color: transparent;
 }
 
 .log-line.is-divider {
-  padding: 4px 6px;
+  padding: 6px 8px;
   background: transparent;
   border-left-color: transparent;
+  margin: 6px 0;
 }
 
 .log-line.is-divider .log-content {
   color: var(--color-primary);
   font-weight: 700;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
 }
 
 .log-time {
-  font-size: 9px;
-  color: rgba(255, 255, 255, 0.4);
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
   font-family: var(--font-mono);
   white-space: nowrap;
   flex-shrink: 0;
+  min-width: 55px;
 }
 
 .log-content {
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.85);
   display: flex;
-  align-items: center;
-  gap: 4px;
+  align-items: flex-start;
+  gap: 6px;
   word-break: break-all;
+  flex: 1;
 }
 
 .log-icon {
   flex-shrink: 0;
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.log-icon i {
+  font-size: 10px;
+}
+
+.log-line.type--success .log-icon i {
+  color: var(--color-success);
+}
+
+.log-line.type--error .log-icon i {
+  color: var(--color-error);
+}
+
+.log-line.type--warning .log-icon i {
+  color: var(--color-warning);
+}
+
+.log-line.type--info .log-icon i {
+  color: var(--color-primary);
+}
+
+.log-message {
+  flex: 1;
 }
 
 .click-hint {

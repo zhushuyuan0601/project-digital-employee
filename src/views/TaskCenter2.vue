@@ -13,17 +13,17 @@
             {{ aiStatusText }}
           </span>
         </div>
-        <button class="btn btn-success btn-sm" @click="handleConnectAll" :disabled="allConnected">
-          <span class="btn-icon">⬡</span>
-          🔗 全连
+        <button type="button" class="btn btn-success btn-sm" @click="handleConnectAll" :disabled="allConnected">
+          <span class="btn-icon"><i class="fas fa-plug"></i></span>
+          全连
         </button>
-        <button class="btn btn-danger btn-sm" @click="handleDisconnectAll" :disabled="!anyConnected">
-          <span class="btn-icon">⏻</span>
-          ✕ 全断
+        <button type="button" class="btn btn-danger btn-sm" @click="handleDisconnectAll" :disabled="!anyConnected">
+          <span class="btn-icon"><i class="fas fa-power-off"></i></span>
+          全断
         </button>
-        <button class="btn btn-secondary btn-sm" @click="handleReset">
-          <span class="btn-icon">↻</span>
-          🗑️ 重置
+        <button type="button" class="btn btn-secondary btn-sm" @click="handleReset">
+          <span class="btn-icon"><i class="fas fa-trash-alt"></i></span>
+          重置
         </button>
       </div>
     </div>
@@ -34,7 +34,7 @@
       <div class="task-center__left">
         <div class="task-input-section">
           <div class="section-title">
-            <span class="title-icon">📝</span>
+            <span class="title-icon"><i class="fas fa-edit"></i></span>
             <span>下达任务</span>
           </div>
 
@@ -51,12 +51,13 @@
 
           <div class="send-btn-row">
             <button
+              type="button"
               class="btn btn-primary btn-lg send-btn-task"
               @click="sendTask"
               :disabled="!taskInput.trim() || !xiaomuConnected"
             >
-              <span class="btn-icon">⟳</span>
-              🚀 下发任务
+              <span class="btn-icon"><i class="fas fa-paper-plane"></i></span>
+              下发任务
             </button>
             <span class="connection-hint" :class="{ connected: xiaomuConnected }">
               <span class="hint-dot"></span>
@@ -67,7 +68,7 @@
 
         <!-- 系统提示 -->
         <div class="info-panel">
-          <div class="info-title">💡 使用说明</div>
+          <div class="info-title"><i class="fas fa-lightbulb"></i> 使用说明</div>
           <div class="info-content">
             <p>1. 在上方输入框中输入任务内容</p>
             <p>2. 点击「下发任务」发送给小呦（项目统筹）</p>
@@ -250,7 +251,7 @@
             <div class="agent-panel-header" @click="toggleClaudePanel">
               <div class="agent-info-large">
                 <div class="agent-avatar-large">
-                  <div class="claude-avatar">🤖</div>
+                  <div class="claude-avatar"><i class="fas fa-robot"></i></div>
                   <span class="connection-dot connected"></span>
                 </div>
                 <div class="agent-details">
@@ -262,7 +263,7 @@
                 <span class="status-dot"></span>
                 <span class="status-text">执行中</span>
               </div>
-              <button class="expand-btn" @click.stop="toggleClaudePanel">
+              <button type="button" aria-label="展开/收起 Claude 会话" class="expand-btn" @click.stop="toggleClaudePanel">
                 <span :class="{ 'expanded': expandedClaudeSession }">▼</span>
               </button>
             </div>
@@ -277,9 +278,9 @@
                   <span class="session-name-mini">{{ getSessionDisplayName(session) }}</span>
                 </div>
                 <div class="session-mini-stats">
-                  <span>📊 {{ session.tokens }}</span>
-                  <span>💬 {{ session.userMessages }}/{{ session.assistantMessages }}</span>
-                  <span>🔧 {{ session.toolUses }}</span>
+                  <span><i class="fas fa-chart-bar"></i> {{ session.tokens }}</span>
+                  <span><i class="fas fa-comments"></i> {{ session.userMessages }}/{{ session.assistantMessages }}</span>
+                  <span><i class="fas fa-tools"></i> {{ session.toolUses }}</span>
                 </div>
               </div>
             </div>
@@ -289,13 +290,13 @@
               <!-- 会话信息栏 -->
               <div class="session-info-bar">
                 <div class="session-info-left">
-                  <button class="back-btn" @click="expandedClaudeSession = false">← 返回</button>
+                  <button type="button" aria-label="返回会话列表" class="back-btn" @click="expandedClaudeSession = false"><i class="fas fa-arrow-left"></i> 返回</button>
                   <span class="session-model-badge">{{ selectedClaudeSession.model }}</span>
                   <span class="session-path-mini">{{ selectedClaudeSession.workingDir }}</span>
                 </div>
                 <div class="session-info-right">
                   <span class="token-stat">Token: {{ selectedClaudeSession.tokens }}</span>
-                  <span class="refresh-btn" @click="refreshClaudeTranscript">🔄</span>
+                  <span class="refresh-btn" @click="refreshClaudeTranscript"><i class="fas fa-sync-alt"></i></span>
                 </div>
               </div>
 
@@ -315,9 +316,9 @@
                     <div class="msg-content">
                       <template v-for="(part, pidx) in msg.parts" :key="pidx">
                         <div v-if="part.type === 'text'" class="msg-text">{{ part.text }}</div>
-                        <div v-else-if="part.type === 'thinking'" class="msg-thinking">💭 {{ part.thinking }}</div>
+                        <div v-else-if="part.type === 'thinking'" class="msg-thinking"><i class="fas fa-brain"></i> {{ part.thinking }}</div>
                         <div v-else-if="part.type === 'tool_use'" class="msg-tool">
-                          <span class="tool-name">🔧 {{ part.name }}</span>
+                          <span class="tool-name"><i class="fas fa-tools"></i> {{ part.name }}</span>
                           <pre class="tool-input">{{ part.input }}</pre>
                         </div>
                         <div v-else-if="part.type === 'tool_result'" class="msg-tool-result" :class="{ 'is-error': part.isError }">
@@ -386,7 +387,7 @@
         <!-- 产出文件 -->
         <div class="detail-section">
           <div class="section-header-with-action">
-            <h5>📁 产出文件</h5>
+            <h5><i class="fas fa-folder-open"></i> 产出文件</h5>
             <el-button size="small" type="primary" plain @click="refreshFiles" :loading="refreshing">
               <el-icon><Refresh /></el-icon>
             </el-button>
@@ -414,7 +415,7 @@
 
         <!-- 执行日志 -->
         <div class="detail-section">
-          <h5>📜 执行日志</h5>
+          <h5><i class="fas fa-scroll"></i> 执行日志</h5>
           <div class="agent-logs-list">
             <div
               v-for="msg in agents[selectedAgent]?.messages"
@@ -478,7 +479,11 @@ import { AGENT_CONFIG } from '@/simulation'
 import MarkdownIt from 'markdown-it'
 
 const multiAgentStore = useMultiAgentChatStore()
-const md = new MarkdownIt()
+const md = new MarkdownIt({
+  html: false, // 禁用HTML，防止XSS攻击
+  linkify: true,
+  typographer: true
+})
 
 // 连接状态
 const aiStatus = ref<'connected' | 'disconnected' | 'error'>('connected')
@@ -657,9 +662,9 @@ const sendClaudeMessage = async () => {
 // 获取消息角色标签
 const getMessageRoleLabel = (role: string) => {
   switch (role) {
-    case 'user': return '👤 用户'
-    case 'assistant': return '🤖 Claude'
-    case 'system': return '⚙️ 系统'
+    case 'user': return '<i class="fas fa-user"></i> 用户'
+    case 'assistant': return '<i class="fas fa-robot"></i> Claude'
+    case 'system': return '<i class="fas fa-cog"></i> 系统'
     default: return role
   }
 }
@@ -907,13 +912,13 @@ const getAgentIcon = (agentId: string) => {
 
 // 获取文件图标
 const getFileIcon = (fileName: string) => {
-  if (/\.(md|markdown)$/i.test(fileName)) return '📘'
-  if (/\.txt$/i.test(fileName)) return '📄'
-  if (/\.html?$/i.test(fileName)) return '🌐'
-  if (/\.docx?$/i.test(fileName)) return '📝'
-  if (/\.pptx?$/i.test(fileName)) return '📊'
-  if (/\.xlsx?$/i.test(fileName)) return '📈'
-  return '📁'
+  if (/\.(md|markdown)$/i.test(fileName)) return '<i class="fas fa-file-code"></i>'
+  if (/\.txt$/i.test(fileName)) return '<i class="fas fa-file-alt"></i>'
+  if (/\.html?$/i.test(fileName)) return '<i class="fas fa-globe"></i>'
+  if (/\.docx?$/i.test(fileName)) return '<i class="fas fa-file-word"></i>'
+  if (/\.pptx?$/i.test(fileName)) return '<i class="fas fa-file-powerpoint"></i>'
+  if (/\.xlsx?$/i.test(fileName)) return '<i class="fas fa-file-excel"></i>'
+  return '<i class="fas fa-file"></i>'
 }
 
 // 获取文件图标样式类
@@ -1187,7 +1192,7 @@ onUnmounted(() => {
   font-size: 26px;
   font-weight: 700;
   color: var(--color-primary);
-  text-shadow: 0 0 20px rgba(0, 240, 255, 0.4);
+  text-shadow: 0 0 10px rgba(74, 157, 156, 0.3);
   letter-spacing: 0.1em;
   margin: 0;
 }
@@ -1221,7 +1226,7 @@ onUnmounted(() => {
 }
 
 .ai-status.status--connected {
-  background: rgba(0, 255, 136, 0.1);
+  background: rgba(91, 168, 140, 0.1);
   border-color: var(--color-success);
   color: var(--color-success);
 }
@@ -1235,7 +1240,7 @@ onUnmounted(() => {
 
 .ai-status.status--connected .status-dot {
   background: var(--color-success);
-  box-shadow: 0 0 8px rgba(0, 255, 136, 0.6);
+  box-shadow: 0 0 6px rgba(91, 168, 140, 0.4);
   animation: pulse 1.5s ease-in-out infinite;
 }
 
@@ -1331,7 +1336,7 @@ onUnmounted(() => {
 
 .task-input :deep(.el-textarea__inner):focus {
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px rgba(0, 240, 255, 0.1);
+  box-shadow: 0 0 0 2px rgba(74, 157, 156, 0.1);
 }
 
 .send-btn-row {
@@ -1366,13 +1371,13 @@ onUnmounted(() => {
 
 .connection-hint.connected .hint-dot {
   background: var(--color-success);
-  box-shadow: 0 0 6px rgba(0, 255, 136, 0.6);
+  box-shadow: 0 0 6px rgba(91, 168, 140, 0.4);
   animation: pulse 1.5s ease-in-out infinite;
 }
 
 /* 信息面板 */
 .info-panel {
-  width: 280px;
+  width: min(280px, 100%);
   flex-shrink: 0;
   background: var(--bg-panel);
   border: 1px solid var(--grid-line);
@@ -1407,6 +1412,27 @@ onUnmounted(() => {
   gap: 16px;
 }
 
+@media (max-width: 1024px) {
+  .agents-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .task-center__header {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .task-center__left {
+    flex-direction: column;
+  }
+
+  .info-panel {
+    width: 100%;
+  }
+}
+
 .agent-panel {
   background: var(--bg-panel);
   border: 1px solid var(--grid-line);
@@ -1414,17 +1440,19 @@ onUnmounted(() => {
   overflow: hidden;
   cursor: pointer;
   transition: all 0.2s;
+  contain: layout paint;
 }
 
 .agent-panel:hover {
-  border-color: rgba(0, 240, 255, 0.3);
-  box-shadow: 0 0 20px rgba(0, 240, 255, 0.1);
+  border-color: rgba(74, 157, 156, 0.25);
+  box-shadow: 0 0 10px rgba(74, 157, 156, 0.08);
 }
 
 .agent-panel.is-busy {
   border-color: rgba(255, 107, 50, 0.5);
   box-shadow: 0 0 20px rgba(255, 107, 50, 0.2);
   animation: busy-glow 2s ease-in-out infinite;
+  will-change: box-shadow;
 }
 
 @keyframes busy-glow {
@@ -1432,11 +1460,11 @@ onUnmounted(() => {
   50% { box-shadow: 0 0 30px rgba(255, 107, 50, 0.4); }
 }
 
-.agent-panel--xiaomu { border-left: 4px solid var(--color-success); }
-.agent-panel--xiaoyan { border-left: 4px solid var(--color-warning); }
-.agent-panel--xiaochan { border-left: 4px solid var(--color-secondary); }
-.agent-panel--xiaokai { border-left: 4px solid var(--color-primary); }
-.agent-panel--xiaoce { border-left: 4px solid #ff3366; }
+.agent-panel--xiaomu { background: linear-gradient(to right, rgba(91, 168, 140, 0.15) 0%, transparent 4px); }
+.agent-panel--xiaoyan { background: linear-gradient(to right, rgba(212, 121, 74, 0.15) 0%, transparent 4px); }
+.agent-panel--xiaochan { background: linear-gradient(to right, rgba(107, 123, 168, 0.15) 0%, transparent 4px); }
+.agent-panel--xiaokai { background: linear-gradient(to right, rgba(74, 157, 156, 0.15) 0%, transparent 4px); }
+.agent-panel--xiaoce { background: linear-gradient(to right, rgba(255, 77, 79, 0.15) 0%, transparent 4px); }
 
 .agent-panel-header {
   display: flex;
@@ -1481,7 +1509,7 @@ onUnmounted(() => {
 
 .connection-dot.connected {
   background: var(--color-success);
-  box-shadow: 0 0 6px rgba(0, 255, 136, 0.6);
+  box-shadow: 0 0 6px rgba(91, 168, 140, 0.4);
 }
 
 .agent-details {
@@ -1513,21 +1541,21 @@ onUnmounted(() => {
 }
 
 .status-badge.status--idle {
-  background: rgba(0, 255, 136, 0.1);
+  background: rgba(91, 168, 140, 0.1);
 }
 
 .status-badge.status--idle .status-dot {
   background: var(--color-success);
-  box-shadow: 0 0 6px rgba(0, 255, 136, 0.6);
+  box-shadow: 0 0 6px rgba(91, 168, 140, 0.4);
 }
 
 .status-badge.status--busy {
-  background: rgba(255, 107, 50, 0.15);
+  background: rgba(212, 121, 74, 0.12);
 }
 
 .status-badge.status--busy .status-dot {
   background: var(--color-warning);
-  box-shadow: 0 0 8px rgba(255, 107, 50, 0.6);
+  box-shadow: 0 0 6px rgba(212, 121, 74, 0.4);
   animation: pulse 1s ease-in-out infinite;
 }
 
@@ -1594,21 +1622,21 @@ onUnmounted(() => {
   padding: 8px 10px;
   background: var(--bg-surface);
   border-radius: 6px;
-  border-left: 3px solid transparent;
+  border: 1px solid var(--border-default);
 }
 
 .log-item.type-user {
-  border-left-color: var(--color-secondary);
-  background: rgba(189, 0, 255, 0.05);
+  border-color: var(--color-secondary);
+  background: rgba(107, 123, 168, 0.05);
 }
 
 .log-item.type-assistant {
-  border-left-color: var(--color-primary);
-  background: rgba(0, 240, 255, 0.05);
+  border-color: var(--color-primary);
+  background: rgba(74, 157, 156, 0.05);
 }
 
 .log-item.type-system {
-  border-left-color: var(--text-muted);
+  border-color: var(--text-muted);
   background: rgba(136, 144, 168, 0.05);
 }
 
@@ -1652,7 +1680,7 @@ onUnmounted(() => {
 /* 正在输入指示器 */
 .log-item.typing-indicator {
   border-left-color: var(--color-primary);
-  background: rgba(0, 240, 255, 0.05);
+  background: rgba(74, 157, 156, 0.05);
 }
 
 .typing-content {
@@ -1811,7 +1839,7 @@ onUnmounted(() => {
 
 .agent-file-item:hover {
   border-color: var(--color-primary);
-  background: rgba(0, 240, 255, 0.05);
+  background: rgba(74, 157, 156, 0.05);
 }
 
 .file-icon {
@@ -1872,18 +1900,18 @@ onUnmounted(() => {
 }
 
 .agent-log-item--user {
-  background: rgba(189, 0, 255, 0.05);
-  border-left: 3px solid var(--color-secondary);
+  background: rgba(107, 123, 168, 0.05);
+  border: 1px solid var(--color-secondary);
 }
 
 .agent-log-item--assistant {
-  background: rgba(0, 240, 255, 0.05);
-  border-left: 3px solid var(--color-primary);
+  background: rgba(74, 157, 156, 0.05);
+  border: 1px solid var(--color-primary);
 }
 
 .agent-log-item--system {
   background: rgba(136, 144, 168, 0.05);
-  border-left: 3px solid var(--text-muted);
+  border: 1px solid var(--text-muted);
 }
 
 .log-time {
@@ -2487,7 +2515,7 @@ onUnmounted(() => {
 
 /* ClaudeCode 动态角色样式 */
 .agent-panel--claudecode {
-  border-left: 4px solid #8b5cf6;
+  border: 1px solid rgba(139, 92, 246, 0.3);
   background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.1) 100%);
 }
 
@@ -2500,6 +2528,7 @@ onUnmounted(() => {
   border-color: rgba(139, 92, 246, 0.6);
   box-shadow: 0 0 25px rgba(139, 92, 246, 0.3);
   animation: claude-busy-glow 2s ease-in-out infinite;
+  will-change: box-shadow;
 }
 
 @keyframes claude-busy-glow {
@@ -2530,7 +2559,7 @@ onUnmounted(() => {
   padding: 10px 12px;
   background: rgba(0, 0, 0, 0.2);
   border-radius: 8px;
-  border-left: 3px solid #8b5cf6;
+  border: 1px solid rgba(139, 92, 246, 0.3);
 }
 
 .session-header {
@@ -2645,7 +2674,7 @@ onUnmounted(() => {
   padding: 10px 12px;
   background: rgba(139, 92, 246, 0.1);
   border-radius: 8px;
-  border-left: 3px solid #8b5cf6;
+  border: 1px solid rgba(139, 92, 246, 0.3);
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -2816,17 +2845,17 @@ onUnmounted(() => {
 
 .transcript-msg.msg-user {
   background: rgba(59, 130, 246, 0.15);
-  border-left: 3px solid #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.3);
 }
 
 .transcript-msg.msg-assistant {
   background: rgba(139, 92, 246, 0.15);
-  border-left: 3px solid #8b5cf6;
+  border: 1px solid rgba(139, 92, 246, 0.3);
 }
 
 .transcript-msg.msg-system {
   background: rgba(100, 100, 100, 0.15);
-  border-left: 3px solid #666;
+  border: 1px solid rgba(100, 100, 100, 0.3);
 }
 
 .msg-role-badge {
@@ -2893,7 +2922,7 @@ onUnmounted(() => {
 }
 
 .msg-tool-result.is-error {
-  border-left: 2px solid #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
   background: rgba(239, 68, 68, 0.1);
 }
 
@@ -2959,5 +2988,28 @@ onUnmounted(() => {
   color: #ef4444;
   background: rgba(239, 68, 68, 0.1);
   border-top: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+/* 减少动画偏好支持 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .status-dot,
+  .connection-dot,
+  .typing-dot {
+    animation: none !important;
+  }
+
+  .agent-panel.is-busy,
+  .agent-panel--claudecode.is-busy {
+    animation: none !important;
+  }
 }
 </style>
