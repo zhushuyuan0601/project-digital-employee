@@ -30,35 +30,6 @@
       </div>
     </div>
 
-    <!-- 任务下达区域 -->
-    <div class="task-input-section">
-      <div class="task-input-row">
-        <el-input
-          v-model="taskInput"
-          placeholder="输入任务内容，直接下发给小呦..."
-          type="textarea"
-          :rows="2"
-          class="task-input"
-          @keydown.ctrl.enter="sendTask"
-        />
-      </div>
-      <div class="send-btn-row">
-        <button
-          type="button"
-          class="btn btn-primary btn-lg send-btn-task"
-          @click="sendTask"
-          :disabled="!taskInput.trim() || !xiaomuConnected"
-        >
-          <span class="btn-icon"><i class="fas fa-paper-plane"></i></span>
-          下发任务
-        </button>
-        <span class="connection-hint" :class="{ connected: xiaomuConnected }">
-          <span class="hint-dot"></span>
-          {{ xiaomuConnected ? '小呦已连接' : '小呦未连接' }}
-        </span>
-      </div>
-    </div>
-
     <!-- 主体内容：侧边栏 + 详情面板 -->
     <div class="main-layout">
       <!-- 左侧：Agent 列表 -->
@@ -229,11 +200,37 @@
                   </div>
                 </div>
               </div>
+              <!-- 底部输入栏 -->
+              <div class="chat-input-bar">
+                <div class="chat-input-row">
+                  <el-input
+                    v-model="taskInput"
+                    :placeholder="chatInputPlaceholder"
+                    type="textarea"
+                    :autosize="{ minRows: 1, maxRows: 4 }"
+                    class="chat-input"
+                    @keydown.ctrl.enter="sendToSelectedAgent"
+                  />
+                  <button
+                    type="button"
+                    class="btn btn-primary chat-send-btn"
+                    @click="sendToSelectedAgent"
+                    :disabled="!taskInput.trim() || !selectedAgentConnected"
+                  >
+                    <i class="fas fa-paper-plane"></i>
+                  </button>
+                </div>
+                <div class="chat-input-meta">
+                  <span class="connection-hint" :class="{ connected: selectedAgentConnected }">
+                    <span class="hint-dot"></span>
+                    {{ selectedAgentConnected ? getAgentName(selectedAgent!) + ' 已连接' : getAgentName(selectedAgent!) + ' 未连接' }}
+                  </span>
+                  <span class="input-shortcut">Ctrl+Enter 发送</span>
+                </div>
+              </div>
             </div>
           </div>
         </template>
-
-        <!-- ClaudeCode 详情 -->
         <template v-else-if="selectedAgent === 'claude'">
           <div class="detail-topbar">
             <div class="claude-avatar-topbar"><i class="fas fa-robot"></i></div>
@@ -412,6 +409,18 @@ const xiaomuConnected = computed(() => multiAgentStore.agents['xiaomu']?.isConne
 
 // 选中的 Agent
 const selectedAgent = ref<string | null>(null)
+
+// 选中的 Agent 是否已连接
+const selectedAgentConnected = computed(() => {
+  if (!selectedAgent.value || selectedAgent.value === 'claude') return false
+  return multiAgentStore.agents[selectedAgent.value]?.isConnected || false
+})
+
+// 聊天输入框占位符
+const chatInputPlaceholder = computed(() => {
+  if (!selectedAgent.value) return '选择一个 Agent 后开始对话...'
+  return `给 ${getAgentName(selectedAgent.value)} 发送消息...`
+})
 
 // 文件预览对话框
 const showPreviewDialog = ref(false)
@@ -734,11 +743,11 @@ const downloadFile = () => {
   ElMessage.success('文件已开始下载')
 }
 
-// 发送任务给小呦
-const sendTask = async () => {
-  if (!taskInput.value.trim()) return
-  if (!xiaomuConnected.value) {
-    ElMessage.warning('小呦未连接，请先点击全连按钮')
+// 发送消息给选中的 Agent
+const sendToSelectedAgent = async () => {
+  if (!taskInput.value.trim() || !selectedAgent.value) return
+  if (!selectedAgentConnected.value) {
+    ElMessage.warning(`${getAgentName(selectedAgent.value)} 未连接，请先点击全连按钮`)
     return
   }
 
@@ -749,11 +758,10 @@ const sendTask = async () => {
   const content = taskInput.value.trim()
 
   try {
-    multiAgentStore.sendMessage('xiaomu', content)
-    ElMessage.success('任务已发送给小呦')
+    multiAgentStore.sendMessage(selectedAgent.value, content)
+    ElMessage.success(`消息已发送给 ${getAgentName(selectedAgent.value)}`)
     taskInput.value = ''
   } catch (err) {
-    console.error('[TaskCenter2] Send message error:', err)
     ElMessage.error('发送失败：' + (err instanceof Error ? err.message : '未知错误'))
   } finally {
     isSending.value = false
@@ -941,8 +949,8 @@ onUnmounted(() => {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  margin-bottom: 10px;
-  padding: 2px 0 8px;
+  margin-bottom: 6px;
+  padding: 0 0 4px;
   border-bottom: 1px solid color-mix(in oklab, var(--border-subtle) 84%, transparent);
   flex-shrink: 0;
 }
@@ -952,7 +960,7 @@ onUnmounted(() => {
 }
 
 .task-center__title h1 {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: 0.02em;
@@ -969,11 +977,11 @@ onUnmounted(() => {
 .task-center__mode {
   display: inline-flex;
   align-items: center;
-  padding: 6px 10px;
+  padding: 4px 8px;
   border-radius: 999px;
   background: color-mix(in oklab, var(--color-primary-bg) 80%, transparent);
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: 10px;
   letter-spacing: 0.04em;
 }
 
@@ -1026,45 +1034,6 @@ onUnmounted(() => {
   color: var(--color-success);
 }
 
-/* Task Input Area */
-.task-input-section {
-  flex-shrink: 0;
-  background: var(--bg-panel);
-  border-radius: var(--radius-lg);
-  padding: 10px 12px;
-  box-shadow: var(--shadow-sm);
-  margin-bottom: 10px;
-}
-
-.task-input-row {
-  margin-bottom: 8px;
-}
-
-.task-input :deep(.el-textarea__inner) {
-  background: var(--gray-900);
-  border: 1px solid var(--border-default);
-  color: var(--text-primary);
-  font-size: 13px;
-  line-height: 1.6;
-  resize: none;
-}
-
-.task-input :deep(.el-textarea__inner):focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px var(--color-primary-bg);
-}
-
-.send-btn-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.send-btn-task {
-  flex: 1;
-}
-
 .connection-hint {
   display: flex;
   align-items: center;
@@ -1108,7 +1077,8 @@ onUnmounted(() => {
 .sidebar {
   width: 300px;
   flex-shrink: 0;
-  background: var(--bg-panel);
+  background:
+    linear-gradient(180deg, var(--bg-panel) 0%, color-mix(in oklab, var(--bg-panel) 92%, var(--bg-base) 8%) 100%);
   border-radius: 20px;
   display: flex;
   flex-direction: column;
@@ -1326,7 +1296,8 @@ onUnmounted(() => {
 /* Detail Panel */
 .detail-panel {
   flex: 1;
-  background: var(--bg-panel);
+  background:
+    linear-gradient(135deg, var(--bg-panel) 0%, color-mix(in oklab, var(--bg-panel) 94%, var(--color-primary) 6%) 100%);
   border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
@@ -1629,6 +1600,65 @@ onUnmounted(() => {
 .chat-container::-webkit-scrollbar-thumb {
   background: var(--border-subtle);
   border-radius: 4px;
+}
+
+/* Chat Input Bar */
+.chat-input-bar {
+  flex-shrink: 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.chat-input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.chat-input {
+  flex: 1;
+}
+
+.chat-input :deep(.el-textarea__inner) {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+  resize: none;
+  border-radius: 12px;
+  padding: 8px 12px;
+  min-height: 36px !important;
+}
+
+.chat-input :deep(.el-textarea__inner):focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-bg);
+}
+
+.chat-send-btn {
+  min-height: 36px;
+  min-width: 36px;
+  padding: 0;
+  border-radius: 12px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.chat-input-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 2px 0;
+}
+
+.input-shortcut {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
 }
 
 .chat-empty-hint {
