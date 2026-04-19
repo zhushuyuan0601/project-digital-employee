@@ -139,7 +139,6 @@
             </div>
             <div class="agent-card__desc">{{ claudeCodeSessions.length }} 个活跃会话</div>
           </div>
-          </div>
         </div>
       </div>
 
@@ -1163,112 +1162,124 @@ onUnmounted(() => {
   border-radius: 4px;
 }
 
-.agent-card-mini {
+/* Agent Card — reference style */
+.agent-card {
   background: var(--bg-card);
-  border-radius: 8px;
-  padding: 14px 16px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  cursor: pointer;
   border: 1px solid var(--border-default);
-  transition: all 0.2s ease;
-  position: relative;
-  overflow: hidden;
+  border-radius: 8px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.agent-card-mini:hover {
+.agent-card:hover {
   border-color: var(--color-primary);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
-.agent-card-mini.active {
+.agent-card.active {
   border-color: var(--color-primary);
   background: rgba(88, 166, 255, 0.05);
-  box-shadow: none;
 }
 
-.agent-card-mini.active::before {
-  display: none;
+.agent-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
 }
 
-.agent-avatar-mini {
+.agent-card__main {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.agent-card__avatar {
   width: 40px;
   height: 40px;
   border-radius: 8px;
-  background: var(--bg-card);
+  background: #30363d;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border: none;
-  position: relative;
   overflow: hidden;
 }
 
-.agent-avatar-mini img {
+.agent-card__avatar img {
   width: 100%;
   height: 100%;
-  border-radius: 50%;
   object-fit: cover;
+  border-radius: 8px;
+}
+
+.agent-card__name {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.agent-card__role {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.agent-card__desc {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.agent-card__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-default);
+}
+
+.agent-card__tags {
+  display: flex;
+  gap: 6px;
+}
+
+.agent-card__tags .tag {
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.agent-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .claude-avatar-small {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%);
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #8957e5, #a371f7);
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
   font-size: 20px;
-}
-
-.status-dot-mini {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  position: absolute;
-  bottom: 1px;
-  right: 1px;
-  border: 2px solid var(--bg-panel);
-}
-
-.status-dot-mini.online,
-.status-dot-mini.idle {
-  background: var(--color-success);
-}
-
-.status-dot-mini.busy {
-  background: var(--color-accent);
-}
-
-.status-dot-mini.offline {
-  background: var(--text-tertiary);
-}
-
-.agent-info-mini {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  min-width: 0;
-}
-
-.agent-name-mini {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.agent-role-mini {
-  font-size: 12px;
-  color: var(--text-secondary);
 }
 
 .status-badge-mini {
@@ -2258,8 +2269,8 @@ onUnmounted(() => {
     overflow-y: hidden;
   }
 
-  .agent-card-mini {
-    min-width: 220px;
+  .agent-card {
+    min-width: 260px;
   }
 }
 
