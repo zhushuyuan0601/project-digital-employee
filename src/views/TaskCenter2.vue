@@ -16,6 +16,12 @@
             {{ aiStatusText }}
           </span>
         </div>
+        <button type="button" class="btn btn-theme-toggle btn-sm" @click="toggleTheme" :title="isLight ? '切换到深色模式' : '切换到浅色模式'">
+          <span class="btn-icon theme-icon">
+            <el-icon><Sunny v-if="isLight" /><Moon v-else /></el-icon>
+          </span>
+          <span class="theme-label">{{ isLight ? '关灯' : '开灯' }}</span>
+        </button>
         <button type="button" class="btn btn-success btn-sm" @click="handleConnectAll" :disabled="allConnected">
           <span class="btn-icon"><i class="fas fa-plug"></i></span>
           全连
@@ -381,12 +387,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Loading, Warning, Document } from '@element-plus/icons-vue'
+import { Loading, Warning, Document, Sunny, Moon } from '@element-plus/icons-vue'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
+import { useThemeStore } from '@/stores/theme'
 import { AGENT_CONFIG } from '@/simulation'
 import MarkdownIt from 'markdown-it'
 
 const multiAgentStore = useMultiAgentChatStore()
+const themeStore = useThemeStore()
 const md = new MarkdownIt({
   html: false,
   linkify: true,
@@ -412,6 +420,12 @@ const aiStatusText = computed(() => {
 
 const allConnected = computed(() => multiAgentStore.allConnected)
 const anyConnected = computed(() => multiAgentStore.anyConnected)
+const isLight = computed(() => themeStore.isLight)
+
+// 切换主题
+function toggleTheme() {
+  themeStore.toggle()
+}
 
 // 任务输入
 const taskInput = ref('')
@@ -1022,6 +1036,27 @@ onUnmounted(() => {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 6px;
+}
+
+.btn-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-theme-toggle .theme-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-theme-toggle .theme-icon .el-icon {
+  font-size: 14px;
+}
+
+.theme-label {
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .ai-status {

@@ -359,6 +359,39 @@ pre {
   border-color: color-mix(in oklab, var(--color-error) 16%, transparent);
 }
 
+.btn-theme-toggle {
+  background: color-mix(in oklab, var(--color-warning) 12%, var(--bg-surface));
+  color: color-mix(in oklab, var(--color-warning) 80%, white 20%);
+  border-color: color-mix(in oklab, var(--color-warning) 20%, transparent);
+  font-weight: 500;
+}
+
+.btn-theme-toggle:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--color-warning) 20%, var(--bg-surface));
+  border-color: color-mix(in oklab, var(--color-warning) 40%, transparent);
+  box-shadow: 0 4px 12px color-mix(in oklab, var(--color-warning) 20%, transparent);
+}
+
+.btn-theme-toggle .theme-icon {
+  color: var(--color-warning);
+}
+
+:root.light-theme .btn-theme-toggle {
+  background: color-mix(in oklab, var(--color-primary) 10%, var(--bg-surface));
+  color: var(--color-primary);
+  border-color: color-mix(in oklab, var(--color-primary) 20%, transparent);
+}
+
+:root.light-theme .btn-theme-toggle:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--color-primary) 18%, var(--bg-surface));
+  border-color: color-mix(in oklab, var(--color-primary) 40%, transparent);
+  box-shadow: 0 4px 12px color-mix(in oklab, var(--color-primary) 20%, transparent);
+}
+
+:root.light-theme .btn-theme-toggle .theme-icon {
+  color: var(--color-primary);
+}
+
 .btn-icon {
   display: inline-flex;
   align-items: center;
