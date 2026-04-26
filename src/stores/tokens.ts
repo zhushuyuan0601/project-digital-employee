@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { tokensApi, type TokenUsage, type TokenStats, type ModelUsage, type AgentCost } from '@/api'
 
 export const useTokensStore = defineStore('tokens', () => {

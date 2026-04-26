@@ -1,7 +1,6 @@
 // 模拟数据类型定义
-
-import type { Agent, AgentRole } from '@/types/agent'
-import type { Task, TaskStatus } from '@/types/task'
+import { AGENT_DEFINITIONS, type AgentRole } from '@/config/agents'
+import type { TaskStatus } from '@/types/task'
 
 // 执行日志
 export interface ExecutionLog {
@@ -110,35 +109,14 @@ export const DEFAULT_TEMPLATE: MockResponseTemplate = {
 }
 
 // Agent 配置
-export const AGENT_CONFIG: Record<string, { name: string; role: AgentRole; icon: string; description: string }> = {
-  xiaomu: {
-    name: '项目管理',
-    role: 'assistant',
-    icon: '/avatars/avatar-xiaomu.jpeg',
-    description: '任务秘书 - 统筹调度、任务分配、汇报'
-  },
-  xiaokai: {
-    name: '研发工程师',
-    role: 'developer',
-    icon: '/avatars/avatar-xiaokai.jpeg',
-    description: '研发工程师 - 技术总监&开发工程师'
-  },
-  xiaochan: {
-    name: '产品经理',
-    role: 'product',
-    icon: '/avatars/avatar-xiaochan.jpeg',
-    description: '产品经理 - 产品需求分析'
-  },
-  xiaoyan: {
-    name: '研究员',
-    role: 'analyst',
-    icon: '/avatars/avatar-xiaoyan.jpeg',
-    description: '竞品分析师 - 市场调研'
-  },
-  xiaoce: {
-    name: '测试员',
-    role: 'tester',
-    icon: '/avatars/avatar-xiaoce.jpeg',
-    description: '质量检查员 - 测试验证&质量保障'
-  }
-}
+export const AGENT_CONFIG: Record<string, { name: string; role: AgentRole; icon: string; description: string }> = Object.fromEntries(
+  AGENT_DEFINITIONS.map((agent) => [
+    agent.id,
+    {
+      name: agent.roleLabel,
+      role: agent.roleType,
+      icon: agent.icon,
+      description: agent.description,
+    },
+  ])
+) as Record<string, { name: string; role: AgentRole; icon: string; description: string }>

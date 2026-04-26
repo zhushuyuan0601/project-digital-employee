@@ -1,5 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { buildGatewaySocketUrl, getDefaultGatewayConnectionSettings } from '@/config/gateway'
+import {
+  buildChallengeResponseMessage,
+  buildConnectRequest,
+  extractChatText,
+  extractText,
+} from '@/utils/gateway-protocol'
 
 export interface ChatMessage {
   id: string
@@ -33,9 +40,10 @@ export const useChatStore = defineStore('chat', () => {
   const isTyping = ref(false)
   const typingStartTime = ref<number | null>(null)
   const toolCalls = ref<ToolCall[]>([])
+  const defaultGatewaySettings = getDefaultGatewayConnectionSettings()
   const settings = ref<ConnectionSettings>({
-    wsUrl: 'ws://127.0.0.1:18789',
-    token: 'bd0f157b60e41a3d9895ddec846d2d10c8d795bc0a061f70',
+    wsUrl: defaultGatewaySettings.wsUrl,
+    token: defaultGatewaySettings.token,
     sessionKey: 'agent:ceo:main',
     autoConnect: true,
   })
@@ -83,38 +91,8 @@ export const useChatStore = defineStore('chat', () => {
       return
     }
 
-    // 使用 HMAC-SHA256 计算签名
-    const encoder = new TextEncoder()
-    const keyData = encoder.encode(settings.value.token)
-    const messageData = encoder.encode(payload.nonce)
-
-    // 导入密钥
-    const key = await crypto.subtle.importKey(
-      'raw',
-      keyData,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    )
-
-    // 计算签名
-    const signature = await crypto.subtle.sign('HMAC', key, messageData)
-
-    // 转换为 hex 字符串
-    const signatureHex = Array.from(new Uint8Array(signature))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('')
-
-    // 发送挑战响应
-    const responseMsg = {
-      type: 'req',
-      id: `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      method: 'connect.challenge_response',
-      params: {
-        nonce: payload.nonce,
-        response: signatureHex
-      }
-    }
+    const responseMsg = await buildChallengeResponseMessage(settings.value.token, payload)
+    if (!responseMsg) return
 
     ws.value.send(JSON.stringify(responseMsg))
   }
@@ -171,10 +149,7 @@ export const useChatStore = defineStore('chat', () => {
     isTyping.value = false
     typingStartTime.value = null
 
-    const tokenParam = settings.value.token
-      ? `?token=${encodeURIComponent(settings.value.token)}`
-      : ''
-    const wsUrl = `${settings.value.wsUrl}${tokenParam}`
+    const wsUrl = buildGatewaySocketUrl(settings.value.wsUrl, settings.value.token)
 
     try {
       ws.value = new WebSocket(wsUrl)
@@ -192,7 +167,7 @@ export const useChatStore = defineStore('chat', () => {
           console.error('[WebSocket] Parse error:', e)
         }
       }
-      ws.value.onclose = (event) => {
+      ws.value.onclose = () => {
         isConnected.value = false
         isConnecting.value = false
         isTyping.value = false
@@ -226,25 +201,15 @@ export const useChatStore = defineStore('chat', () => {
   function sendConnectRequest() {
     if (!ws.value) return
     const agentIdShort = settings.value.sessionKey.split(':')[1] || 'ceo'
-    const msg = {
-      type: 'req',
-      id: `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      method: 'connect',
-      params: {
-        minProtocol: 1,
-        maxProtocol: 10,
-        client: {
-          id: 'webchat',
-          displayName: agentIdShort,
-          version: '1.0.0',
-          platform: 'web',
-          mode: 'webchat',
-        },
-        scopes: ['operator.admin', 'operator.write', 'operator.read'],
-        caps: ['tool-events'],
-        auth: settings.value.token ? { token: settings.value.token } : undefined,
+    const msg = buildConnectRequest({
+      token: settings.value.token,
+      client: {
+        id: 'webchat',
+        displayName: agentIdShort,
       },
-    }
+      minProtocol: 1,
+      maxProtocol: 10,
+    })
     ws.value.send(JSON.stringify(msg))
   }
 
@@ -509,92 +474,10 @@ export const useChatStore = defineStore('chat', () => {
     const reason = data.reason || data.reasonSummary || '未知原因'
 
     if (phase === 'fallback') {
-      let attemptsInfo = ''
-      if (Array.isArray(data.attempts) && data.attempts.length > 0) {
-        attemptsInfo = '，尝试：' + data.attempts.slice(0, 3).map((a: any) => {
-          if (typeof a === 'string') return a
-          return `${a.provider}/${a.model}: ${a.reason || a.code || 'error'}`
-        }).join(', ')
-      }
       addSystemMessage(`⚠️ 模型降级：从 ${activeModel || '主模型'} 降级到 ${selectedModel}（原因：${reason}）`)
     } else if (phase === 'cleared') {
       addSystemMessage(`✅ 模型已恢复到：${selectedModel}`)
     }
-  }
-
-  // 过滤掉思考内容（与 openclaw 项目保持一致）
-  // 支持的标签：<think>, <thinking>, <thought>, <antthinking>
-  function filterThoughts(text: string): string {
-    if (!text) return text
-
-    // 移除 <think>...</think> 标签及其内容（不区分大小写）
-    const THINKING_TAG_RE = /<\s*(\/?)\s*(?:think(?:ing)?|thought|antthinking)\b[^<>]*>/gi
-    const QUICK_TAG_RE = /<\s*\/?\s*(?:think(?:ing)?|thought|antthinking)\b/i
-
-    if (!QUICK_TAG_RE.test(text)) {
-      return text
-    }
-
-    let result = ""
-    let lastIndex = 0
-    let inThinking = false
-
-    for (const match of text.matchAll(THINKING_TAG_RE)) {
-      const idx = match.index ?? 0
-      const isClose = match[1] === "/"
-
-      if (!inThinking) {
-        result += text.slice(lastIndex, idx)
-        if (!isClose) {
-          inThinking = true
-        }
-      } else if (isClose) {
-        inThinking = false
-      }
-      lastIndex = idx + match[0].length
-    }
-
-    // 如果没有关闭标签，保留剩余内容
-    if (!inThinking) {
-      result += text.slice(lastIndex)
-    }
-
-    return result.trimStart()
-  }
-
-  function extractText(payload: any): string | null {
-    if (!payload) return null
-    if (payload.data) {
-      if (typeof payload.data === 'string') return filterThoughts(payload.data)
-      if (payload.data.text) return filterThoughts(payload.data.text)
-      if (payload.data.content) {
-        if (typeof payload.data.content === 'string') return filterThoughts(payload.data.content)
-        if (Array.isArray(payload.data.content)) {
-          const text = payload.data.content.map((c: any) => c.text || '').join('')
-          return filterThoughts(text)
-        }
-      }
-      if (payload.data.delta) {
-        const text = payload.data.delta.text || payload.data.delta.content || ''
-        return filterThoughts(text)
-      }
-    }
-    return null
-  }
-
-  function extractChatText(payload: any): string | null {
-    if (!payload?.message) return null
-    const msg = payload.message
-    if (typeof msg === 'string') return filterThoughts(msg)
-    if (msg.text) return filterThoughts(msg.text)
-    if (msg.content) {
-      if (typeof msg.content === 'string') return filterThoughts(msg.content)
-      if (Array.isArray(msg.content)) {
-        const text = msg.content.map((c: any) => c.text || '').join('')
-        return filterThoughts(text)
-      }
-    }
-    return null
   }
 
   function updateOrCreateMessage(role: 'assistant', content: string, runId?: string) {

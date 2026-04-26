@@ -276,13 +276,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useSecurityStore } from '@/stores/security'
+import { useNotification } from '@/composables/useNotification'
 
 const securityStore = useSecurityStore()
-
-const loading = computed(() => securityStore.loading)
-const scanning = computed(() => securityStore.scanning)
+const notification = useNotification()
 
 // 使用 store 中的数据
 const stats = computed(() => securityStore.stats)
@@ -336,7 +335,7 @@ const runSecurityScan = async () => {
   try {
     await securityStore.runSecurityScan()
   } catch (e: any) {
-    alert('扫描失败：' + e.message)
+    notification.error('扫描失败：' + e.message)
   }
 }
 
@@ -352,7 +351,7 @@ const revokeSecret = async (item: any) => {
   try {
     await securityStore.resolveSecret(item.id)
   } catch (e: any) {
-    alert('操作失败：' + e.message)
+    notification.error('操作失败：' + e.message)
   }
 }
 

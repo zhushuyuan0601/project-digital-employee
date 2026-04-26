@@ -245,8 +245,28 @@
 import { ref, computed, onMounted } from 'vue'
 import { useCronStore } from '@/stores/cron'
 import type { CronTask } from '@/api'
+import { useNotification } from '@/composables/useNotification'
+
+type CronTaskViewModel = CronTask & {
+  schedule: string
+  naturalLanguage: string
+  description: string
+  agent: string
+  runCount: number
+}
+
+type CronExecutionViewModel = {
+  id: string
+  taskName: string
+  status: 'success' | 'failed' | 'running'
+  agent: string
+  duration: number
+  time: string
+  date: string
+}
 
 const cronStore = useCronStore()
+const notification = useNotification()
 
 const filterStatus = ref('')
 const showCreateModal = ref(false)
@@ -255,6 +275,31 @@ const editingTask = ref<CronTask | null>(null)
 // 使用 store 中的数据
 const stats = computed(() => cronStore.stats)
 const tasks = computed(() => cronStore.tasks)
+const taskViewModels = computed<CronTaskViewModel[]>(() =>
+  tasks.value.map((task) => ({
+    ...task,
+    schedule: task.cron,
+    naturalLanguage: task.cronDescription || cronStore.cronToHuman(task.cron),
+    description: task.lastError || '定时执行任务',
+    agent: task.agentName,
+    runCount: task.successCount + task.failureCount,
+  }))
+)
+const executionHistory = computed<CronExecutionViewModel[]>(() =>
+  cronStore.executions.map((exec) => {
+    const start = new Date(exec.startTime)
+    const end = exec.endTime ? new Date(exec.endTime) : null
+    return {
+      id: exec.id,
+      taskName: exec.taskName,
+      status: exec.status === 'failure' ? 'failed' : exec.status,
+      agent: tasks.value.find((task) => task.id === exec.taskId)?.agentName || '未知 Agent',
+      duration: end ? Math.max(end.getTime() - start.getTime(), 0) : 0,
+      time: start.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+      date: start.toLocaleDateString('zh-CN'),
+    }
+  })
+)
 
 // 表单数据
 const formData = ref({
@@ -273,44 +318,26 @@ const todayExecutions = computed(() => stats.value?.todayExecutions || 0)
 
 // 过滤后的任务列表
 const filteredTasks = computed(() => {
-  if (!filterStatus.value) return tasks.value
-  if (filterStatus.value === 'active') return tasks.value.filter(t => t.enabled)
-  if (filterStatus.value === 'paused') return tasks.value.filter(t => !t.enabled)
-  return tasks.value
+  if (!filterStatus.value) return taskViewModels.value
+  if (filterStatus.value === 'active') return taskViewModels.value.filter((task) => task.enabled)
+  if (filterStatus.value === 'paused') return taskViewModels.value.filter((task) => !task.enabled)
+  return taskViewModels.value
 })
-
-// Cron 表达式转自然语言
-const cronToNatural = (cron: string): string => {
-  return cronStore.cronToHuman(cron) || '自定义'
-}
-
-// 格式化时间
-const formatTime = (dateStr: string | null): string => {
-  if (!dateStr) return '从未'
-  const date = new Date(dateStr)
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
 
 const toggleTask = async (task: CronTask) => {
   try {
     await cronStore.toggleTask(task.id)
   } catch (e: any) {
-    alert('操作失败：' + e.message)
+    notification.error('操作失败：' + e.message)
   }
 }
 
 const runNow = async (task: CronTask) => {
   try {
     await cronStore.executeTask(task.id)
-    alert('任务已启动执行')
+    notification.success('任务已启动执行')
   } catch (e: any) {
-    alert('执行失败：' + e.message)
+    notification.error('执行失败：' + e.message)
   }
 }
 
@@ -328,26 +355,14 @@ const editTask = (task: CronTask) => {
 }
 
 const deleteTask = async (task: CronTask) => {
-  if (confirm(`确定要删除任务 "${task.name}" 吗？`)) {
-    try {
-      await cronStore.deleteTask(task.id)
-    } catch (e: any) {
-      alert('删除失败：' + e.message)
-    }
-  }
-}
+  const confirmed = await notification.confirm(`确定要删除任务 "${task.name}" 吗？`, '删除任务')
+  if (!confirmed) return
 
-const openCreateModal = () => {
-  editingTask.value = null
-  formData.value = {
-    name: '',
-    schedule: '',
-    naturalLanguage: '',
-    agent: '',
-    description: '',
-    enabled: true
+  try {
+    await cronStore.deleteTask(task.id)
+  } catch (e: any) {
+    notification.error('删除失败：' + e.message)
   }
-  showCreateModal.value = true
 }
 
 const saveTask = async () => {
@@ -371,7 +386,7 @@ const saveTask = async () => {
     editingTask.value = null
     await cronStore.fetchTasks()
   } catch (e: any) {
-    alert('保存失败：' + e.message)
+    notification.error('保存失败：' + e.message)
   }
 }
 

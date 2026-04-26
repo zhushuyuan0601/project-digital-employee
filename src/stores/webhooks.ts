@@ -40,8 +40,8 @@ export const useWebhooksStore = defineStore('webhooks', () => {
     description?: string
     events: string[]
     secret?: string
-    algorithm?: string
-    retryPolicy?: string
+    algorithm?: Webhook['algorithm']
+    retryPolicy?: Webhook['retryPolicy']
     maxRetries?: number
     timeout?: number
     enabled?: boolean

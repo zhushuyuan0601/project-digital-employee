@@ -1,41 +1,17 @@
 <template>
   <div class="task-center-2">
     <!-- 顶部标题 -->
-    <div class="task-center__header">
-      <div class="task-center__title-wrap">
-        <div class="task-center__title">
-          <span class="title-icon"><i class="fas fa-satellite-dish"></i></span>
-          <h1>任务指挥中心</h1>
-          <span class="task-center__mode">Gateway 直连</span>
-        </div>
-      </div>
-      <div class="header-actions">
-        <div class="ai-status" :class="`status--${aiStatus}`">
-          <span class="status-dot"></span>
-          <span class="status-label">
-            {{ aiStatusText }}
-          </span>
-        </div>
-        <button type="button" class="btn btn-theme-toggle btn-sm" @click="toggleTheme" :title="isLight ? '切换到深色模式' : '切换到浅色模式'">
-          <span class="btn-icon theme-icon">
-            <el-icon><Sunny v-if="isLight" /><Moon v-else /></el-icon>
-          </span>
-          <span class="theme-label">{{ isLight ? '关灯' : '开灯' }}</span>
-        </button>
-        <button type="button" class="btn btn-success btn-sm" @click="handleConnectAll" :disabled="allConnected">
-          <span class="btn-icon"><i class="fas fa-plug"></i></span>
-          全连
-        </button>
-        <button type="button" class="btn btn-danger btn-sm" @click="handleDisconnectAll" :disabled="!anyConnected">
-          <span class="btn-icon"><i class="fas fa-power-off"></i></span>
-          全断
-        </button>
-        <button type="button" class="btn btn-secondary btn-sm" @click="handleReset">
-          <span class="btn-icon"><i class="fas fa-trash-alt"></i></span>
-          重置
-        </button>
-      </div>
-    </div>
+    <TaskControlBar
+      :ai-status="aiStatus"
+      :ai-status-text="aiStatusText"
+      :all-connected="allConnected"
+      :any-connected="anyConnected"
+      :is-light="isLight"
+      @toggle-theme="toggleTheme"
+      @connect-all="handleConnectAll"
+      @disconnect-all="handleDisconnectAll"
+      @reset="handleReset"
+    />
 
     <!-- 主体内容：侧边栏 + 详情面板 -->
     <div class="main-layout">
@@ -60,35 +36,18 @@
             popper-class="agent-tip-popper"
           >
             <template #reference>
-              <div
-                class="agent-card"
-                :class="{ active: selectedAgent === agent.id }"
+              <TaskAgentCard
+                :name="agent.name"
+                :role="agent.role"
+                :desc="agent.desc"
+                :tags="agent.tags"
+                :icon-src="getAgentIcon(agent.id)"
+                :active="selectedAgent === agent.id"
+                :status-class="getAgentStatus(agent.id)"
+                :status-text="getAgentStatusText(agent.id)"
+                :message-count="agents[agent.id]?.messages.length || 0"
                 @click="selectAgent(agent.id)"
-              >
-                <div class="agent-card__header">
-                  <div class="agent-card__main">
-                    <div class="agent-card__avatar">
-                      <img :src="getAgentIcon(agent.id)" :alt="agent.name" />
-                    </div>
-                    <div>
-                      <div class="agent-card__name">{{ agent.name }}</div>
-                      <div class="agent-card__role">{{ agent.role }}</div>
-                    </div>
-                  </div>
-                  <div class="status-badge-mini" :class="getAgentStatus(agent.id)">
-                    {{ getAgentStatusText(agent.id) }}
-                  </div>
-                </div>
-                <div class="agent-card__desc">{{ agent.desc }}</div>
-                <div class="agent-card__footer">
-                  <div class="agent-card__tags">
-                    <span class="tag" v-for="tag in agent.tags" :key="tag">{{ tag }}</span>
-                  </div>
-                  <div class="agent-card__meta">
-                    <i class="ri-message-3-line"></i> {{ agents[agent.id]?.messages.length || 0 }}
-                  </div>
-                </div>
-              </div>
+              />
             </template>
             <!-- Hover 详情卡片 -->
             <div class="agent-tip-card">
@@ -193,62 +152,15 @@
 
           <!-- 详情内容：聊天区 -->
           <div class="detail-content">
-            <div class="chat-section">
-              <div class="chat-container" :ref="(el) => { if (selectedAgent) chatBoxRefs[selectedAgent] = el as HTMLElement | null }">
-                <div v-if="(agents[selectedAgent]?.messages.length || 0) === 0" class="chat-empty-hint">
-                  <i class="ri-chat-smile-2-line"></i>
-                  暂无对话记录
-                </div>
-                <div
-                  v-for="msg in agents[selectedAgent]?.messages"
-                  :key="msg.id"
-                  class="chat-msg"
-                  :class="{ user: msg.role === 'user' }"
-                >
-                  <div class="msg-avatar">
-                    <template v-if="msg.role === 'user'">
-                      <i class="ri-user-line"></i>
-                    </template>
-                    <template v-else>
-                      <img :src="getAgentIcon(selectedAgent)" :alt="getAgentName(selectedAgent)" />
-                    </template>
-                  </div>
-                  <div>
-                    <div class="msg-bubble" v-html="renderMarkdown(msg.content)"></div>
-                    <div class="msg-time">{{ formatTime(msg.timestamp) }}</div>
-                  </div>
-                </div>
-              </div>
-              <!-- 底部派发输入栏 -->
-              <div class="chat-input-bar">
-                <div class="chat-input-row">
-                  <el-input
-                    v-model="taskInput"
-                    :placeholder="chatInputPlaceholder"
-                    type="textarea"
-                    :autosize="{ minRows: 1, maxRows: 4 }"
-                    class="chat-input"
-                    @keydown.ctrl.enter="sendToSelectedAgent"
-                  />
-                  <button
-                    type="button"
-                    class="dispatch-send-btn"
-                    @click="sendToSelectedAgent"
-                    :disabled="!taskInput.trim() || !selectedAgentConnected"
-                  >
-                    <i class="fas fa-paper-plane"></i>
-                    <span>派发</span>
-                  </button>
-                </div>
-                <div class="chat-input-meta">
-                  <span class="connection-hint" :class="{ connected: selectedAgentConnected }">
-                    <span class="hint-dot"></span>
-                    {{ selectedAgentConnected ? getAgentName(selectedAgent!) + ' 已连接' : getAgentName(selectedAgent!) + ' 未连接' }}
-                  </span>
-                  <span class="input-shortcut">Ctrl+Enter 派发</span>
-                </div>
-              </div>
-            </div>
+            <TaskMessagePanel
+              v-model="taskInput"
+              :messages="agents[selectedAgent]?.messages || []"
+              :agent-name="getAgentName(selectedAgent)"
+              :agent-icon="getAgentIcon(selectedAgent)"
+              :connected="selectedAgentConnected"
+              :placeholder="chatInputPlaceholder"
+              @send="sendToSelectedAgent"
+            />
           </div>
         </template>
         <template v-else-if="selectedAgent === 'claude'">
@@ -387,11 +299,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Loading, Warning, Document, Sunny, Moon } from '@element-plus/icons-vue'
+import { Loading, Warning, Document } from '@element-plus/icons-vue'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
 import { useThemeStore } from '@/stores/theme'
 import { AGENT_CONFIG } from '@/simulation'
 import MarkdownIt from 'markdown-it'
+import TaskControlBar from '@/components/task-center/TaskControlBar.vue'
+import TaskAgentCard from '@/components/task-center/TaskAgentCard.vue'
+import TaskMessagePanel from '@/components/task-center/TaskMessagePanel.vue'
 
 const multiAgentStore = useMultiAgentChatStore()
 const themeStore = useThemeStore()
@@ -433,8 +348,6 @@ const isSending = ref(false)
 
 // Agent 状态
 const agents = computed(() => multiAgentStore.agents)
-const xiaomuConnected = computed(() => multiAgentStore.agents['xiaomu']?.isConnected || false)
-
 // 选中的 Agent
 const selectedAgent = ref<string | null>(null)
 
@@ -458,12 +371,6 @@ const previewFileItem = ref<{ name: string; content: string; type: string; path?
 const previewLoading = ref(false)
 const previewError = ref<string | null>(null)
 const previewContent = ref<{ type: string; content: string }>({ type: '', content: '' })
-
-// 聊天框 refs
-const chatBoxRefs = ref<Record<string, HTMLElement | null>>({})
-
-// 跟踪聊天框用户滚动
-const chatUserScrolledUp = ref<Record<string, boolean>>({})
 
 // ClaudeCode 会话数据
 const claudeCodeSessions = ref<any[]>([])
@@ -555,18 +462,6 @@ const getAgentRole = (agentId: string) => {
     xiaoce: '质量检查 · agent:team-qa:main'
   }
   return roles[agentId] || ''
-}
-
-// 获取 Agent 描述
-const getAgentDesc = (agentId: string) => {
-  const a = agentList.find(a => a.id === agentId)
-  return a?.desc || ''
-}
-
-// 获取 Agent 标签
-const getAgentTags = (agentId: string) => {
-  const a = agentList.find(a => a.id === agentId)
-  return a?.tags || []
 }
 
 // 获取 Agent 图标
@@ -667,37 +562,6 @@ watch(
   },
   { deep: true, immediate: true }
 )
-
-// 自动滚动聊天到底部
-const scrollChatToBottom = (agentId: string) => {
-  nextTick(() => {
-    const chatBox = chatBoxRefs.value[agentId]
-    if (chatBox && !chatUserScrolledUp.value[agentId]) {
-      chatBox.scrollTop = chatBox.scrollHeight
-    }
-  })
-}
-
-// 监听消息变化，自动滚动聊天
-watch(
-  () => [
-    agents.value['xiaomu']?.messages.length,
-    agents.value['xiaoyan']?.messages.length,
-    agents.value['xiaochan']?.messages.length,
-    agents.value['xiaokai']?.messages.length,
-    agents.value['xiaoce']?.messages.length
-  ],
-  () => {
-    const agentIds = ['xiaomu', 'xiaoyan', 'xiaochan', 'xiaokai', 'xiaoce']
-    agentIds.forEach(agentId => scrollChatToBottom(agentId))
-  }
-)
-
-// 渲染 Markdown
-const renderMarkdown = (content: string) => {
-  if (!content) return ''
-  return md.render(content)
-}
 
 const renderPreviewContent = () => {
   if (previewContent.value.type === 'markdown') {
@@ -829,17 +693,6 @@ const handleReset = () => {
   }).catch(() => {})
 }
 
-// 格式化时间
-const formatTime = (timestamp: number) => {
-  const date = new Date(timestamp)
-  return date.toLocaleTimeString('zh-CN', {
-    hour12: false,
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  })
-}
-
 // 获取 ClaudeCode 会话
 const fetchClaudeCodeSessions = async () => {
   try {
@@ -925,29 +778,6 @@ onMounted(() => {
   if (!selectedAgent.value) {
     selectedAgent.value = 'xiaomu'
   }
-
-  // 初始化聊天滚动
-  nextTick(() => {
-    const agentIds = ['xiaomu', 'xiaoyan', 'xiaochan', 'xiaokai', 'xiaoce']
-    agentIds.forEach(agentId => {
-      chatUserScrolledUp.value[agentId] = false
-    })
-  })
-
-  // 添加聊天框滚动事件监听
-  nextTick(() => {
-    const agentIds = ['xiaomu', 'xiaoyan', 'xiaochan', 'xiaokai', 'xiaoce']
-    agentIds.forEach(agentId => {
-      const chatBox = chatBoxRefs.value[agentId]
-      if (chatBox) {
-        chatBox.addEventListener('scroll', () => {
-          const threshold = 50
-          const isAtBottom = chatBox.scrollHeight - chatBox.scrollTop - chatBox.clientHeight <= threshold
-          chatUserScrolledUp.value[agentId] = !isAtBottom
-        })
-      }
-    })
-  })
 
   // ClaudeCode 会话
   fetchClaudeCodeSessions()

@@ -440,8 +440,23 @@
 import { ref, computed, onMounted } from 'vue'
 import { useWebhooksStore } from '@/stores/webhooks'
 import type { Webhook, WebhookDelivery } from '@/api'
+import { useNotification } from '@/composables/useNotification'
+
+type WebhookForm = {
+  name: string
+  url: string
+  description: string
+  events: string[]
+  secret: string
+  algorithm: Webhook['algorithm']
+  maxRetries: number
+  timeout: number
+  retryPolicy: Webhook['retryPolicy']
+  enabled: boolean
+}
 
 const webhooksStore = useWebhooksStore()
+const notification = useNotification()
 
 // 状态
 const searchQuery = ref('')
@@ -450,6 +465,8 @@ const showEditModal = ref(false)
 const showTestModal = ref(false)
 const showLogsModal = ref(false)
 const testEventType = ref('task.created')
+const saving = ref(false)
+const testing = ref(false)
 const testingWebhook = ref<Webhook | null>(null)
 const loggingWebhook = ref<Webhook | null>(null)
 const deliveryLogs = ref<WebhookDelivery[]>([])
@@ -460,11 +477,11 @@ const stats = computed(() => webhooksStore.stats)
 const webhooks = computed(() => webhooksStore.webhooks)
 
 // 表单数据
-const formData = ref({
+const formData = ref<WebhookForm>({
   name: '',
   url: '',
   description: '',
-  events: [] as string[],
+  events: [],
   secret: '',
   algorithm: 'HMAC-SHA256',
   maxRetries: 3,
@@ -498,11 +515,7 @@ const filteredWebhooks = computed(() => {
 
 const activeWebhooks = computed(() => webhooks.value.filter(w => w.enabled).length)
 const disabledWebhooks = computed(() => webhooks.value.filter(w => !w.enabled).length)
-const todayDeliveries = computed(() => {
-  const now = new Date()
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  return webhooks.value.reduce((sum, w) => sum + (w.successCount || 0) + (w.failureCount || 0), 0)
-})
+const todayDeliveries = computed(() => stats.value?.todayDeliveries || 0)
 
 // 方法
 const refreshWebhooks = async () => {
@@ -521,11 +534,12 @@ const toggleWebhook = async (webhook: Webhook) => {
   try {
     await webhooksStore.toggleWebhook(webhook.id)
   } catch (e: any) {
-    alert('操作失败：' + e.message)
+    notification.error('操作失败：' + e.message)
   }
 }
 
 const editWebhook = (webhook: Webhook) => {
+  editingWebhookId.value = webhook.id
   formData.value = {
     name: webhook.name,
     url: webhook.url,
@@ -542,12 +556,13 @@ const editWebhook = (webhook: Webhook) => {
 }
 
 const deleteWebhook = async (webhook: Webhook) => {
-  if (confirm(`确定要删除 Webhook "${webhook.name}" 吗？`)) {
-    try {
-      await webhooksStore.deleteWebhook(webhook.id)
-    } catch (e: any) {
-      alert('删除失败：' + e.message)
-    }
+  const confirmed = await notification.confirm(`确定要删除 Webhook "${webhook.name}" 吗？`, '删除 Webhook')
+  if (!confirmed) return
+
+  try {
+    await webhooksStore.deleteWebhook(webhook.id)
+  } catch (e: any) {
+    notification.error('删除失败：' + e.message)
   }
 }
 
@@ -558,12 +573,15 @@ const testWebhook = (webhook: Webhook) => {
 
 const confirmTestWebhook = async () => {
   if (!testingWebhook.value) return
+  testing.value = true
   try {
     await webhooksStore.testWebhook(testingWebhook.value.id, testEventType.value)
-    alert('测试通知已发送！')
+    notification.success('测试通知已发送')
     showTestModal.value = false
   } catch (e: any) {
-    alert('发送失败：' + e.message)
+    notification.error('发送失败：' + e.message)
+  } finally {
+    testing.value = false
   }
 }
 
@@ -573,7 +591,7 @@ const viewLogs = async (webhook: Webhook) => {
     deliveryLogs.value = await webhooksStore.fetchDeliveries(webhook.id, 50)
     showLogsModal.value = true
   } catch (e: any) {
-    alert('获取日志失败：' + e.message)
+    notification.error('获取日志失败：' + e.message)
   }
 }
 
@@ -587,16 +605,19 @@ const generateSecret = () => {
 }
 
 const saveWebhook = async () => {
+  saving.value = true
   try {
     if (showEditModal.value && editingWebhookId.value) {
-      await webhooksStore.updateWebhook(editingWebhookId.value, formData.value)
+      await webhooksStore.updateWebhook(editingWebhookId.value, { ...formData.value })
     } else {
-      await webhooksStore.createWebhook(formData.value)
+      await webhooksStore.createWebhook({ ...formData.value })
     }
     closeModal()
     await refreshWebhooks()
   } catch (e: any) {
-    alert('保存失败：' + e.message)
+    notification.error('保存失败：' + e.message)
+  } finally {
+    saving.value = false
   }
 }
 
@@ -620,7 +641,7 @@ const closeModal = () => {
   }
 }
 
-const formatTime = (date: Date | string | null) => {
+const formatTime = (date?: Date | string | null) => {
   if (!date) return '从未'
   const d = typeof date === 'string' ? new Date(date) : date
   const now = new Date()

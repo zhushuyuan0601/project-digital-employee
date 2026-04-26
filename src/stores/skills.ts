@@ -17,7 +17,11 @@ export const useSkillsStore = defineStore('skills', () => {
   // 按分类过滤
   const categories = computed(() => {
     const cats = new Set<string>()
-    skills.value.forEach(s => cats.add(s.category))
+    skills.value.forEach((s) => {
+      if (s.category) {
+        cats.add(s.category)
+      }
+    })
     return Array.from(cats)
   })
 

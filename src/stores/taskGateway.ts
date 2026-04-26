@@ -2,6 +2,13 @@
 // 真实连接模式：实际建立 WebSocket 连接到 Gateway
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { getAgentDefinition, DEFAULT_GROUP_CHAT_AGENT_IDS } from '@/config/agents'
+import { useGatewayConnection } from '@/composables/useGatewayConnection'
+import {
+  buildConnectRequest,
+  extractChatText,
+  extractText,
+} from '@/utils/gateway-protocol'
 
 // Agent 连接配置
 export interface AgentConnection {
@@ -24,55 +31,29 @@ export interface TaskMessage {
   data?: any
 }
 
-// Gateway 配置
-const GATEWAY_CONFIG = {
-  wsUrl: 'ws://127.0.0.1:18789',
-  token: 'bd0f157b60e41a3d9895ddec846d2d10c8d795bc0a061f70',
-}
-
 // 模拟模式开关 - 设置为 false 启用真实连接
 const SIMULATION_MODE = false
 
 export const useTaskGatewayStore = defineStore('taskGateway', () => {
+  const { settings, resolveSocketUrl, createChallengeResponse } = useGatewayConnection()
+
   // 状态 - 四个 Agent 连接配置
-  const connections = ref<Record<string, AgentConnection>>({
-    xiaomu: {
-      id: 'xiaomu',
-      gatewayAgentId: 'ceo',
-      name: '小呦',
-      ws: null,
-      isConnected: false,
-      isConnecting: false,
-      sessionKey: 'agent:ceo:main'
-    },
-    xiaokai: {
-      id: 'xiaokai',
-      gatewayAgentId: 'tech-lead',
-      name: '研发工程师',
-      ws: null,
-      isConnected: false,
-      isConnecting: false,
-      sessionKey: 'agent:tech-lead:main'
-    },
-    xiaochan: {
-      id: 'xiaochan',
-      gatewayAgentId: 'pm',
-      name: '产品经理',
-      ws: null,
-      isConnected: false,
-      isConnecting: false,
-      sessionKey: 'agent:pm:main'
-    },
-    xiaoyan: {
-      id: 'xiaoyan',
-      gatewayAgentId: 'researcher',
-      name: '研究员',
-      ws: null,
-      isConnected: false,
-      isConnecting: false,
-      sessionKey: 'agent:researcher:main'
-    }
-  })
+  const connections = ref<Record<string, AgentConnection>>(
+    Object.fromEntries(
+      DEFAULT_GROUP_CHAT_AGENT_IDS.map((agentId) => {
+        const agent = getAgentDefinition(agentId)!
+        return [agentId, {
+          id: agent.id,
+          gatewayAgentId: agent.gatewayAgentId,
+          name: agent.name,
+          ws: null,
+          isConnected: false,
+          isConnecting: false,
+          sessionKey: agent.sessionKey,
+        }]
+      })
+    )
+  )
 
   // 消息日志
   const messages = ref<TaskMessage[]>([])
@@ -140,26 +121,15 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
     const conn = connections.value[agentId]
     if (!conn.ws) return
 
-    const msg = {
-      type: 'req',
-      id: `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      method: 'connect',
-      params: {
-        minProtocol: PROTOCOL_VERSION,
-        maxProtocol: PROTOCOL_VERSION,
-        client: {
-          id: 'openclaw-control-ui',  // 必须使用这个 ID 才能被识别为 Control UI
-          displayName: 'Web Chat',
-          version: '1.0.0',
-          platform: 'web',
-          mode: 'webchat',
-        },
-        role: 'operator',  // 必须指定 role，dangerouslyDisableDeviceAuth 只对 operator 生效
-        scopes: ['operator.admin', 'operator.write', 'operator.read'],
-        caps: ['tool-events'],
-        auth: GATEWAY_CONFIG.token ? { token: GATEWAY_CONFIG.token } : undefined,
+    const msg = buildConnectRequest({
+      token: settings.value.token,
+      client: {
+        id: 'openclaw-control-ui',
+        displayName: conn.name,
       },
-    }
+      minProtocol: PROTOCOL_VERSION,
+      maxProtocol: PROTOCOL_VERSION,
+    })
     pendingRequests.value[msg.id] = { method: 'connect', agentId }
     conn.ws?.send(JSON.stringify(msg))
     console.log(`[TaskGateway:${agentId}] 发送连接请求 (protocol v${PROTOCOL_VERSION})`)
@@ -283,52 +253,16 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
 
   // 处理连接挑战响应
   async function handleConnectChallenge(agentId: string, payload: { nonce: string; ts: number }) {
-    console.log(`[TaskGateway:${agentId}] Received challenge:`, payload)
-
     const conn = connections.value[agentId]
-    if (!conn?.ws || !GATEWAY_CONFIG.token) {
+    if (!conn?.ws || !settings.value.token) {
       console.error(`[TaskGateway:${agentId}] No token to respond to challenge`)
       return
     }
 
-    // 检查 crypto.subtle 是否可用（安全上下文）
-    if (!window.crypto?.subtle) {
+    const responseMsg = await createChallengeResponse(payload)
+    if (!responseMsg) {
       console.warn(`[TaskGateway:${agentId}] crypto.subtle 不可用（非安全上下文），跳过挑战响应`)
-      // 在非安全上下文下，Gateway 应配置 allowInsecureAuth 来支持纯 token 认证
       return
-    }
-
-    // 使用 HMAC-SHA256 计算签名
-    const encoder = new TextEncoder()
-    const keyData = encoder.encode(GATEWAY_CONFIG.token)
-    const messageData = encoder.encode(payload.nonce)
-
-    // 导入密钥
-    const key = await window.crypto.subtle.importKey(
-      'raw',
-      keyData,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    )
-
-    // 计算签名
-    const signature = await window.crypto.subtle.sign('HMAC', key, messageData)
-
-    // 转换为 hex 字符串
-    const signatureHex = Array.from(new Uint8Array(signature))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('')
-
-    // 发送挑战响应
-    const responseMsg = {
-      type: 'req',
-      id: `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      method: 'connect.challenge_response',
-      params: {
-        nonce: payload.nonce,
-        response: signatureHex
-      }
     }
 
     conn.ws.send(JSON.stringify(responseMsg))
@@ -430,35 +364,6 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
     }
   }
 
-  // 提取文本
-  function extractText(payload: any): string | null {
-    if (!payload?.data) return null
-    if (typeof payload.data === 'string') return payload.data
-    if (payload.data.text) return payload.data.text
-    if (payload.data.content) {
-      if (typeof payload.data.content === 'string') return payload.data.content
-      if (Array.isArray(payload.data.content)) {
-        return payload.data.content.map((c: any) => c.text || '').join('')
-      }
-    }
-    return null
-  }
-
-  // 提取 chat 文本
-  function extractChatText(payload: any): string | null {
-    if (!payload?.message) return null
-    const msg = payload.message
-    if (typeof msg === 'string') return msg
-    if (msg.text) return msg.text
-    if (msg.content) {
-      if (typeof msg.content === 'string') return msg.content
-      if (Array.isArray(msg.content)) {
-        return msg.content.map((c: any) => c.text || '').join('')
-      }
-    }
-    return null
-  }
-
   // 连接到单个 Agent（模拟模式下直接返回已连接）
   function connectAgent(agentId: string) {
     if (SIMULATION_MODE) {
@@ -479,7 +384,7 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
     conn.isConnecting = true
 
     try {
-      const wsUrl = `${GATEWAY_CONFIG.wsUrl}?token=${encodeURIComponent(GATEWAY_CONFIG.token)}`
+      const wsUrl = resolveSocketUrl()
       console.log(`[TaskGateway:${agentId}] 连接 Gateway: ${wsUrl}`)
 
       const ws = new WebSocket(wsUrl)
@@ -550,10 +455,7 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
       return
     }
     // 真实模式：连接所有 4 个 Agent
-    connectAgent('xiaomu')
-    connectAgent('xiaokai')
-    connectAgent('xiaochan')
-    connectAgent('xiaoyan')
+    DEFAULT_GROUP_CHAT_AGENT_IDS.forEach((agentId) => connectAgent(agentId))
   }
 
   // 断开所有 Agent（模拟模式下保持连接状态）
@@ -571,10 +473,7 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
       return
     }
     // 真实模式：断开所有 4 个 Agent
-    disconnectAgent('xiaomu')
-    disconnectAgent('xiaokai')
-    disconnectAgent('xiaochan')
-    disconnectAgent('xiaoyan')
+    DEFAULT_GROUP_CHAT_AGENT_IDS.forEach((agentId) => disconnectAgent(agentId))
     console.log('[TaskGateway] 已断开所有 Agent 连接')
   }
 

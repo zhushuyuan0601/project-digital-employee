@@ -1,126 +1,193 @@
 <template>
-  <div class="group-chat-interface">
-    <!-- 群聊头部 -->
-    <div class="group-chat-header">
-      <div class="header-left">
-        <div class="group-avatar">
-          <span class="avatar-icon">◉</span>
-        </div>
-        <div class="group-info">
-          <h2 class="group-title">{{ groupConfig.name }}</h2>
-          <div class="group-members">
-            <span
-              v-for="agent in participatingAgents"
-              :key="agent.id"
-              class="member-tag"
-              :class="agent.isConnected ? 'online' : 'offline'"
-              :title="agent.name"
-            >
-              <span class="member-avatar">{{ agent.avatar }}</span>
-              <span class="member-name">{{ agent.name }}</span>
-              <span class="member-status"></span>
-            </span>
-          </div>
+  <div class="command-room">
+    <aside class="command-sidebar">
+      <div class="command-sidebar__hero">
+        <div class="hero-mark">群</div>
+        <div class="hero-copy">
+          <p class="hero-kicker">联合态势频道</p>
+          <h1 class="hero-title">{{ groupConfig.name }}</h1>
+          <p class="hero-desc">{{ groupConfig.description }}</p>
         </div>
       </div>
-      <div class="header-controls">
-        <button class="btn btn-success btn-sm" @click="handleConnectAll" :disabled="allConnected">
-          <span class="btn-icon">⬡</span>
+
+      <div class="hero-status">
+        <span class="status-pill" :class="allConnected ? 'status-pill--online' : anyConnected ? 'status-pill--partial' : 'status-pill--offline'">
+          <span class="status-pill__dot"></span>
+          {{ allConnected ? '全员在线' : anyConnected ? '部分在线' : '等待接入' }}
+        </span>
+        <span class="hero-updated">{{ latestActivityText }}</span>
+      </div>
+
+      <div class="metrics-grid">
+        <article class="metric-card">
+          <span class="metric-label">活跃席位</span>
+          <strong class="metric-value">{{ activeAgentCount }}/{{ participatingAgents.length }}</strong>
+          <span class="metric-hint">已接入协同链路</span>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">会话消息</span>
+          <strong class="metric-value">{{ messages.length }}</strong>
+          <span class="metric-hint">本地归档记录</span>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">待机席位</span>
+          <strong class="metric-value">{{ offlineAgentCount }}</strong>
+          <span class="metric-hint">尚未加入频道</span>
+        </article>
+      </div>
+
+      <div class="command-actions">
+        <button class="control-btn control-btn--solid" @click="handleConnectAll" :disabled="allConnected">
           全连
         </button>
-        <button class="btn btn-danger btn-sm" @click="handleDisconnectAll" :disabled="!anyConnected">
-          <span class="btn-icon">⏻</span>
+        <button class="control-btn" @click="handleDisconnectAll" :disabled="!anyConnected">
           全断
         </button>
-        <button class="btn btn-secondary btn-sm" @click="confirmClear">
-          <span class="btn-icon">↻</span>
-          重置
+        <button class="control-btn" @click="confirmClear">
+          清屏
         </button>
       </div>
-    </div>
 
-    <!-- 消息区域 -->
-    <div class="messages-container" ref="messagesContainer">
-      <div v-if="messages.length === 0" class="empty-state">
-        <div class="empty-art">
-          <pre>
-  ╔═══════════════════════════════════╗
-  ║   群聊会话 - {{ groupConfig.name }}
-  ║   成员：{{ participatingAgents.length }} 人
-  ║                                   ║
-  ║   ▶ 小 U、研究员、产品经理、研发   ║
-  ║      工程师已加入群聊              ║
-  ║                                   ║
-  ║   ▶ 使用 @成员名 发送消息          ║
-  ║   ▶ 例：@小 U 你好                 ║
-  ╚═══════════════════════════════════╝
-          </pre>
-        </div>
-      </div>
-
-      <div
-        v-for="message in messages"
-        :key="message.id"
-        :class="['message-row', 'sender-' + message.sender]"
-      >
-        <!-- 发送者头像 -->
-        <div class="message-avatar">
-          <span v-if="message.sender === 'agent'" class="avatar-icon">
-            {{ message.senderAvatar || '◈' }}
-          </span>
-          <span v-else-if="message.sender === 'user'" class="avatar-icon user-avatar">
-            👤
-          </span>
-          <span v-else class="avatar-icon system-avatar">
-            ⚙
-          </span>
-        </div>
-
-        <!-- 消息内容 -->
-        <div class="message-content">
-          <div class="message-meta">
-            <span class="sender-name" :class="'name-' + message.sender">
-              {{ message.senderName }}
-            </span>
-            <span class="message-time">{{ formatTime(message.timestamp) }}</span>
+      <section class="roster-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="panel-kicker">作战成员</p>
+            <h2>协同编组</h2>
           </div>
-          <div class="message-text" v-html="formatMessageContent(message.content)"></div>
+          <span class="panel-count">{{ participatingAgents.length }}</span>
+        </div>
 
-          <!-- 提及标签 -->
-          <div v-if="message.mentions && message.mentions.length > 0" class="mention-tags">
-            <span
-              v-for="mentionId in message.mentions"
-              :key="mentionId"
-              class="mention-tag"
+        <div class="roster-list">
+          <button
+            v-for="agent in participatingAgents"
+            :key="agent.id"
+            type="button"
+            class="roster-item"
+            @click="appendMention(agent.name)"
+          >
+            <div class="roster-item__avatar">{{ agent.avatar }}</div>
+            <div class="roster-item__body">
+              <strong>{{ agent.name }}</strong>
+              <span>{{ agent.isConnected ? '可直接下达指令' : '暂未接入，会自动提示离线' }}</span>
+            </div>
+            <span class="roster-item__status" :class="agent.isConnected ? 'is-online' : 'is-offline'">
+              {{ agent.isConnected ? '在线' : '离线' }}
+            </span>
+          </button>
+        </div>
+      </section>
+    </aside>
+
+    <section class="command-stage">
+      <header class="stage-header">
+        <div class="stage-header__copy">
+          <p class="stage-kicker">实时群控面板</p>
+          <h2>面向任务分派、回执追踪与多 Agent 会商的主频道</h2>
+        </div>
+        <div class="stage-header__meta">
+          <div class="meta-badge">
+            <span>消息流</span>
+            <strong>{{ messages.length }}</strong>
+          </div>
+          <div class="meta-badge">
+            <span>在线</span>
+            <strong>{{ activeAgentCount }}</strong>
+          </div>
+        </div>
+      </header>
+
+      <div class="stage-body">
+        <div class="stream-shell">
+          <div class="stream-toolbar">
+            <div class="stream-toolbar__title">
+              <span class="toolbar-dot"></span>
+              指挥席广播流
+            </div>
+            <div class="stream-toolbar__hint">
+              对成员使用 `@姓名` 可定向下达指令
+            </div>
+          </div>
+
+          <div class="messages-container" ref="messagesContainer">
+            <div v-if="messages.length === 0" class="empty-state">
+              <div class="empty-orbit">
+                <span class="empty-orbit__core">作战待命</span>
+              </div>
+              <div class="empty-copy">
+                <h3>频道已建立，等待第一条指令</h3>
+                <p>在下方输入框中直接输入，或点击左侧成员卡片快速插入 `@成员名`。</p>
+              </div>
+            </div>
+
+            <div
+              v-for="message in messages"
+              :key="message.id"
+              class="stream-row"
+              :class="`stream-row--${message.sender}`"
             >
-              @{{ getAgentName(mentionId) }}
-            </span>
+              <ChatMessageBubble
+                :variant="message.sender === 'agent' ? 'assistant' : message.sender === 'system' ? 'system' : 'user'"
+                :layout="message.sender === 'user' ? 'right' : 'left'"
+                :sender-name="message.senderName"
+                :time="formatTime(message.timestamp)"
+                :content-html="formatRichText(message.content)"
+                :avatar-text="message.sender === 'agent' ? (message.senderAvatar || '◈') : message.sender === 'system' ? '⚙' : '我'"
+                :mentions="(message.mentions || []).map(getAgentName)"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div class="composer-shell">
+          <div class="composer-head">
+            <div>
+              <p class="panel-kicker">快速派发</p>
+              <h3>指挥输入台</h3>
+            </div>
+            <span class="draft-counter">{{ inputContent.trim().length }} 字</span>
+          </div>
+
+          <div class="mention-strip">
+            <button
+              v-for="agent in participatingAgents"
+              :key="agent.id"
+              type="button"
+              class="mention-chip"
+              :class="{ 'mention-chip--offline': !agent.isConnected }"
+              @click="appendMention(agent.name)"
+            >
+              <span>{{ agent.avatar }}</span>
+              @{{ agent.name }}
+            </button>
+          </div>
+
+          <div class="composer-box">
+            <textarea
+              v-model="inputContent"
+              class="message-input"
+              placeholder="输入群指令，使用 @ 成员名 定向派发。Enter 发送，Shift+Enter 换行。"
+              @keydown.enter.exact.prevent="handleSend"
+              rows="6"
+              ref="inputRef"
+            ></textarea>
+
+            <div class="composer-footer">
+              <div class="composer-footnote">
+                <span>广播消息会保存在本地会话。</span>
+                <span>未上线成员会收到系统提醒，不会静默失败。</span>
+              </div>
+              <button
+                class="send-btn"
+                @click="handleSend"
+                :disabled="sendDisabled"
+              >
+                下达指令
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-
-    <!-- 输入区域 -->
-    <div class="input-area">
-      <div class="input-wrapper">
-        <span class="input-prefix">@</span>
-        <textarea
-          v-model="inputContent"
-          class="message-input"
-          placeholder="输入消息，使用 @ 提及成员（如：@小 U 你好）"
-          @keydown.enter.exact.prevent="handleSend"
-          rows="2"
-          ref="inputRef"
-        ></textarea>
-      </div>
-      <button
-        class="btn-send"
-        @click="handleSend"
-        :disabled="!inputContent.trim()"
-      >
-        <span class="send-icon">⏵</span>
-      </button>
-    </div>
+    </section>
   </div>
 </template>
 
@@ -128,23 +195,24 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useGroupChatStore } from '@/stores/groupChat'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
-import { AGENT_CONFIG } from '@/simulation'
 import { ElMessageBox } from 'element-plus'
+import { extractText } from '@/utils/gateway-protocol'
+import ChatMessageBubble from '@/components/chat/ChatMessageBubble.vue'
+import { useChatFormatting } from '@/composables/useChatFormatting'
 
 const groupStore = useGroupChatStore()
 const multiAgentStore = useMultiAgentChatStore()
+const { formatTime, formatRichText } = useChatFormatting()
 
 const groupConfig = computed(() => groupStore.groupConfig)
 const messages = computed(() => groupStore.messages)
 
-// 连接状态
 const allConnected = computed(() => multiAgentStore.allConnected)
 const anyConnected = computed(() => multiAgentStore.anyConnected)
 
-// 动态获取参与群聊的 Agent（从 groupStore 配置中读取）
 const participatingAgents = computed(() => {
   const agentIds = groupStore.groupConfig.agentIds
-  const result = agentIds.map(id => {
+  return agentIds.map(id => {
     const agentState = multiAgentStore.agents[id]
     return {
       id,
@@ -153,42 +221,48 @@ const participatingAgents = computed(() => {
       isConnected: agentState?.isConnected || false
     }
   })
-  return result
 })
+
+const activeAgentCount = computed(() =>
+  participatingAgents.value.filter(agent => agent.isConnected).length
+)
+
+const offlineAgentCount = computed(() =>
+  participatingAgents.value.length - activeAgentCount.value
+)
+
+const latestActivityText = computed(() => {
+  const lastMessage = messages.value[messages.value.length - 1]
+  if (!lastMessage) {
+    return '尚无群消息'
+  }
+  return `最近更新 ${formatTime(lastMessage.timestamp)}`
+})
+
+const sendDisabled = computed(() => !inputContent.value.trim())
 
 const inputContent = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
-const inputRef = ref<HTMLElement | null>(null)
+const inputRef = ref<HTMLTextAreaElement | null>(null)
 
-// 格式化时间
-const formatTime = (timestamp: number) => {
-  const date = new Date(timestamp)
-  const hours = date.getHours().toString().padStart(2, '0')
-  const minutes = date.getMinutes().toString().padStart(2, '0')
-  const seconds = date.getSeconds().toString().padStart(2, '0')
-  return `${hours}:${minutes}:${seconds}`
-}
-
-// 格式化消息内容
-const formatMessageContent = (content: string) => {
-  if (!content) return ''
-  let formatted = content
-    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="code-block"><code>$2</code></pre>')
-    .replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n/g, '<br>')
-  return formatted
-}
-
-// 获取 Agent 名称
 const getAgentName = (agentId: string) => {
   const agent = participatingAgents.value.find(a => a.id === agentId)
   return agent?.name || agentId
 }
 
-// 监听多 Agent Store 的连接状态变化（由于 participatingAgents 是 computed from multiAgentStore，所以自动响应式）
+const appendMention = (agentName: string) => {
+  const token = `@${agentName} `
+  if (inputContent.value.includes(token.trim())) {
+    inputRef.value?.focus()
+    return
+  }
+
+  const prefix = inputContent.value && !/\s$/.test(inputContent.value) ? ' ' : ''
+  inputContent.value = `${inputContent.value}${prefix}${token}`
+  nextTick(() => inputRef.value?.focus())
+}
+
 const setupAgentStatusWatcher = () => {
-  // watch participatingAgents 变化，更新 groupStore 内部状态用于消息处理
   return watch(
     () => participatingAgents.value,
     (agents) => {
@@ -204,14 +278,11 @@ const setupAgentStatusWatcher = () => {
   )
 }
 
-// 监听 Agent 消息并显示到群聊
 const setupMessageListener = () => {
   const listener = (agentId: string, event: string, payload: any) => {
-    // 只处理 agent 事件
     if (event === 'agent') {
       const stream = payload?.stream
       if (stream === 'assistant') {
-        // 提取 AI 回复内容
         const text = extractText(payload)
         if (text) {
           groupStore.updateAgentReply(agentId, text)
@@ -225,37 +296,21 @@ const setupMessageListener = () => {
   return () => multiAgentStore.removeEventListener(listener)
 }
 
-// 提取文本
-const extractText = (payload: any): string | null => {
-  if (!payload?.data) return null
-  if (typeof payload.data === 'string') return payload.data
-  if (payload.data.text) return payload.data.text
-  if (payload.data.content) {
-    if (typeof payload.data.content === 'string') return payload.data.content
-    if (Array.isArray(payload.data.content)) {
-      return payload.data.content.map((c: any) => c.text || '').join('')
-    }
-  }
-  return null
-}
-
-// 发送消息
 const handleSend = async () => {
   if (!inputContent.value.trim()) return
 
   const content = inputContent.value.trim()
   const { mentions, invalidMentions, offlineAgents } = groupStore.handleUserMessage(content)
+  if (invalidMentions.length > 0 || offlineAgents.length > 0) {
+    console.warn('[GroupChat] ignored mentions', { invalidMentions, offlineAgents })
+  }
 
-  // 向被 @ 的 Agent 发送消息
   for (const agentId of mentions) {
     const agentState = multiAgentStore.agents[agentId]
     if (!agentState) continue
 
     try {
-      // 使用完整的 gatewayAgentId 作为 agent 名称（如 agent:ceo:main）
       const targetAgentName = agentState.config.gatewayAgentId || agentState.config.sessionKey
-
-      // 使用 HTTP API 发送消息（与 Mission-control 一致）
       const response = await fetch('/api/chat/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -271,7 +326,6 @@ const handleSend = async () => {
       const data = await response.json()
 
       if (data.success || data.message) {
-        // 在本地添加用户消息
         multiAgentStore.agents[agentId]?.messages.push({
           id: `msg-${Date.now()}`,
           role: 'user',
@@ -280,7 +334,7 @@ const handleSend = async () => {
           agentId
         })
       } else {
-        console.error(`[GroupChat] Failed to send message to ${coreAgentName}:`, data.error)
+        console.error(`[GroupChat] Failed to send message to ${targetAgentName}:`, data.error)
       }
     } catch (err) {
       console.error(`[GroupChat] Send message error to ${agentId}:`, err)
@@ -290,10 +344,10 @@ const handleSend = async () => {
   inputContent.value = ''
   nextTick(() => {
     scrollToBottom()
+    inputRef.value?.focus()
   })
 }
 
-// 滚动到底部
 const scrollToBottom = () => {
   nextTick(() => {
     if (messagesContainer.value) {
@@ -302,7 +356,6 @@ const scrollToBottom = () => {
   })
 }
 
-// 确认重置
 const confirmClear = () => {
   ElMessageBox.confirm('清空群聊消息记录？', '确认', {
     confirmButtonText: '清空',
@@ -313,17 +366,14 @@ const confirmClear = () => {
   }).catch(() => {})
 }
 
-// 全连
 const handleConnectAll = () => {
   multiAgentStore.connectAll()
 }
 
-// 全断
 const handleDisconnectAll = () => {
   multiAgentStore.disconnectAll()
 }
 
-// 自动滚动
 let prevLength = 0
 const checkScroll = setInterval(() => {
   if (messages.value.length !== prevLength) {
@@ -332,766 +382,621 @@ const checkScroll = setInterval(() => {
   }
 }, 500)
 
-// 生命周期
 const stopAgentWatch = setupAgentStatusWatcher()
 const cleanupListener = setupMessageListener()
 
 onMounted(() => {
   groupStore.loadMessages()
   scrollToBottom()
-  // 连接状态由 App.vue 统一管理，页面切换时不断开
+  inputRef.value?.focus()
 })
 
 onUnmounted(() => {
   clearInterval(checkScroll)
   stopAgentWatch()
   cleanupListener()
-  // 不断开连接，只清理监听器
 })
 </script>
 
 <style scoped>
-/* ========== 群聊界面 ========== */
-.group-chat-interface {
-  height: calc(100vh - 140px);
+.command-room {
+  min-height: 100%;
+  height: auto;
+  display: grid;
+  grid-template-columns: minmax(280px, 332px) minmax(0, 1fr);
+  background:
+    radial-gradient(circle at top left, color-mix(in oklab, var(--color-primary) 14%, transparent), transparent 34%),
+    radial-gradient(circle at bottom right, color-mix(in oklab, var(--color-secondary) 12%, transparent), transparent 30%),
+    var(--bg-base);
+  border: 1px solid var(--border-default);
+  border-radius: 28px;
+  overflow: visible;
+}
+
+.command-sidebar {
   display: flex;
   flex-direction: column;
-  background: var(--bg-panel);
-  border: 1px solid var(--grid-line);
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  gap: 20px;
+  padding: 24px 20px;
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--bg-panel) 88%, transparent), color-mix(in oklab, var(--bg-base) 96%, transparent));
+  border-right: 1px solid var(--border-default);
 }
 
-/* ========== 亮色主题 - 群聊界面 ========== */
-:root.light-theme .group-chat-interface {
-  background: #fafbfc;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-}
-
-/* ========== 群聊头部 ========== */
-.group-chat-header {
+.command-sidebar__hero {
   display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.hero-mark {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border-radius: 20px;
+  background: color-mix(in oklab, var(--color-primary) 18%, var(--bg-card));
+  color: var(--text-primary);
+  font-size: 1.2rem;
+  font-weight: 800;
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-primary) 24%, transparent);
+}
+
+.hero-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.hero-kicker,
+.panel-kicker,
+.stage-kicker {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.hero-title,
+.panel-heading h2,
+.composer-head h3 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.hero-title {
+  font-size: 1.7rem;
+  line-height: 1.1;
+}
+
+.hero-desc {
+  margin: 0;
+  max-width: 26ch;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.hero-status {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
+  gap: 12px;
+}
+
+.status-pill {
+  display: inline-flex;
   align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--grid-line);
-  background: linear-gradient(180deg, rgba(0, 240, 255, 0.05) 0%, transparent 100%);
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--bg-card) 84%, var(--bg-base));
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--border-default);
 }
 
-/* ========== 亮色主题 - 群聊头部 ========== */
-:root.light-theme .group-chat-header {
-  background: #ffffff;
-  border-bottom: 1px solid #e5e7eb;
+.status-pill__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
-.header-left {
+.status-pill--online {
+  color: var(--color-success);
+}
+
+.status-pill--partial {
+  color: var(--color-warning);
+}
+
+.status-pill--offline {
+  color: var(--color-error);
+}
+
+.hero-updated {
+  color: var(--text-tertiary);
+  font-size: 0.78rem;
+}
+
+.metrics-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.metric-card {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+  border-radius: 18px;
+  background: color-mix(in oklab, var(--bg-card) 88%, transparent);
+  box-shadow: inset 0 0 0 1px var(--border-default);
+}
+
+.metric-label,
+.metric-hint,
+.panel-count,
+.draft-counter {
+  color: var(--text-secondary);
+}
+
+.metric-label,
+.metric-hint {
+  font-size: 0.8rem;
+}
+
+.metric-value {
+  color: var(--text-primary);
+  font-size: 1.55rem;
+  line-height: 1;
+}
+
+.command-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.control-btn {
+  height: 42px;
+  border: 0;
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--bg-card) 92%, transparent);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--border-default);
+}
+
+.control-btn--solid {
+  background: color-mix(in oklab, var(--color-primary) 20%, var(--bg-card));
+}
+
+.control-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.roster-panel,
+.composer-shell,
+.stream-shell {
+  min-height: 0;
+  border-radius: 24px;
+  background: color-mix(in oklab, var(--bg-panel) 92%, transparent);
+  box-shadow: inset 0 0 0 1px var(--border-default);
+}
+
+.roster-panel {
   display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-heading,
+.composer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 18px 14px;
+}
+
+.roster-list {
+  display: grid;
+  gap: 10px;
+  padding: 0 12px 12px;
+  overflow-y: auto;
+}
+
+.roster-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 0;
+  border-radius: 16px;
+  background: color-mix(in oklab, var(--bg-base) 74%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--border-default) 88%, transparent);
+  text-align: left;
+}
+
+.roster-item__avatar {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--color-primary) 16%, var(--bg-card));
+  color: var(--text-primary);
+}
+
+.roster-item__body {
+  display: grid;
+  gap: 2px;
+}
+
+.roster-item__body strong {
+  color: var(--text-primary);
+}
+
+.roster-item__body span,
+.roster-item__status {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.roster-item__status.is-online {
+  color: var(--color-success);
+}
+
+.roster-item__status.is-offline {
+  color: var(--color-error);
+}
+
+.command-stage {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 22px;
   gap: 16px;
 }
 
-.group-avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, rgba(0, 240, 255, 0.2) 0%, rgba(189, 0, 255, 0.15) 100%);
-  border: 1px solid rgba(0, 240, 255, 0.3);
+.stage-header {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 0 20px rgba(0, 240, 255, 0.15);
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 4px 2px 0;
 }
 
-.avatar-icon {
-  font-size: 24px;
-  color: var(--color-primary);
-  text-shadow: 0 0 10px rgba(0, 240, 255, 0.6);
+.stage-header__copy {
+  display: grid;
+  gap: 6px;
 }
 
-.user-avatar {
-  color: var(--color-secondary);
+.stage-header__copy h2 {
+  margin: 0;
+  max-width: 40ch;
+  color: var(--text-primary);
+  font-size: 1.45rem;
+  line-height: 1.3;
 }
 
-.system-avatar {
-  color: var(--text-muted);
-  font-size: 20px;
+.stage-header__meta {
+  display: flex;
+  gap: 10px;
 }
 
-.group-info {
+.meta-badge {
+  min-width: 90px;
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: color-mix(in oklab, var(--bg-card) 86%, transparent);
+  box-shadow: inset 0 0 0 1px var(--border-default);
+}
+
+.meta-badge span {
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.meta-badge strong {
+  color: var(--text-primary);
+  font-size: 1.2rem;
+}
+
+.stage-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  gap: 16px;
+}
+
+.stream-shell {
+  min-height: 620px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  overflow: hidden;
 }
 
-.group-title {
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  margin: 0;
-}
-
-.group-members {
+.stream-toolbar {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  box-shadow: inset 0 -1px 0 var(--border-default);
 }
 
-.member-tag {
+.stream-toolbar__title {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  background: rgba(30, 58, 95, 0.3);
-  border: 1px solid rgba(48, 80, 112, 0.4);
-  border-radius: 6px;
-  font-size: 11px;
-  font-family: var(--font-mono);
-  color: var(--text-tertiary);
-  position: relative;
+  gap: 10px;
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
-/* ========== 亮色主题 - 成员标签 (Feishu 风格) ========== */
-:root.light-theme .member-tag {
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 5px 10px;
-  font-size: 12px;
-  font-family: var(--font-sans);
-  color: #6b7280;
-}
-
-.member-avatar {
-  font-size: 12px;
-  color: var(--color-primary);
-}
-
-/* ========== 亮色主题 - 成员头像 ========== */
-:root.light-theme .member-avatar {
-  font-size: 13px;
-  color: #4f46e5;
-}
-
-.member-name {
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-/* ========== 亮色主题 - 成员名称 ========== */
-:root.light-theme .member-name {
-  text-transform: none;
-  letter-spacing: 0;
-  font-weight: 500;
-}
-
-.member-status {
-  width: 6px;
-  height: 6px;
+.toolbar-dot {
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
-  background: var(--text-muted);
+  background: var(--color-primary);
 }
 
-.member-tag.online .member-status {
-  background: var(--color-success);
-  box-shadow: 0 0 8px rgba(0, 255, 136, 0.5);
+.stream-toolbar__hint {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
 }
 
-/* ========== 亮色主题 - 在线状态 ========== */
-:root.light-theme .member-tag.online .member-status {
-  background: #10b981;
-  box-shadow: 0 0 6px rgba(16, 185, 129, 0.4);
-}
-
-.member-tag.offline .member-status {
-  background: var(--color-error);
-  box-shadow: 0 0 8px rgba(255, 51, 102, 0.4);
-}
-
-/* ========== 亮色主题 - 离线状态 ========== */
-:root.light-theme .member-tag.offline .member-status {
-  background: #9ca3af;
-  box-shadow: none;
-}
-
-/* ========== 消息区域 ========== */
 .messages-container {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding: 20px;
-  background: #0a0e14;
-}
-
-/* ========== 亮色主题 - 消息区域 (Feishu 风格) ========== */
-:root.light-theme .messages-container {
-  background: #fafbfc;
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .empty-state {
+  flex: 1;
+  min-height: 420px;
+  display: grid;
+  place-items: center;
+  gap: 18px;
+  text-align: center;
+}
+
+.empty-orbit {
+  width: 220px;
+  height: 220px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, color-mix(in oklab, var(--color-primary) 18%, transparent) 0 24%, transparent 25%),
+    radial-gradient(circle, color-mix(in oklab, var(--color-primary) 10%, transparent) 0 60%, transparent 61%);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-primary) 16%, transparent);
+}
+
+.empty-orbit__core {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 110px;
+  height: 110px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--bg-card) 92%, transparent);
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.empty-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.empty-copy h3,
+.empty-copy p {
+  margin: 0;
+}
+
+.empty-copy h3 {
+  color: var(--text-primary);
+}
+
+.empty-copy p {
+  max-width: 40ch;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.stream-row {
+  display: flex;
+}
+
+.stream-row--user {
+  justify-content: flex-end;
+}
+
+.stream-row :deep(.chat-message-bubble) {
+  width: 100%;
+}
+
+.stream-row :deep(.chat-message-bubble__body) {
+  max-width: min(44rem, calc(100% - 52px));
+}
+
+.composer-shell {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: var(--text-muted);
+  min-height: 620px;
+  overflow: hidden;
 }
 
-.empty-art pre {
-  font-size: 11px;
-  line-height: 1.5;
-  color: var(--color-primary-dim);
-  text-shadow: 0 0 10px rgba(0, 240, 255, 0.3);
-}
-
-/* ========== 亮色主题 - 空状态 ========== */
-:root.light-theme .empty-state {
-  color: #9ca3af;
-}
-
-:root.light-theme .empty-art pre {
-  color: #d1d5db;
-  text-shadow: none;
-}
-
-/* ========== 消息行 - Feishu 风格气泡 ========== */
-.message-row {
+.mention-strip {
   display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
-  padding: 0;
-  background: transparent;
-  border-radius: 0;
-  transition: none;
-}
-
-.message-row:hover {
-  background: transparent;
-}
-
-/* ========== 亮色主题 - 消息行 ========== */
-:root.light-theme .message-row {
-  margin-bottom: 16px;
-}
-
-.message-row.sender-user {
-  background: rgba(189, 0, 255, 0.05);
-  border-left: 2px solid var(--color-secondary);
-}
-
-.message-row.sender-agent {
-  background: rgba(0, 240, 255, 0.05);
-  border-left: 2px solid var(--color-primary);
-}
-
-.message-row.sender-system {
-  background: rgba(136, 144, 168, 0.05);
-  border-left: 2px solid var(--text-muted);
-}
-
-/* ========== 亮色主题 - 消息行无边框背景 ========== */
-:root.light-theme .message-row.sender-user,
-:root.light-theme .message-row.sender-agent,
-:root.light-theme .message-row.sender-system {
-  background: transparent;
-  border-left: none;
-  padding: 0;
-}
-
-.message-avatar {
-  flex-shrink: 0;
-}
-
-.message-avatar .avatar-icon {
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, rgba(0, 240, 255, 0.2) 0%, rgba(189, 0, 255, 0.15) 100%);
-  border: 1px solid rgba(0, 240, 255, 0.3);
-  border-radius: 8px;
-  font-size: 18px;
-}
-
-/* ========== 亮色主题 - 头像 (Feishu 风格) ========== */
-:root.light-theme .message-avatar .avatar-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #dbeafe, #bfdbfe);
-  border: none;
-  color: #2563eb;
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.15);
-}
-
-.message-row.sender-user .avatar-icon {
-  background: linear-gradient(135deg, rgba(189, 0, 255, 0.2) 0%, rgba(136, 0, 255, 0.15) 100%);
-}
-
-/* ========== 亮色主题 - 用户头像 ========== */
-:root.light-theme .message-row.sender-user .avatar-icon {
-  background: linear-gradient(135deg, #e0e7ff, #c7d2fe);
-  color: #4f46e5;
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
-}
-
-.message-row.sender-system .avatar-icon {
-  background: rgba(136, 144, 168, 0.2);
-  border-color: rgba(136, 144, 168, 0.3);
-}
-
-/* ========== 亮色主题 - 系统头像 ========== */
-:root.light-theme .message-row.sender-system .avatar-icon {
-  background: linear-gradient(135deg, #f3f4f6, #e5e7eb);
-  color: #6b7280;
-  box-shadow: 0 2px 8px rgba(107, 114, 128, 0.15);
-}
-
-.message-content {
-  flex: 1;
-  min-width: 0;
-}
-
-/* ========== 亮色主题 - 消息内容区 ========== */
-:root.light-theme .message-content {
-  max-width: 600px;
-}
-
-.message-meta {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 6px;
-}
-
-/* ========== 亮色主题 - 消息元数据 ========== */
-:root.light-theme .message-meta {
-  margin-bottom: 8px;
+  flex-wrap: wrap;
   gap: 8px;
+  padding: 0 18px 16px;
 }
 
-.sender-name {
-  font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-/* ========== 亮色主题 - 发送者名称 ========== */
-:root.light-theme .sender-name {
-  font-size: 14px;
-  font-weight: 600;
-  text-transform: none;
-  letter-spacing: 0;
-}
-
-.sender-name.name-user {
-  color: var(--color-secondary);
-}
-
-.sender-name.name-agent {
-  color: var(--color-primary);
-}
-
-.sender-name.name-system {
-  color: var(--text-muted);
-}
-
-/* ========== 亮色主题 - 发送者名称颜色 ========== */
-:root.light-theme .sender-name.name-user {
-  color: #4f46e5;
-}
-
-:root.light-theme .sender-name.name-agent {
-  color: #2563eb;
-}
-
-:root.light-theme .sender-name.name-system {
-  color: #6b7280;
-}
-
-.message-time {
-  font-size: 10px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-}
-
-/* ========== 亮色主题 - 消息时间 ========== */
-:root.light-theme .message-time {
-  font-size: 12px;
-  color: #9ca3af;
-  font-family: var(--font-sans);
-}
-
-.message-text {
+.mention-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--bg-base) 74%, transparent);
   color: var(--text-primary);
-  line-height: 1.6;
-  word-break: break-word;
-  font-size: 13px;
+  box-shadow: inset 0 0 0 1px var(--border-default);
 }
 
-/* ========== 亮色主题 - 消息文本 (Feishu 气泡风格) ========== */
-:root.light-theme .message-text {
-  background: #ffffff;
-  padding: 12px 16px;
-  border-radius: 16px;
-  border: 1px solid #e5e6e9;
-  border-bottom-left-radius: 4px;
-  line-height: 1.6;
-  font-size: 14px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  display: inline-block;
-  max-width: 100%;
-  color: #1f2329;
+.mention-chip--offline {
+  opacity: 0.55;
 }
 
-/* 用户消息气泡在右侧 */
-:root.light-theme .message-row.sender-user .message-text {
-  background: linear-gradient(135deg, #3370ff 0%, #4d82ff 100%);
-  color: #ffffff;
-  border: none;
-  border-bottom-right-radius: 4px;
-  border-bottom-left-radius: 16px;
-  box-shadow: 0 2px 8px rgba(51, 112, 255, 0.2);
-}
-
-.message-text :deep(.code-block) {
-  background: rgba(10, 14, 20, 0.8);
-  border: 1px solid rgba(48, 80, 112, 0.5);
-  padding: 12px;
-  margin: 8px 0;
-  overflow-x: auto;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--terminal-cyan);
-  border-radius: 6px;
-}
-
-/* ========== 亮色主题 - 代码块 ========== */
-:root.light-theme .message-text :deep(.code-block) {
-  background: #1f2329;
-  border: 1px solid #444852;
-  color: #e5e6e9;
-}
-
-/* 用户气泡内的代码块 */
-:root.light-theme .message-row.sender-user .message-text :deep(.code-block) {
-  background: rgba(0, 0, 0, 0.3);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: #e0e4ff;
-}
-
-.message-text :deep(.inline-code) {
-  background: rgba(30, 58, 95, 0.5);
-  padding: 2px 6px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--color-secondary);
-  border-radius: 4px;
-  border: 1px solid rgba(189, 0, 255, 0.3);
-}
-
-/* ========== 亮色主题 - 行内代码 ========== */
-:root.light-theme .message-text :deep(.inline-code) {
-  background: #f5f6f7;
-  padding: 3px 8px;
-  font-size: 12px;
-  color: #3370ff;
-  border: 1px solid #e5e6e9;
-  border-radius: 6px;
-}
-
-/* 用户气泡内的行内代码 */
-:root.light-theme .message-row.sender-user .message-text :deep(.inline-code) {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.3);
-  color: #ffffff;
-}
-
-/* ========== 提及标签 ========== */
-.mention-tags {
+.composer-box {
   display: flex;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.mention-tag {
-  display: inline-block;
-  padding: 2px 8px;
-  background: rgba(0, 240, 255, 0.1);
-  border: 1px solid rgba(0, 240, 255, 0.3);
-  border-radius: 4px;
-  font-size: 10px;
-  font-family: var(--font-mono);
-  color: var(--color-primary);
-}
-
-/* ========== 亮色主题 - 提及标签 (Feishu 风格) ========== */
-:root.light-theme .mention-tags {
-  margin-top: 10px;
-}
-
-:root.light-theme .mention-tag {
-  background: #eef2ff;
-  border: 1px solid #c7d2fe;
-  border-radius: 6px;
-  font-size: 11px;
-  font-family: var(--font-sans);
-  color: #4f46e5;
-  padding: 3px 10px;
-}
-
-/* 用户气泡内的提及标签 */
-:root.light-theme .message-row.sender-user .mention-tags {
-  margin-top: 10px;
-}
-
-:root.light-theme .message-row.sender-user .mention-tag {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.3);
-  color: #ffffff;
-}
-
-/* ========== 输入区域 ========== */
-.input-area {
-  display: flex;
-  gap: 12px;
-  padding: 16px 20px;
-  border-top: 1px solid var(--grid-line);
-  background: linear-gradient(180deg, rgba(0, 240, 255, 0.02) 0%, rgba(18, 24, 32, 0.95));
-}
-
-/* ========== 亮色主题 - 输入区域 (Feishu 风格) ========== */
-:root.light-theme .input-area {
-  background: #ffffff;
-  border-top: 1px solid #e5e7eb;
-  padding: 12px 16px;
-  gap: 12px;
-}
-
-.input-wrapper {
   flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: rgba(10, 14, 20, 0.8);
-  border: 1px solid rgba(48, 80, 112, 0.4);
-  border-radius: 8px;
-  padding: 8px 12px;
-}
-
-/* ========== 亮色主题 - 输入框包装器 ========== */
-:root.light-theme .input-wrapper {
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  padding: 10px 14px;
-  transition: all 0.2s;
-}
-
-:root.light-theme .input-wrapper:focus-within {
-  background: #ffffff;
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-}
-
-.input-prefix {
-  font-family: var(--font-mono);
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--color-primary);
-  text-shadow: 0 0 8px rgba(0, 240, 255, 0.5);
-}
-
-/* ========== 亮色主题 - 输入前缀 ========== */
-:root.light-theme .input-prefix {
-  color: #6b7280;
-  text-shadow: none;
-  font-size: 14px;
+  min-height: 0;
+  flex-direction: column;
+  margin: 0 18px 18px;
+  padding: 16px;
+  border-radius: 20px;
+  background: color-mix(in oklab, var(--bg-base) 78%, transparent);
+  box-shadow: inset 0 0 0 1px var(--border-default);
 }
 
 .message-input {
   flex: 1;
-  padding: 8px;
+  min-height: 240px;
+  padding: 0;
+  border: 0;
   background: transparent;
-  border: none;
-  font-family: var(--font-mono);
-  font-size: 13px;
   color: var(--text-primary);
+  font: inherit;
+  line-height: 1.7;
   resize: none;
-  transition: all 0.2s;
-}
-
-/* ========== 亮色主题 - 消息输入框 ========== */
-:root.light-theme .message-input {
-  font-family: var(--font-sans);
-  font-size: 14px;
-  color: #1f2937;
-  line-height: 1.5;
 }
 
 .message-input::placeholder {
-  color: var(--text-muted);
-}
-
-/* ========== 亮色主题 - 占位符 ========== */
-:root.light-theme .message-input::placeholder {
-  color: #9ca3af;
+  color: var(--text-tertiary);
 }
 
 .message-input:focus {
   outline: none;
 }
 
-.message-input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.composer-footer {
+  display: grid;
+  gap: 14px;
+  padding-top: 14px;
+  box-shadow: inset 0 1px 0 var(--border-default);
 }
 
-.btn-send {
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 240, 255, 0.1);
-  border: 1px solid rgba(0, 240, 255, 0.3);
-  border-radius: 8px;
-  color: var(--color-primary);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-/* ========== 亮色主题 - 发送按钮 (突出、不透明) ========== */
-:root.light-theme .btn-send {
-  width: 42px;
-  height: 42px;
-  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-  border: none;
-  border-radius: 12px;
-  color: #ffffff;
-  box-shadow:
-    0 2px 8px rgba(99, 102, 241, 0.3),
-    0 1px 3px rgba(99, 102, 241, 0.15);
-}
-
-:root.light-theme .btn-send:hover:not(:disabled) {
-  background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
-  box-shadow:
-    0 4px 12px rgba(99, 102, 241, 0.35),
-    0 2px 6px rgba(99, 102, 241, 0.2);
-  transform: translateY(-1px);
-}
-
-:root.light-theme .btn-send:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  background: #e5e7eb;
-  box-shadow: none;
-}
-
-.btn-send:hover:not(:disabled) {
-  background: rgba(0, 240, 255, 0.2);
-  border-color: var(--color-primary);
-  box-shadow: 0 0 15px rgba(0, 240, 255, 0.4);
-}
-
-.btn-send:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.send-icon {
-  font-size: 18px;
-}
-
-/* ========== 亮色主题 - 发送图标 ========== */
-:root.light-theme .send-icon {
-  font-size: 16px;
-}
-
-/* ========== 按钮样式 ========== */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-family: var(--font-mono);
-  letter-spacing: 0.05em;
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-sm {
-  height: 28px;
-  padding: 0 10px;
-  font-size: 11px;
-}
-
-.btn-icon {
-  font-size: 14px;
-  line-height: 1;
-}
-
-.btn-primary {
-  background: rgba(0, 240, 255, 0.15);
-  border-color: rgba(0, 240, 255, 0.3);
-  color: var(--color-primary);
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: rgba(0, 240, 255, 0.25);
-  border-color: var(--color-primary);
-  box-shadow: 0 0 15px rgba(0, 240, 255, 0.3);
-}
-
-.btn-success {
-  background: rgba(0, 255, 136, 0.15);
-  border-color: rgba(0, 255, 136, 0.3);
-  color: var(--color-success);
-}
-
-.btn-success:hover:not(:disabled) {
-  background: rgba(0, 255, 136, 0.25);
-  border-color: var(--color-success);
-  box-shadow: 0 0 15px rgba(0, 255, 136, 0.3);
-}
-
-.btn-danger {
-  background: rgba(255, 51, 102, 0.15);
-  border-color: rgba(255, 51, 102, 0.3);
-  color: var(--color-error);
-}
-
-.btn-danger:hover:not(:disabled) {
-  background: rgba(255, 51, 102, 0.25);
-  border-color: var(--color-error);
-  box-shadow: 0 0 15px rgba(255, 51, 102, 0.3);
-}
-
-.btn-secondary {
-  background: rgba(136, 144, 168, 0.15);
-  border-color: rgba(136, 144, 168, 0.3);
+.composer-footnote {
+  display: grid;
+  gap: 4px;
   color: var(--text-secondary);
+  font-size: 0.8rem;
 }
 
-.btn-secondary:hover:not(:disabled) {
-  background: rgba(136, 144, 168, 0.25);
-  border-color: var(--text-secondary);
-  box-shadow: 0 0 15px rgba(136, 144, 168, 0.3);
+.send-btn {
+  width: 100%;
+  height: 48px;
+  border: 0;
+  border-radius: 16px;
+  background: color-mix(in oklab, var(--color-primary) 24%, var(--bg-card));
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.send-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+:root.light-theme .command-room {
+  background:
+    radial-gradient(circle at top left, oklch(0.95 0.03 250 / 0.8), transparent 34%),
+    radial-gradient(circle at bottom right, oklch(0.94 0.02 30 / 0.75), transparent 30%),
+    oklch(0.985 0.004 250);
+}
+
+:root.light-theme .command-sidebar,
+:root.light-theme .roster-panel,
+:root.light-theme .composer-shell,
+:root.light-theme .stream-shell {
+  background: rgba(255, 255, 255, 0.86);
+}
+
+@media (max-width: 1180px) {
+  .command-room {
+    grid-template-columns: 1fr;
+    min-height: auto;
+    height: auto;
+  }
+
+  .command-sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-default);
+  }
+
+  .stage-body {
+    grid-template-columns: 1fr;
+  }
+
+  .stream-shell,
+  .composer-shell {
+    min-height: auto;
+  }
+
+  .composer-box {
+    min-height: 280px;
+  }
+}
+
+@media (max-width: 720px) {
+  .command-stage {
+    padding: 14px;
+  }
+
+  .command-sidebar {
+    padding: 16px;
+  }
+
+  .stage-header,
+  .stream-toolbar,
+  .panel-heading,
+  .composer-head,
+  .hero-status {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .stage-header__meta,
+  .command-actions {
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .messages-container {
+    padding: 16px;
+  }
+
+  .composer-box,
+  .mention-strip {
+    margin-left: 14px;
+    margin-right: 14px;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
 }
 </style>

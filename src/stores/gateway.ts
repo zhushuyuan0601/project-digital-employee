@@ -6,54 +6,40 @@
 import { ref, computed, reactive } from 'vue'
 import { defineStore } from 'pinia'
 import {
-  getOrCreateDeviceIdentity,
-  signPayload,
-  getCachedDeviceToken,
   cacheDeviceToken,
   clearDeviceIdentity,
-  isSecureContext,
-  isEd25519Supported
 } from '@/lib/device-identity'
+import {
+  clearGatewayToken as clearStoredGatewayToken,
+  getGatewayBaseWsUrl,
+  getGatewayToken,
+  setGatewayToken as persistGatewayToken,
+} from '@/config/gateway'
 
 // Gateway 协议版本
 const PROTOCOL_VERSION = 3
 const PING_INTERVAL_MS = 30000
 const MAX_MISSED_PONGS = 3
 
-// Gateway 连接配置
-// 直接连接 Gateway，不走 Vite 代理
-// 这样 Gateway 能正确识别为本地连接，避免 scopes 被清空
-const GATEWAY_HOST = import.meta.env.VITE_GATEWAY_HOST || '127.0.0.1'
-const GATEWAY_PORT = import.meta.env.VITE_GATEWAY_PORT || '18789'
-const GATEWAY_CLIENT_ID = 'cli'
-
-// Token 存储键
-const STORAGE_GATEWAY_TOKEN = 'mc-gateway-token'
-
 /**
  * 获取存储的 Gateway Token
  */
 export function getStoredToken(): string {
-  // 优先使用环境变量
-  const envToken = import.meta.env.VITE_GATEWAY_TOKEN
-  if (envToken) return envToken
-
-  // 其次使用 localStorage
-  return localStorage.getItem(STORAGE_GATEWAY_TOKEN) || ''
+  return getGatewayToken()
 }
 
 /**
  * 存储 Gateway Token
  */
 export function setGatewayToken(token: string): void {
-  localStorage.setItem(STORAGE_GATEWAY_TOKEN, token)
+  persistGatewayToken(token)
 }
 
 /**
  * 清除 Gateway Token
  */
 export function clearGatewayToken(): void {
-  localStorage.removeItem(STORAGE_GATEWAY_TOKEN)
+  clearStoredGatewayToken()
 }
 
 // WebSocket 实例
@@ -124,27 +110,17 @@ export const useGatewayStore = defineStore('gateway', () => {
    * 这样 Gateway 能正确识别为本地连接，避免 scopes 被清空
    */
   function buildWebSocketUrl(): string {
-    // 优先使用环境变量配置
-    if (GATEWAY_HOST && GATEWAY_PORT) {
-      const isLocal = GATEWAY_HOST === 'localhost' || GATEWAY_HOST === '127.0.0.1'
-      const wsProtocol = isLocal ? 'ws:' : (window.location.protocol === 'https:' ? 'wss:' : 'ws:')
-      return `${wsProtocol}//${GATEWAY_HOST}:${GATEWAY_PORT}`
-    }
-
-    // 默认直接连接 Gateway（不走代理）
-    return 'ws://127.0.0.1:18789'
+    return getGatewayBaseWsUrl()
   }
 
   /**
    * 发送连接握手（仅使用 token 认证）
    */
-  async function sendConnectHandshake(nonce?: string) {
+  async function sendConnectHandshake(_nonce?: string) {
     if (!ws || ws.readyState !== WebSocket.OPEN) return
 
     const token = getStoredToken()
 
-    // 强制禁用设备签名，只使用 token 认证
-    let device: any = undefined
     tokenOnlyFallback = true
 
     // 检查是否有 token
@@ -320,7 +296,7 @@ export const useGatewayStore = defineStore('gateway', () => {
   /**
    * 处理 Gateway 事件
    */
-  function handleGatewayEvent(event: string, payload: any, seq?: number) {
+  function handleGatewayEvent(event: string, payload: any, _seq?: number) {
     switch (event) {
       case 'tick':
         // 会话快照更新
@@ -570,7 +546,7 @@ export const useGatewayStore = defineStore('gateway', () => {
   function handleChatEvent(payload: any) {
     if (!payload) return
 
-    const { sessionKey, message, state } = payload
+    const { sessionKey, message } = payload
     const agentName = extractAgentFromKey(sessionKey) || 'agent'
 
     if (message && message.content) {
@@ -669,7 +645,7 @@ export const useGatewayStore = defineStore('gateway', () => {
     }
 
     // 通知 UI 更新
-    lastMessageAt.value = Date.now()
+    lastMessageAt.value = new Date()
   }
 
   /**
@@ -720,7 +696,7 @@ export const useGatewayStore = defineStore('gateway', () => {
         }
       }
 
-      ws.onclose = (event) => {
+      ws.onclose = () => {
         isConnected.value = false
         isConnecting.value = false
         handshakeComplete = false
@@ -789,7 +765,7 @@ export const useGatewayStore = defineStore('gateway', () => {
   /**
    * 发送聊天消息到指定 Session
    */
-  function sendChatMessage(sessionKey: string, message: string, from: string = 'human'): boolean {
+  function sendChatMessage(sessionKey: string, message: string, _from: string = 'human'): boolean {
     return sendMessage({
       type: 'req',
       method: 'chat.send',

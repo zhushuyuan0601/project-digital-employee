@@ -52,7 +52,7 @@
 
       <div v-else class="log-list">
         <div
-          v-for="(log, index) in filteredLogs"
+          v-for="log in filteredLogs"
           :key="log.id"
           :class="['log-entry', log.level]"
         >
@@ -72,8 +72,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
+import { useNotification } from '@/composables/useNotification'
 
 const multiAgentStore = useMultiAgentChatStore()
+const notification = useNotification()
 const isConnected = computed(() => multiAgentStore.anyConnected)
 
 const loading = ref(false)
@@ -266,10 +268,10 @@ const refreshLogs = () => {
   }, 500)
 }
 
-const clearLogs = () => {
-  if (confirm('确定要清空所有日志吗？')) {
-    logs.value = []
-  }
+const clearLogs = async () => {
+  const confirmed = await notification.confirm('确定要清空所有日志吗？', '清空日志')
+  if (!confirmed) return
+  logs.value = []
 }
 
 // 监听连接状态，连接时添加初始日志

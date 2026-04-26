@@ -1,15 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Agent, AgentRole, AgentStatus } from '@/types/agent'
+import { AGENT_DEFINITIONS, AGENT_TO_GATEWAY_MAP } from '@/config/agents'
 
-// Agent 到 Gateway Agent 的映射配置
-export const AGENT_TO_GATEWAY_MAP: Record<string, string> = {
-  xiaomu: 'ceo',           // 项目管理/小呦 <-> ceo (项目统筹)
-  xiaokai: 'tech-lead',    // 研发工程师 <-> tech-lead (技术开发)
-  xiaochan: 'pm',          // 产品经理 <-> pm (产品设计)
-  xiaoyan: 'researcher',   // 研究员 <-> researcher (调研分析)
-  xiaoce: 'team-qa'        // 测试员 <-> team-qa (质量检查)
-}
+export { AGENT_TO_GATEWAY_MAP }
 
 // localStorage key
 const AGENT_STATS_KEY = 'agent_completed_tasks'
@@ -122,61 +116,17 @@ export const useAgentsStore = defineStore('agents', () => {
 
   // 初始化默认 agents（从 localStorage 恢复统计）
   function initializeDefaultAgents() {
-    // 从 localStorage 加载已完成任务数
     const savedStats = loadCompletedTasksFromStorage()
-
-    agents.value = [
-      {
-        id: 'xiaomu',
-        name: '小呦',
-        role: 'assistant',
-        icon: '/avatars/avatar-xiaomu.jpeg',
-        status: 'idle',
-        completedTasks: savedStats['xiaomu'] || 0,
-        description: '项目统筹 - 任务调度、分配、汇报',
-        gatewayAgentId: 'ceo'
-      },
-      {
-        id: 'xiaokai',
-        name: '研发工程师',
-        role: 'developer',
-        icon: '/avatars/avatar-xiaokai.jpeg',
-        status: 'idle',
-        completedTasks: savedStats['xiaokai'] || 0,
-        description: '技术开发 - 技术规划&研发管理',
-        gatewayAgentId: 'tech-lead'
-      },
-      {
-        id: 'xiaochan',
-        name: '产品经理',
-        role: 'product',
-        icon: '/avatars/avatar-xiaochan.jpeg',
-        status: 'idle',
-        completedTasks: savedStats['xiaochan'] || 0,
-        description: '产品设计 - 产品需求分析',
-        gatewayAgentId: 'pm'
-      },
-      {
-        id: 'xiaoyan',
-        name: '研究员',
-        role: 'analyst',
-        icon: '/avatars/avatar-xiaoyan.jpeg',
-        status: 'idle',
-        completedTasks: savedStats['xiaoyan'] || 0,
-        description: '调研分析 - 市场调研',
-        gatewayAgentId: 'researcher'
-      },
-      {
-        id: 'xiaoce',
-        name: '测试员',
-        role: 'tester',
-        icon: '/avatars/avatar-xiaoce.jpeg',
-        status: 'idle',
-        completedTasks: savedStats['xiaoce'] || 0,
-        description: '质量检查 - 测试验证&质量保障',
-        gatewayAgentId: 'team-qa'
-      }
-    ]
+    agents.value = AGENT_DEFINITIONS.map((agent) => ({
+      id: agent.id,
+      name: agent.name,
+      role: agent.roleType,
+      icon: agent.icon,
+      status: 'idle',
+      completedTasks: savedStats[agent.id] || 0,
+      description: agent.description,
+      gatewayAgentId: agent.gatewayAgentId,
+    }))
   }
 
   return {

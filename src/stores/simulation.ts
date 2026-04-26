@@ -742,6 +742,7 @@ export const useSimulationStore = defineStore('simulation', () => {
   async function executeXiaomuWorkflow(controller: AbortController | null): Promise<boolean> {
     const agentId = 'xiaomu'
     const agentsStore = useAgentsStore()
+    const isUnicomScenario = currentScenario.value === 'unicom_ai_cs'
     const isRingtoneScenario = currentScenario.value === 'unicom_ai_ringtone'
 
     agentsStore.assignTaskToAgent(agentId, { id: `coord_${Date.now()}`, title: '任务调度协调', progress: 0 })
@@ -1101,13 +1102,13 @@ export const useSimulationStore = defineStore('simulation', () => {
   // 暂停执行
   async function pause() {
     isPaused.value = true
-    await streamLogTyping('xiaomu', '⏸️ 任务已暂停', 'warning', controller)
+    await streamLogTyping('xiaomu', '⏸️ 任务已暂停', 'warning', abortController.value)
   }
 
   // 继续执行
   async function resume() {
     isPaused.value = false
-    await streamLogTyping('xiaomu', '▶️ 任务已继续', 'success', controller)
+    await streamLogTyping('xiaomu', '▶️ 任务已继续', 'success', abortController.value)
   }
 
   // 取消执行
@@ -1126,7 +1127,7 @@ export const useSimulationStore = defineStore('simulation', () => {
     const agentsStore = useAgentsStore()
     agentsStore.resetAgentStatus()
 
-    await streamLogTyping('xiaomu', '⛔ 任务已取消', 'warning', controller)
+    await streamLogTyping('xiaomu', '⛔ 任务已取消', 'warning', abortController.value)
   }
 
   // 重试任务

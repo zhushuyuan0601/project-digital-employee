@@ -56,21 +56,10 @@
     <!-- 主聊天界面 - 双 Agent 对话 -->
     <div class="chat-wrapper">
       <!-- 左侧 Agent 切换栏 -->
-      <div class="agent-sidebar">
-        <div
-          v-for="agent in agents"
-          :key="agent.id"
-          :class="['agent-sidebar-item', { active: currentAgentId === agent.id }]"
-          @click="switchAgent(agent.id)"
-        >
-          <div class="sidebar-avatar">{{ agent.avatar }}</div>
-          <div class="sidebar-info">
-            <span class="sidebar-name">{{ agent.displayName }}</span>
-            <span class="sidebar-role">{{ agent.role }}</span>
-          </div>
-          <span class="sidebar-status" :class="getStatusClass(agent.id)"></span>
-        </div>
-      </div>
+      <ChatAgentSidebar
+        :agents="sidebarAgents"
+        @select="switchAgent"
+      />
 
       <!-- 聊天主体区域 -->
       <div class="chat-main">
@@ -139,51 +128,16 @@
           </p>
         </div>
 
-        <div
+        <ChatMessageBubble
           v-for="message in currentMessages"
           :key="message.id"
-          :class="['terminal-line', 'line-' + message.role]"
-        >
-          <!-- 用户消息在右侧 -->
-          <template v-if="message.role === 'user'">
-            <div class="line-content line-content-right">
-              <div class="message-card card-user">
-                <div class="card-indicator"></div>
-                <div class="message-body" v-html="formatContent(message.content)"></div>
-              </div>
-            </div>
-            <div class="line-prefix line-prefix-right">
-              <span class="line-time">{{ formatTime(message.timestamp) }}</span>
-              <span class="line-mark user">CMD</span>
-            </div>
-          </template>
-          <!-- Agent 消息在左侧 -->
-          <template v-else-if="message.role === 'assistant'">
-            <div class="line-prefix">
-              <span class="line-mark assistant">AI</span>
-              <span class="line-time">{{ formatTime(message.timestamp) }}</span>
-            </div>
-            <div class="line-content">
-              <div class="message-card card-assistant">
-                <div class="card-indicator"></div>
-                <div class="message-body" v-html="formatContent(message.content)"></div>
-              </div>
-            </div>
-          </template>
-          <!-- 系统消息 -->
-          <template v-else>
-            <div class="line-prefix">
-              <span class="line-mark system">SYS</span>
-              <span class="line-time">{{ formatTime(message.timestamp) }}</span>
-            </div>
-            <div class="line-content">
-              <div class="message-card card-system">
-                <div class="card-indicator"></div>
-                <div class="message-body" v-html="formatContent(message.content)"></div>
-              </div>
-            </div>
-          </template>
-        </div>
+          :variant="message.role === 'assistant' ? 'assistant' : message.role === 'system' ? 'system' : 'user'"
+          :layout="message.role === 'user' ? 'right' : 'left'"
+          :sender-name="message.role === 'assistant' ? currentAgentConfig?.displayName : message.role === 'system' ? '系统' : '指挥台'"
+          :time="formatTime(message.timestamp)"
+          :content-html="formatRichText(message.content)"
+          :avatar-text="message.role === 'assistant' ? currentAgentConfig?.avatar : message.role === 'system' ? '⚙' : '⌘'"
+        />
 
         <!-- 打字指示器 -->
         <div v-if="currentAgent?.isTyping" class="terminal-line line-assistant typing">
@@ -246,8 +200,12 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
 import { ElMessageBox } from 'element-plus'
+import ChatAgentSidebar from '@/components/chat/ChatAgentSidebar.vue'
+import ChatMessageBubble from '@/components/chat/ChatMessageBubble.vue'
+import { useChatFormatting } from '@/composables/useChatFormatting'
 
 const store = useMultiAgentChatStore()
+const { formatTime, formatRichText } = useChatFormatting()
 
 // Agent 配置
 const agents = computed(() => store.agentConfigs)
@@ -269,6 +227,17 @@ const currentAgent = computed(() => {
 const currentMessages = computed(() => {
   return store.agents[currentAgentId.value]?.messages || []
 })
+
+const sidebarAgents = computed(() =>
+  agents.value.map((agent) => ({
+    id: agent.id,
+    name: agent.displayName,
+    role: agent.role,
+    avatar: agent.avatar,
+    status: getStatusClass(agent.id) as 'connected' | 'connecting' | 'disconnected',
+    active: currentAgentId.value === agent.id,
+  }))
+)
 
 // 打字时长
 const typingDurationText = computed(() => {
@@ -307,26 +276,6 @@ const switchAgent = (agentId: string) => {
   nextTick(() => {
     scrollToBottom()
   })
-}
-
-// 方法
-const formatTime = (timestamp: number) => {
-  const date = new Date(timestamp)
-  const hours = date.getHours().toString().padStart(2, '0')
-  const minutes = date.getMinutes().toString().padStart(2, '0')
-  const seconds = date.getSeconds().toString().padStart(2, '0')
-  return `${hours}:${minutes}:${seconds}`
-}
-
-const formatContent = (content: string) => {
-  if (!content) return ''
-  let formatted = content
-    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="code-block"><code>$2</code></pre>')
-    .replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-    .replace(/\n/g, '<br>')
-  return formatted
 }
 
 const toggleSettings = () => {
@@ -394,7 +343,8 @@ const handleSend = async () => {
     }
   } catch (err) {
     console.error('[Chat] Send message error:', err)
-    ElMessageBox.alert('发送失败：' + err.message, '错误', { type: 'error' })
+    const message = err instanceof Error ? err.message : '未知错误'
+    ElMessageBox.alert('发送失败：' + message, '错误', { type: 'error' })
     return
   }
 

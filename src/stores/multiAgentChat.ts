@@ -1,5 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { getMultiAgentStoreConfigs } from '@/config/agents'
+import { useGatewayConnection } from '@/composables/useGatewayConnection'
+import {
+  buildConnectRequest,
+  extractChatText,
+  extractText,
+} from '@/utils/gateway-protocol'
 
 export interface AgentConfig {
   id: string
@@ -23,6 +30,8 @@ export interface AgentConnection {
   ws: WebSocket | null
   isConnected: boolean
   isConnecting: boolean
+  isTyping: boolean
+  typingStartTime: number | null
   messages: ChatMessage[]
   currentAssistantMsgId: string | null
 }
@@ -35,7 +44,7 @@ export interface ConnectionSettings {
 
 export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
   // 更新或创建消息（非流式模式，直接显示完整内容）
-  function updateOrCreateMessage(agentId: string, role: 'assistant', content: string, runId?: string, streaming: boolean = false) {
+  function updateOrCreateMessage(agentId: string, role: 'assistant', content: string, runId?: string) {
     const agent = agents.value[agentId]
     if (!agent) return
 
@@ -70,62 +79,14 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
   }
 
   // 配置的 Agent 列表 - 与任务指挥页面保持一致
-  const agentConfigs: AgentConfig[] = [
-    {
-      id: 'xiaomu',
-      sessionKey: 'agent:ceo:main',
-      displayName: '小呦',
-      role: '项目统筹',
-      avatar: '◈',
-      gatewayAgentId: 'agent:ceo:main'
-    },
-    {
-      id: 'xiaoyan',
-      sessionKey: 'agent:researcher:main',
-      displayName: '研究员',
-      role: '调研分析',
-      avatar: '🔍',
-      gatewayAgentId: 'agent:researcher:main'
-    },
-    {
-      id: 'xiaochan',
-      sessionKey: 'agent:pm:main',
-      displayName: '产品经理',
-      role: '产品设计',
-      avatar: '📝',
-      gatewayAgentId: 'agent:pm:main'
-    },
-    {
-      id: 'xiaokai',
-      sessionKey: 'agent:tech-lead:main',
-      displayName: '研发工程师',
-      role: '技术开发',
-      avatar: '💻',
-      gatewayAgentId: 'agent:tech-lead:main'
-    },
-    {
-      id: 'xiaoce',
-      sessionKey: 'agent:team-qa:main',
-      displayName: '测试员',
-      role: '质量检查',
-      avatar: '🛡️',
-      gatewayAgentId: 'agent:team-qa:main'
-    }
-  ]
+  const agentConfigs: AgentConfig[] = getMultiAgentStoreConfigs() as AgentConfig[]
 
   // 当前选中的 Agent ID
   const selectedAgentId = ref<string>('xiaomu')
 
   // 设置 - 直接连接 Gateway，不走 Vite 代理
   // 这样 Gateway 能正确识别为本地连接，避免 scopes 被清空
-  const settings = ref<ConnectionSettings>({
-    wsUrl: import.meta.env.VITE_GATEWAY_WS_URL ||
-           import.meta.env.VITE_GATEWAY_HOST && import.meta.env.VITE_GATEWAY_PORT ?
-             `ws://${import.meta.env.VITE_GATEWAY_HOST}:${import.meta.env.VITE_GATEWAY_PORT}` :
-             'ws://127.0.0.1:18789',  // 默认直接连接 Gateway
-    token: import.meta.env.VITE_GATEWAY_TOKEN || 'bd0f157b60e41a3d9895ddec846d2d10c8d795bc0a061f70',
-    autoConnect: true,
-  })
+  const { settings, resolveSocketUrl, createChallengeResponse } = useGatewayConnection()
 
   console.log('[MultiAgentChat] 初始化 - wsUrl:', settings.value.wsUrl, 'hasToken:', !!settings.value.token)
 
@@ -142,6 +103,8 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
       ws: null,
       isConnected: false,
       isConnecting: false,
+      isTyping: false,
+      typingStartTime: null,
       messages: [],
       currentAssistantMsgId: null
     }
@@ -175,7 +138,6 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
     return agentConfigs.some(config => agents.value[config.id]?.isConnected)
   })
 
-  // 处理连接挑战响应
   async function handleConnectChallenge(agentId: string, payload: { nonce: string; ts: number }) {
     const agent = agents.value[agentId]
     if (!agent || !agent.ws || !settings.value.token) {
@@ -183,134 +145,14 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
       return
     }
 
-    if (!window.crypto?.subtle) {
-      console.warn(`[MultiAgentChat] [${agentId}] window.crypto.subtle 不可用（非安全上下文），跳过挑战响应`)
+    const responseMsg = await createChallengeResponse(payload)
+    if (!responseMsg) {
+      console.warn(`[MultiAgentChat] [${agentId}] crypto.subtle 不可用，跳过挑战响应`)
       return
-    }
-
-    const encoder = new TextEncoder()
-    const keyData = encoder.encode(settings.value.token)
-    const messageData = encoder.encode(payload.nonce)
-
-    const key = await window.crypto.subtle.importKey(
-      'raw',
-      keyData,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    )
-
-    const signature = await window.crypto.subtle.sign('HMAC', key, messageData)
-    const signatureHex = Array.from(new Uint8Array(signature))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('')
-
-    const responseMsg = {
-      type: 'req',
-      id: `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      method: 'connect.challenge_response',
-      params: {
-        nonce: payload.nonce,
-        response: signatureHex
-      }
     }
 
     agent.ws.send(JSON.stringify(responseMsg))
     console.log(`[MultiAgentChat] [${agentId}] 挑战响应已发送`)
-  }
-
-  // 过滤思考内容
-  function filterThoughts(text: string): string {
-    if (!text) return text
-
-    const THINKING_TAG_RE = /<\s*(\/?)\s*(?:think(?:ing)?|thought|antthinking)\b[^<>]*>/gi
-    const QUICK_TAG_RE = /<\s*\/?\s*(?:think(?:ing)?|thought|antthinking)\b/i
-
-    if (!QUICK_TAG_RE.test(text)) {
-      return text
-    }
-
-    let result = ""
-    let lastIndex = 0
-    let inThinking = false
-
-    for (const match of text.matchAll(THINKING_TAG_RE)) {
-      const idx = match.index ?? 0
-      const isClose = match[1] === "/"
-
-      if (!inThinking) {
-        result += text.slice(lastIndex, idx)
-        if (!isClose) {
-          inThinking = true
-        }
-      } else if (isClose) {
-        inThinking = false
-      }
-      lastIndex = idx + match[0].length
-    }
-
-    if (!inThinking) {
-      result += text.slice(lastIndex)
-    }
-
-    return result.trimStart()
-  }
-
-  // 提取消息文本
-  function extractText(payload: any): string | null {
-    if (!payload) return null
-    if (payload.data) {
-      if (typeof payload.data === 'string') {
-        const filtered = filterThoughts(payload.data)
-        return filtered.trim() ? filtered : null
-      }
-      if (payload.data.text) {
-        const filtered = filterThoughts(payload.data.text)
-        return filtered.trim() ? filtered : null
-      }
-      if (payload.data.content) {
-        if (typeof payload.data.content === 'string') {
-          const filtered = filterThoughts(payload.data.content)
-          return filtered.trim() ? filtered : null
-        }
-        if (Array.isArray(payload.data.content)) {
-          const text = payload.data.content.map((c: any) => c.text || '').join('')
-          const filtered = filterThoughts(text)
-          return filtered.trim() ? filtered : null
-        }
-      }
-      if (payload.data.delta) {
-        const text = payload.data.delta.text || payload.data.delta.content || ''
-        const filtered = filterThoughts(text)
-        return filtered.trim() ? filtered : null
-      }
-    }
-    return null
-  }
-
-  function extractChatText(payload: any): string | null {
-    if (!payload?.message) return null
-    const msg = payload.message
-    if (typeof msg === 'string') {
-      const filtered = filterThoughts(msg)
-      return filtered.trim() ? filtered : null
-    }
-    if (msg.text) {
-      const filtered = filterThoughts(msg.text)
-      return filtered.trim() ? filtered : null
-    }
-    if (msg.content) {
-      if (typeof msg.content === 'string') {
-        const filtered = filterThoughts(msg.content)
-        return filtered.trim() ? filtered : null
-      }
-      if (Array.isArray(msg.content)) {
-        const text = msg.content.map((c: any) => c.text || '').join('')
-        const filtered = filterThoughts(text)
-        return filtered.trim() ? filtered : null
-      }
-    }
-    return null
   }
 
   function addSystemMessage(agentId: string, content: string) {
@@ -519,6 +361,8 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
     if (stream === 'assistant') {
       const text = extractText(payload)
       if (text) {
+        agent.isTyping = false
+        agent.typingStartTime = null
         console.log(`[MultiAgentChat] [${agentId}] [assistant] 收到回复 (runId: ${runId}):`, text.slice(0, 80))
         updateOrCreateMessage(agentId, 'assistant', text, runId)
       }
@@ -528,13 +372,19 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
       if (state === 'start') {
         // 开始处理，清空旧消息
         console.log(`[MultiAgentChat] [${agentId}] [lifecycle] 清空旧消息`)
+        agent.isTyping = true
+        agent.typingStartTime = Date.now()
         agent.messages = []
         saveMessages(agentId)
       } else if (state === 'error' || payload?.phase === 'error') {
         const error = payload?.data?.error || payload?.error || '未知错误'
+        agent.isTyping = false
+        agent.typingStartTime = null
         console.error(`[MultiAgentChat] [${agentId}] [lifecycle] 错误:`, error)
         addSystemMessage(agentId, `AI 错误：${error}`)
       } else if (state === 'done' || state === 'final') {
+        agent.isTyping = false
+        agent.typingStartTime = null
         console.log(`[MultiAgentChat] [${agentId}] [lifecycle] 处理完成`)
       }
     } else if (stream === 'tool') {
@@ -561,15 +411,23 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
     if (state === 'start') {
       console.log(`[MultiAgentChat] [${agentId}] [chat] 开始处理 (runId: ${runId})，清空旧消息`)
       // 开始处理，清空旧消息
+      agent.isTyping = true
+      agent.typingStartTime = Date.now()
       agent.messages = []
       saveMessages(agentId)
     } else if (state === 'delta' || state === 'final' || state === 'committed') {
       const text = extractChatText(payload)
       if (text) {
+        if (state === 'final' || state === 'committed') {
+          agent.isTyping = false
+          agent.typingStartTime = null
+        }
         console.log(`[MultiAgentChat] [${agentId}] [chat] 收到回复 (${state}, runId: ${runId}):`, text.slice(0, 80))
         updateOrCreateMessage(agentId, 'assistant', text, runId)
       }
     } else if (state === 'error') {
+      agent.isTyping = false
+      agent.typingStartTime = null
       console.error(`[MultiAgentChat] [${agentId}] [chat] 错误:`, payload?.errorMessage || '未知错误')
       addSystemMessage(agentId, `错误：${payload?.errorMessage || '未知错误'}`)
     } else {
@@ -635,10 +493,7 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
     agent.isConnected = false
 
     // 构建 WebSocket URL，只使用 token 参数
-    const tokenParam = settings.value.token
-      ? `?token=${encodeURIComponent(settings.value.token)}`
-      : ''
-    const wsUrl = `${settings.value.wsUrl}${tokenParam}`
+    const wsUrl = resolveSocketUrl()
 
     console.log(`[MultiAgentChat] [${agentId}] 正在连接: ${wsUrl.replace(/\?.*/, '?token=***')}`)
 
@@ -746,26 +601,15 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
     // Gateway 协议版本（与服务端保持一致）
     const PROTOCOL_VERSION = 3
 
-    const msg = {
-      type: 'req',
-      id: `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      method: 'connect',
-      params: {
-        minProtocol: PROTOCOL_VERSION,
-        maxProtocol: PROTOCOL_VERSION,
-        client: {
-          id: 'openclaw-control-ui',  // 必须使用这个 ID 才能被识别为 Control UI
-          displayName: agent.config.displayName,
-          version: '1.0.0',
-          platform: 'web',
-          mode: 'webchat',
-        },
-        role: 'operator',  // 必须指定 role，dangerouslyDisableDeviceAuth 只对 operator 生效
-        scopes: ['operator.admin', 'operator.write', 'operator.read'],
-        caps: ['tool-events'],
-        auth: settings.value.token ? { token: settings.value.token } : undefined,
+    const msg = buildConnectRequest({
+      token: settings.value.token,
+      client: {
+        id: 'openclaw-control-ui',
+        displayName: agent.config.displayName,
       },
-    }
+      minProtocol: PROTOCOL_VERSION,
+      maxProtocol: PROTOCOL_VERSION,
+    })
     console.log(`[MultiAgentChat] [${agentId}] 发送连接请求 (protocol v${PROTOCOL_VERSION}):`, JSON.stringify(msg.params.client, null, 2))
     pendingRequests.value[msg.id] = { method: 'connect', agentId }
     agent.ws.send(JSON.stringify(msg))
@@ -800,6 +644,8 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
       agentId
     }
     agent.messages.push(userMessage)
+    agent.isTyping = true
+    agent.typingStartTime = Date.now()
     saveMessages(agentId)
 
     // 使用 'agent' 方法创建新 session 并发送消息（与 Mission-control 一致）
@@ -826,6 +672,8 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
     const agent = agents.value[agentId]
     if (!agent) return
     agent.messages = []
+    agent.isTyping = false
+    agent.typingStartTime = null
     saveMessages(agentId)
   }
 

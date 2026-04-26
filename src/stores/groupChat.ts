@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { AgentConfig } from './multiAgentChat'
+import { DEFAULT_GROUP_CHAT_AGENT_IDS } from '@/config/agents'
+import { getDefaultGatewayConnectionSettings } from '@/config/gateway'
 
 // 群聊消息
 export interface GroupChatMessage {
@@ -28,7 +29,7 @@ export const useGroupChatStore = defineStore('groupChat', () => {
     id: 'group-main',
     name: '作战指挥群',
     description: '多 Agent 协同作战群聊',
-    agentIds: ['xiaomu', 'xiaoyan', 'xiaochan', 'xiaokai']
+    agentIds: [...DEFAULT_GROUP_CHAT_AGENT_IDS]
   }
 
   // 群聊消息
@@ -38,10 +39,7 @@ export const useGroupChatStore = defineStore('groupChat', () => {
   const agentConnections = ref<Record<string, { isConnected: boolean; avatar: string; displayName: string }>>({})
 
   // 设置
-  const settings = ref({
-    wsUrl: 'ws://127.0.0.1:18789',
-    token: 'bd0f157b60e41a3d9895ddec846d2d10c8d795bc0a061f70',
-  })
+  const settings = ref(getDefaultGatewayConnectionSettings())
 
   // 计算属性：获取所有参与的 Agent
   const participatingAgents = computed(() => {
@@ -112,7 +110,7 @@ export const useGroupChatStore = defineStore('groupChat', () => {
 
   // 处理用户发送的消息
   function handleUserMessage(content: string) {
-    const { mentions, cleanedContent } = parseMentions(content)
+    const { mentions } = parseMentions(content)
 
     // 如果没有 @ 任何人，添加普通用户消息
     if (mentions.length === 0) {

@@ -93,47 +93,11 @@
         <span>数字员工</span>
       </h2>
       <div class="team-members-grid mb-8">
-        <div v-for="member in teamMembers" :key="member.id" class="agent-card glass-card-hover">
-          <!-- Agent 头部 -->
-          <div class="agent-header">
-            <div class="agent-avatar" :style="{ background: getGradientStyle(member.gradient) }">
-              <img :src="member.icon" :alt="member.name" />
-            </div>
-            <div class="agent-info">
-              <h4 class="agent-name">{{ member.name }}</h4>
-              <p class="agent-title">{{ member.title }}</p>
-            </div>
-          </div>
-
-          <!-- 统计数据 -->
-          <div class="agent-stats">
-            <div v-for="(value, key) in member.stats" :key="key" class="stat-item">
-              <p class="stat-value mono">{{ value }}</p>
-              <p class="stat-label">{{ key }}</p>
-            </div>
-          </div>
-
-          <!-- 状态 -->
-          <div class="agent-status">
-            <div class="status-dot"></div>
-            <span>Active</span>
-          </div>
-
-          <!-- 当前任务 -->
-          <div class="agent-task">
-            <span class="task-label">当前:</span> <span class="task-value">{{ member.task }}</span>
-          </div>
-
-          <!-- 今日产出 -->
-          <div v-if="member.todayOutputs && member.todayOutputs.length" class="agent-outputs">
-            <p class="outputs-title">今日产出 ({{ member.todayOutputs.length }})</p>
-            <div class="outputs-list">
-              <a v-for="output in member.todayOutputs" :key="output.name" :href="output.url" target="_blank" class="output-tag">
-                {{ getTypeEmoji(output.type) }} {{ output.name.slice(0, 6) }}...
-              </a>
-            </div>
-          </div>
-        </div>
+        <DigitalEmployeeAgentCard
+          v-for="member in teamMembers"
+          :key="member.id"
+          :member="member"
+        />
       </div>
 
       <!-- 工作成果 -->
@@ -313,132 +277,11 @@
           <p class="loading-text">正在加载项目数据...</p>
         </div>
         <div v-else class="projects-grid">
-          <div
+          <ProjectCard
             v-for="project in projects"
             :key="project.id"
-            class="project-card"
-            :class="getStageCardClass(project.stage)"
-          >
-            <!-- 项目卡片顶部状态条 -->
-            <div class="project-card__stripe"></div>
-
-            <!-- 项目头部 -->
-            <div class="project-card__header">
-              <div class="project-card__icon">
-                <span class="stage-emoji">{{ project.stageEmoji }}</span>
-              </div>
-              <div class="project-card__info">
-                <h3 class="project-card__name" :title="project.name">{{ project.name }}</h3>
-                <p class="project-card__desc line-clamp-2">{{ project.description }}</p>
-              </div>
-              <div class="project-card__stage">
-                <span :class="['stage-badge', getStageBadgeClass(project.stage)]">
-                  <span class="stage-badge__dot"></span>
-                  {{ project.stageName }}
-                </span>
-                <a
-                  v-if="project.githubUrl"
-                  :href="project.githubUrl"
-                  target="_blank"
-                  class="github-btn"
-                  title="GitHub 仓库"
-                >
-                  <i class="fab fa-github"></i>
-                </a>
-              </div>
-            </div>
-
-            <!-- 项目信息栏 -->
-            <div class="project-card__meta">
-              <div class="meta-item">
-                <span class="meta-label">进度</span>
-                <span class="meta-value meta-value--primary">{{ project.progress }}%</span>
-              </div>
-              <div class="meta-item">
-                <span class="meta-label">负责人</span>
-                <span class="meta-value">{{ project.leaderRole || project.leader || '未知' }}</span>
-              </div>
-              <div class="meta-item">
-                <span class="meta-label">更新</span>
-                <span class="meta-value">{{ project.lastUpdate || project.createDate || '-' }}</span>
-              </div>
-              <div class="meta-item">
-                <span class="meta-label">任务</span>
-                <span class="meta-value">{{ project.completedTasks || 0 }}/{{ project.totalTasks || 0 }}</span>
-              </div>
-            </div>
-
-            <!-- 进度条 -->
-            <div class="project-card__progress">
-              <div class="progress-bar">
-                <div class="progress-bar__fill" :style="{ width: (project.progress || 0) + '%' }"></div>
-              </div>
-            </div>
-
-            <!-- 任务列表 -->
-            <div class="project-card__body">
-              <!-- 已完成任务 -->
-              <div v-if="project.progressList && project.progressList.length > 0" class="task-section">
-                <div class="task-section__header task-section__header--success">
-                  <i class="fas fa-check-circle"></i>
-                  <span>已完成</span>
-                </div>
-                <div class="task-list">
-                  <div
-                    v-for="(item, idx) in project.progressList"
-                    :key="idx"
-                    class="task-item task-item--done"
-                    :title="item"
-                  >
-                    <span class="task-item__icon">✓</span>
-                    <span class="task-item__text">{{ item }}</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 下一步计划 -->
-              <div v-if="project.nextSteps && project.nextSteps.length > 0" class="task-section">
-                <div class="task-section__header task-section__header--next">
-                  <i class="fas fa-bullseye"></i>
-                  <span>下一步</span>
-                </div>
-                <div class="task-list">
-                  <div
-                    v-for="(item, idx) in project.nextSteps"
-                    :key="idx"
-                    class="task-item task-item--next"
-                    :title="item"
-                  >
-                    <span class="task-item__icon task-item__icon--next">→</span>
-                    <span class="task-item__text task-item__text--next">{{ item }}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 底部链接 -->
-            <div v-if="project.demoUrl || project.githubUrl" class="project-card__footer">
-              <span class="footer-label">快速链接:</span>
-              <a
-                v-if="project.githubUrl"
-                :href="project.githubUrl"
-                target="_blank"
-                class="footer-link footer-link--github"
-              >
-                <i class="fab fa-github"></i>
-                <span>GitHub</span>
-              </a>
-              <a
-                v-if="project.demoUrl"
-                :href="project.demoUrl"
-                target="_blank"
-                class="footer-link footer-link--demo"
-              >
-                <i class="fas fa-play"></i>
-                <span>Demo</span>
-              </a>
-            </div>
-          </div>
+            :project="project"
+          />
         </div>
       </div>
 
@@ -481,12 +324,82 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import axios from 'axios'
 import { useAgentsStore } from '@/stores/agents'
 import { ElMessage } from 'element-plus'
 import { Loading, Warning, Document } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
+import DigitalEmployeeAgentCard from '@/components/digital-employee/DigitalEmployeeAgentCard.vue'
+import ProjectCard from '@/components/digital-employee/ProjectCard.vue'
+
+type AgentId = 'xiaomu' | 'xiaokai' | 'xiaochan' | 'xiaoyan' | 'xiaoce'
+type OutputType = 'code' | 'doc' | 'report' | 'markdown' | 'text' | 'html' | 'pdf' | 'unsupported' | 'json'
+
+interface DashboardStats {
+  totalProjects: number
+  inProgress: number
+  notStarted: number
+  todayCommits: number
+}
+
+interface PreviewFileItem {
+  name: string
+  type?: string
+  path?: string
+  url?: string
+  content?: string
+  date?: string
+  person?: string
+}
+
+interface OutputRecord extends PreviewFileItem {
+  name: string
+  date: string
+  person: string
+  type: string
+}
+
+interface WorkRecord {
+  date: string
+  time: string
+  person: string
+  task: string
+  status?: string
+}
+
+interface ProjectRecord {
+  id: string
+  stage: string
+  stageEmoji?: string
+  stageName?: string
+  name: string
+  description?: string
+  githubUrl?: string
+  demoUrl?: string
+  progress?: number
+  leaderRole?: string
+  leader?: string
+  lastUpdate?: string
+  createDate?: string
+  completedTasks?: number
+  totalTasks?: number
+  progressList?: string[]
+  nextSteps?: string[]
+}
+
+interface TeamMemberCard {
+  id: string
+  name: string
+  title: string
+  icon: string
+  status: string
+  completedTasks: number
+  gradient: string
+  stats: Record<string, number | string>
+  task: string
+  todayOutputs: OutputRecord[]
+}
 
 const agentsStore = useAgentsStore()
 const md = new MarkdownIt()
@@ -498,16 +411,16 @@ const lastUpdate = ref('--:--:--')
 
 // 文件预览对话框
 const showPreviewDialog = ref(false)
-const previewFileItem = ref(null)
+const previewFileItem = ref<PreviewFileItem | null>(null)
 const previewLoading = ref(false)
-const previewError = ref(null)
-const previewContent = ref({ type: '', content: '' })
+const previewError = ref<string | null>(null)
+const previewContent = ref<{ type: OutputType | string; content: string }>({ type: '', content: '' })
 
 // 数据
-const stats = ref({ totalProjects: 0, inProgress: 0, notStarted: 0, todayCommits: 0 })
-const projects = ref([])
-const allWorkRecords = ref([])
-const allOutputs = ref([])
+const stats = ref<DashboardStats>({ totalProjects: 0, inProgress: 0, notStarted: 0, todayCommits: 0 })
+const projects = ref<ProjectRecord[]>([])
+const allWorkRecords = ref<WorkRecord[]>([])
+const allOutputs = ref<OutputRecord[]>([])
 
 // 筛选
 const filterDateStart = ref('')
@@ -517,13 +430,6 @@ const filterOutputDateStart = ref('')
 const filterOutputDateEnd = ref('')
 const filterOutputRole = ref('all')
 const filterOutputType = ref('all')
-
-// GitHub 链接映射
-const githubRepos = {
-  '智能情报系统': 'https://github.com/zhushuyuan0601/project-ai-intel',
-  '统一智能体平台': 'https://github.com/zhushuyuan0601/unified-agent-platform',
-  'ai_customer_service': 'https://github.com/zhushuyuan0601/telecom-assistant'
-}
 
 // 计算属性
 const filteredWork = computed(() => {
@@ -555,23 +461,23 @@ const isWeekFilter = computed(() => {
   return filterOutputDateStart.value === weekAgo && filterOutputDateEnd.value === today
 })
 
-const teamMembers = computed(() => {
+const teamMembers = computed<TeamMemberCard[]>(() => {
   const today = new Date().toISOString().split('T')[0]
   const todayOutputs = allOutputs.value.filter(o => o.date === today)
   // 保持原有的人名匹配逻辑（小 U、小开等）
-  const nameMap = {
+  const nameMap: Record<AgentId, string> = {
     xiaomu: '小 U',
     xiaokai: '小开',
     xiaochan: '小产',
     xiaoyan: '小研',
     xiaoce: '小测'
   }
-  const getOutputsByPerson = (agentId) => {
+  const getOutputsByPerson = (agentId: AgentId) => {
     const personName = nameMap[agentId] || ''
     return todayOutputs.filter(o => o.person && o.person.includes(personName))
   }
 
-  const workByPerson = {}
+  const workByPerson: Record<string, number> = {}
   allWorkRecords.value.forEach(w => {
     const name = w.person.split('(')[0]
     workByPerson[name] = (workByPerson[name] || 0) + 1
@@ -585,16 +491,16 @@ const teamMembers = computed(() => {
     icon: agent.icon,
     status: agent.status,
     completedTasks: agent.completedTasks,
-    gradient: getGradientForAgent(agent.id),
-    stats: getAgentStats(agent.id, workByPerson),
-    task: getAgentTask(agent.id),
-    todayOutputs: getOutputsByPerson(agent.id)
+    gradient: getGradientForAgent(agent.id as AgentId),
+    stats: getAgentStats(agent.id as AgentId, workByPerson),
+    task: getAgentTask(agent.id as AgentId),
+    todayOutputs: getOutputsByPerson(agent.id as AgentId)
   }))
 })
 
 // 获取 Agent 对应的渐变色
-function getGradientForAgent(agentId) {
-  const gradients = {
+function getGradientForAgent(agentId: AgentId) {
+  const gradients: Record<AgentId, string> = {
     xiaomu: 'from-indigo-400 to-purple-500',    // 项目管理
     xiaokai: 'from-green-400 to-cyan-500',      // 研发工程师
     xiaochan: 'from-pink-400 to-rose-500',      // 产品经理
@@ -604,22 +510,9 @@ function getGradientForAgent(agentId) {
   return gradients[agentId] || 'from-gray-400 to-gray-500'
 }
 
-// 获取渐变色样式（用于内联 style）
-function getGradientStyle(gradientClass: string): string {
-  const gradientMap: Record<string, string> = {
-    'from-indigo-400 to-purple-500': 'linear-gradient(135deg, #818cf8, #a855f7)',
-    'from-green-400 to-cyan-500': 'linear-gradient(135deg, #4ade80, #06b6d4)',
-    'from-pink-400 to-rose-500': 'linear-gradient(135deg, #f472b6, #f43f5e)',
-    'from-yellow-400 to-orange-500': 'linear-gradient(135deg, #facc15, #f97316)',
-    'from-red-400 to-pink-500': 'linear-gradient(135deg, #f87171, #ec4899)',
-    'from-gray-400 to-gray-500': 'linear-gradient(135deg, #9ca3af, #6b7280)'
-  }
-  return gradientMap[gradientClass] || gradientMap['from-gray-400 to-gray-500']
-}
-
 // 获取 Agent 统计信息
-function getAgentStats(agentId, workByPerson) {
-  const statsMap = {
+function getAgentStats(agentId: AgentId, workByPerson: Record<string, number>) {
+  const statsMap: Record<AgentId, Record<string, number | string>> = {
     xiaomu: { '任务': workByPerson['小 U'] || 0, '同步': '✅' },
     xiaokai: { '提交': stats.value.todayCommits || 0, '代码': '2.5k' },
     xiaochan: { 'PRD': 0, '评审': 0 },
@@ -630,8 +523,8 @@ function getAgentStats(agentId, workByPerson) {
 }
 
 // 获取 Agent 当前任务
-function getAgentTask(agentId) {
-  const tasks = {
+function getAgentTask(agentId: AgentId) {
+  const tasks: Record<AgentId, string> = {
     xiaomu: '团队协调',
     xiaokai: '智能情报系统开发',
     xiaochan: '产品需求规划',
@@ -639,59 +532,6 @@ function getAgentTask(agentId) {
     xiaoce: '功能测试验证'
   }
   return tasks[agentId] || '-'
-}
-
-// 方法
-const getStageColor = (stage) => {
-  const colors = {
-    'idea': 'from-gray-500 to-gray-600',
-    'analysis': 'from-yellow-500 to-orange-500',
-    'tech-assessment': 'from-purple-500 to-pink-500',
-    'development': 'from-blue-500 to-cyan-500',
-    'testing': 'from-indigo-500 to-purple-500',
-    'deployed': 'from-green-500 to-emerald-500',
-    'maintenance': 'from-teal-500 to-cyan-500',
-    'paused': 'from-orange-500 to-red-500',
-    'cancelled': 'from-red-500 to-rose-500'
-  }
-  return colors[stage] || 'from-gray-500 to-gray-600'
-}
-
-// 获取阶段徽章类名
-const getStageBadgeClass = (stage) => {
-  const classMap = {
-    'idea': 'stage-badge--idea',
-    'analysis': 'stage-badge--analysis',
-    'tech-assessment': 'stage-badge--tech-assessment',
-    'development': 'stage-badge--development',
-    'testing': 'stage-badge--testing',
-    'deployed': 'stage-badge--deployed',
-    'maintenance': 'stage-badge--maintenance',
-    'paused': 'stage-badge--paused',
-    'cancelled': 'stage-badge--cancelled'
-  }
-  return classMap[stage] || 'stage-badge--idea'
-}
-
-// 获取阶段卡片装饰类（可选，用于特殊阶段的高亮）
-const getStageCardClass = (stage) => {
-  // 目前返回空类名，保留扩展性
-  return ''
-}
-
-const getStatusColor = (status) => {
-  const colors = {
-    '开发中': 'from-blue-500 to-cyan-500',
-    '规划中': 'from-yellow-500 to-orange-500',
-    '未启动': 'from-gray-500 to-gray-600',
-    '已上线': 'from-green-500 to-emerald-500'
-  }
-  return colors[status] || 'from-gray-500 to-gray-600'
-}
-
-const getStatusEmoji = (status) => {
-  const emojis = { '开发中': '🚧', '规划中': '📋', '未启动': '⏳', '已上线': '✅' }
-  return emojis[status] || '📦'
 }
 
 const getTypeIcon = (type: string): string => {
@@ -712,19 +552,9 @@ const getTypeIconColor = (type: string): string => {
   return colors[type] || '#94a3b8'
 }
 
-const getOutputFileTypeName = (type) => {
-  const names = { code: '代码', doc: '文档', report: '报告' }
+const getOutputFileTypeName = (type: string) => {
+  const names: Record<string, string> = { code: '代码', doc: '文档', report: '报告' }
   return names[type] || '文件'
-}
-
-const getGithubLink = (projectName) => {
-  return githubRepos[projectName] || ''
-}
-
-// 渲染 Markdown
-const renderMarkdown = (content) => {
-  if (!content) return ''
-  return md.render(content)
 }
 
 // 渲染预览内容
@@ -736,17 +566,18 @@ const renderPreviewContent = () => {
 }
 
 // 转义 HTML
-const escapeHtml = (content) => {
+const escapeHtml = (content: string) => {
   const div = document.createElement('div')
   div.textContent = content
   return div.innerHTML
 }
 
 // 获取文件类型
-const getFileType = (fileName) => {
+const getFileType = (fileName: string) => {
   if (!fileName) return 'text'
-  const ext = fileName.split('.').pop().toLowerCase()
-  const typeMap = {
+  const ext = fileName.split('.').pop()?.toLowerCase()
+  if (!ext) return 'text'
+  const typeMap: Record<string, OutputType | string> = {
     'md': 'markdown',
     'markdown': 'markdown',
     'txt': 'text',
@@ -773,7 +604,7 @@ const getFileType = (fileName) => {
 }
 
 // 预览文件 - 适配 /api/dashboard 返回的数据格式
-const previewFile = (file) => {
+const previewFile = (file: PreviewFileItem) => {
   console.log('[DigitalEmployee] 预览文件，file:', file)
   previewFileItem.value = file
   previewLoading.value = true
@@ -811,7 +642,7 @@ const previewFile = (file) => {
           previewError.value = data.error || '读取文件失败'
         }
       })
-      .catch(err => {
+      .catch((err: Error) => {
         console.error('[DigitalEmployee] 预览错误:', err)
         previewLoading.value = false
         previewError.value = '读取文件失败：' + err.message
@@ -868,19 +699,19 @@ const refreshData = async () => {
     }
 
     // 项目
-    projects.value = data.projects || []
+    projects.value = (data.projects || []) as ProjectRecord[]
 
     // 工作记录 - 从 activities API 获取
     const activitiesData = activitiesRes.data
     if (activitiesData.success && activitiesData.activities) {
-      allWorkRecords.value = activitiesData.activities
+      allWorkRecords.value = activitiesData.activities as WorkRecord[]
     } else {
-      allWorkRecords.value = data.todayWork || []
+      allWorkRecords.value = (data.todayWork || []) as WorkRecord[]
     }
 
     // 工作成果
     console.log('[DigitalEmployee] API 返回的 outputs:', data.outputs)
-    allOutputs.value = data.outputs || []
+    allOutputs.value = (data.outputs || []) as OutputRecord[]
 
     // 更新时间
     const now = new Date()
@@ -903,7 +734,7 @@ const getLocalDate = () => {
   return `${year}-${month}-${day}`
 }
 
-const getLocalDateDaysAgo = (days) => {
+const getLocalDateDaysAgo = (days: number) => {
   const now = new Date()
   now.setDate(now.getDate() - days)
   const year = now.getFullYear()
@@ -912,19 +743,21 @@ const getLocalDateDaysAgo = (days) => {
   return `${year}-${month}-${day}`
 }
 
-const setQuickDate = (range) => {
+const setQuickDate = (range: 'today' | 'week') => {
   const today = getLocalDate()
   filterDateStart.value = range === 'today' ? today : getLocalDateDaysAgo(7)
   filterDateEnd.value = today
 }
 
-const setOutputQuickDate = (range) => {
+const setOutputQuickDate = (range: 'today' | 'week') => {
   const today = getLocalDate()
   filterOutputDateStart.value = range === 'today' ? today : getLocalDateDaysAgo(7)
   filterOutputDateEnd.value = today
 }
 
 // 生命周期
+let refreshTimer: number | null = null
+
 onMounted(() => {
   const today = getLocalDate()
   filterDateStart.value = today
@@ -938,7 +771,13 @@ onMounted(() => {
   }
 
   refreshData()
-  setInterval(refreshData, 30000)
+  refreshTimer = window.setInterval(refreshData, 30000)
+})
+
+onUnmounted(() => {
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+  }
 })
 </script>
 

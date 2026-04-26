@@ -1,5 +1,6 @@
 // 任务分析器 - 通过 Gateway 让项目管理（ceo）分析任务
 import { useTaskGatewayStore } from '@/stores/taskGateway'
+import { AGENT_DEFINITIONS } from '@/config/agents'
 
 // 任务执行步骤
 export interface TaskStep {
@@ -11,38 +12,17 @@ export interface TaskStep {
 }
 
 // Agent 角色配置
-export const AGENT_CONFIG: Record<string, { name: string; icon: string; description: string; role: string }> = {
-  xiaomu: {
-    name: '小呦',
-    icon: '/avatars/avatar-xiaomu.jpeg',
-    description: '项目统筹',
-    role: 'assistant'
-  },
-  xiaokai: {
-    name: '研发工程师',
-    icon: '/avatars/avatar-xiaokai.jpeg',
-    description: '技术开发',
-    role: 'developer'
-  },
-  xiaochan: {
-    name: '产品经理',
-    icon: '/avatars/avatar-xiaochan.jpeg',
-    description: '产品设计',
-    role: 'product'
-  },
-  xiaoyan: {
-    name: '研究员',
-    icon: '/avatars/avatar-xiaoyan.jpeg',
-    description: '调研分析',
-    role: 'analyst'
-  },
-  xiaoce: {
-    name: '测试员',
-    icon: '/avatars/avatar-xiaoce.jpeg',
-    description: '质量检查',
-    role: 'tester'
-  }
-}
+export const AGENT_CONFIG: Record<string, { name: string; icon: string; description: string; role: string }> = Object.fromEntries(
+  AGENT_DEFINITIONS.map((agent) => [
+    agent.id,
+    {
+      name: agent.name,
+      icon: agent.icon,
+      description: agent.roleLabel,
+      role: agent.roleType,
+    },
+  ])
+) as Record<string, { name: string; icon: string; description: string; role: string }>
 
 /**
  * 通过 Gateway 让项目管理（ceo）分析任务

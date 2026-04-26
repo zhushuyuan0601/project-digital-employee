@@ -535,6 +535,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive } from 'vue'
+import { useNotification } from '@/composables/useNotification'
 
 interface Skill {
   id: string
@@ -568,6 +569,8 @@ interface RegistrySkill {
   hash?: string
   url?: string
 }
+
+const notification = useNotification()
 
 const skills = ref<Skill[]>([])
 const loading = ref(false)
@@ -688,14 +691,14 @@ async function installFromRegistry(skill: RegistrySkill) {
     })
     const data = await response.json()
     if (data.success) {
-      alert(`安装成功：${skill.name}`)
+      notification.success(`安装成功：${skill.name}`)
       fetchSkills()
       showRegistryDetailModal.value = false
     } else {
-      alert('安装失败: ' + (data.error || data.message))
+      notification.error('安装失败: ' + (data.error || data.message))
     }
   } catch (e: any) {
-    alert('安装失败: ' + e.message)
+    notification.error('安装失败: ' + e.message)
   } finally {
     installingSkills.value.delete(skill.slug)
   }
@@ -724,7 +727,7 @@ async function viewSkillDetail(skill: Skill) {
       const data = await response.json()
       if (data.success) {
         skillContent.value = data.content || ''
-        if (data.security) {
+        if (data.security && selectedSkill.value) {
           selectedSkill.value = { ...selectedSkill.value, securityScan: { status: data.security.status } }
         }
       }
@@ -753,10 +756,10 @@ async function installSkill(skill: Skill) {
       fetchSkills()
       showDetailModal.value = false
     } else {
-      alert('安装失败: ' + data.error)
+      notification.error('安装失败: ' + data.error)
     }
   } catch (e: any) {
-    alert('安装失败: ' + e.message)
+    notification.error('安装失败: ' + e.message)
   }
 }
 
@@ -770,16 +773,17 @@ async function updateSkill(skill: Skill) {
     if (data.success) {
       fetchSkills()
     } else {
-      alert('更新失败: ' + data.error)
+      notification.error('更新失败: ' + data.error)
     }
   } catch (e: any) {
-    alert('更新失败: ' + e.message)
+    notification.error('更新失败: ' + e.message)
   }
 }
 
 // 卸载技能
 async function uninstallSkill(skill: Skill) {
-  if (!confirm(`确定要卸载 ${skill.name} 吗？`)) return
+  const confirmed = await notification.confirm(`确定要卸载 ${skill.name} 吗？`, '卸载技能')
+  if (!confirmed) return
 
   try {
     const response = await fetch(`/api/skills?source=${skill.source}&name=${skill.name}`, {
@@ -790,10 +794,10 @@ async function uninstallSkill(skill: Skill) {
       fetchSkills()
       showDetailModal.value = false
     } else {
-      alert('卸载失败: ' + data.error)
+      notification.error('卸载失败: ' + data.error)
     }
   } catch (e: any) {
-    alert('卸载失败: ' + e.message)
+    notification.error('卸载失败: ' + e.message)
   }
 }
 
@@ -804,12 +808,12 @@ async function scanSkillSecurity(skill: Skill) {
   try {
     const response = await fetch(`/api/skills?mode=check&source=${skill.source}&name=${skill.name}`)
     const data = await response.json()
-    if (data.success && data.security) {
+    if (data.success && data.security && selectedSkill.value) {
       selectedSkill.value = { ...selectedSkill.value, securityScan: { status: data.security.status } }
-      alert(`安全扫描完成: ${data.security.status}`)
+      notification.success(`安全扫描完成: ${data.security.status}`)
     }
   } catch (e: any) {
-    alert('扫描失败: ' + e.message)
+    notification.error('扫描失败: ' + e.message)
   }
 }
 
@@ -829,10 +833,10 @@ async function createSkill() {
       newSkill.value = { name: '', source: 'workspace', content: '' }
       fetchSkills()
     } else {
-      alert('创建失败: ' + data.error)
+      notification.error('创建失败: ' + data.error)
     }
   } catch (e: any) {
-    alert('创建失败: ' + e.message)
+    notification.error('创建失败: ' + e.message)
   }
 }
 
