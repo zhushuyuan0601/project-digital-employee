@@ -49,7 +49,7 @@ export const navigationSections: NavigationSection[] = [
     items: [
       { to: '/tokens', label: '成本追踪', meta: 'Token 与请求', icon: markRaw(Coin) },
       { to: '/memory', label: '内存图谱', meta: '知识与上下文', icon: markRaw(Collection), roles: ['admin', 'operator'] },
-      { to: '/security', label: '安全审计', meta: '风险巡检', icon: markRaw(WarningFilled), roles: ['admin'] },
+      { to: '/security', label: '安全治理中心', meta: '密钥、MCP 与审计事件', icon: markRaw(WarningFilled), roles: ['admin'] },
     ],
   },
 ]

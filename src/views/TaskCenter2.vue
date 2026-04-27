@@ -1,6 +1,5 @@
 <template>
   <div class="task-center-2">
-    <!-- 顶部标题 -->
     <TaskControlBar
       :ai-status="aiStatus"
       :ai-status-text="aiStatusText"
@@ -13,18 +12,130 @@
       @reset="handleReset"
     />
 
-    <!-- 主体内容：侧边栏 + 详情面板 -->
-    <div class="main-layout">
-      <!-- 左侧：Agent 列表 -->
-      <div class="sidebar">
-        <div class="sidebar-header">
-          <div class="section-title">
-            ACTIVE AGENTS
-            <span class="agent-count">{{ agentList.length }}</span>
+    <section class="workspace-hero">
+      <div class="workspace-hero__copy">
+        <p class="workspace-kicker">Task Dispatch / Execution / Review</p>
+        <h1>任务指挥中心 II</h1>
+        <p class="workspace-desc">把任务派发、执行会话和产出审阅拆成连续工作流，降低一个页面承载多种职责的复杂度。</p>
+      </div>
+      <div class="workspace-hero__stats">
+        <article class="workspace-stat-card">
+          <span class="workspace-stat-card__label">在线 Agent</span>
+          <strong>{{ connectedAgentCount }}/{{ agentList.length }}</strong>
+          <small>{{ busyAgentCount }} 个正在执行</small>
+        </article>
+        <article class="workspace-stat-card">
+          <span class="workspace-stat-card__label">Claude 会话</span>
+          <strong>{{ claudeCodeSessions.length }}</strong>
+          <small>代码执行与协同窗口</small>
+        </article>
+        <article class="workspace-stat-card">
+          <span class="workspace-stat-card__label">待审成果</span>
+          <strong>{{ totalOutputCount }}</strong>
+          <small>{{ pendingReviewCount }} 个新增文件待关注</small>
+        </article>
+      </div>
+    </section>
+
+    <div class="workspace-tabs">
+      <button
+        v-for="stage in workspaceStages"
+        :key="stage.key"
+        type="button"
+        class="workspace-tab"
+        :class="{ 'is-active': activeStage === stage.key }"
+        @click="setStage(stage.key)"
+      >
+        <strong>{{ stage.label }}</strong>
+        <span>{{ stage.meta }}</span>
+      </button>
+    </div>
+
+    <div v-if="activeStage === 'review'" class="review-layout">
+      <aside class="review-sidebar">
+        <div class="review-sidebar__header">
+          <div>
+            <p class="workspace-kicker">Output Library</p>
+            <h3>成果资产库</h3>
+          </div>
+          <span>{{ totalOutputCount }} 份文件</span>
+        </div>
+
+        <div v-if="outputReviewGroups.length === 0" class="review-empty">
+          暂无可审阅成果
+        </div>
+
+        <div
+          v-for="group in outputReviewGroups"
+          :key="group.id"
+          class="review-group"
+        >
+          <div class="review-group__header">
+            <strong>{{ group.name }}</strong>
+            <span>{{ group.files.length }} 项</span>
+          </div>
+          <button
+            v-for="file in group.files"
+            :key="reviewFileKey(file)"
+            type="button"
+            class="review-file"
+            :class="{ 'is-active': selectedReviewAgentId === group.id && reviewSelectionKey === reviewFileKey(file) }"
+            @click="inspectReviewFile(group.id, file)"
+          >
+            <i :class="getFileIcon(file.name)"></i>
+            <span>{{ file.name }}</span>
+            <small>{{ file.mtimeStr || group.role }}</small>
+          </button>
+        </div>
+      </aside>
+
+      <section class="review-preview">
+        <div class="review-preview__header">
+          <div>
+            <p class="workspace-kicker">Output Review</p>
+            <h3>{{ previewFileItem?.name || '选择成果开始审阅' }}</h3>
+          </div>
+          <span class="review-preview__meta">{{ selectedReviewAgentName }}</span>
+        </div>
+
+        <div class="review-preview__body">
+          <div v-if="previewLoading" class="preview-loading">
+            <el-icon class="is-loading"><Loading /></el-icon>
+            <span>加载文件中...</span>
+          </div>
+          <div v-else-if="previewError" class="preview-error">
+            <el-icon><Warning /></el-icon>
+            <span>{{ previewError }}</span>
+          </div>
+          <div v-else-if="previewFileItem" class="preview-content preview-content--inline">
+            <div v-if="previewContent.type === 'markdown'" class="markdown-rendered" v-html="renderPreviewContent()"></div>
+            <pre v-else-if="previewContent.type === 'text'" v-html="escapeHtml(previewContent.content)"></pre>
+            <div v-else-if="previewContent.type === 'html'" v-html="previewContent.content"></div>
+            <div v-else class="preview-unsupported">
+              <el-icon><Document /></el-icon>
+              <p>该文件类型暂不支持在线预览</p>
+              <p class="hint">{{ previewFileItem?.name }}</p>
+              <el-button type="primary" @click="downloadFile">下载文件</el-button>
+            </div>
+          </div>
+          <div v-else class="empty-state">
+            <i class="ri-folder-open-line"></i>
+            <span>从左侧成果列表中选择文件开始审阅</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div v-else class="workspace-layout">
+      <aside v-if="activeStage === 'dispatch'" class="dispatch-sidebar">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>ACTIVE AGENTS</span>
+            <strong>{{ agentList.length }}</strong>
           </div>
         </div>
 
-        <div class="agent-list" ref="agentListRef">
+        <div class="agent-list">
           <el-popover
             v-for="agent in agentList"
             :key="agent.id"
@@ -49,7 +160,6 @@
                 @click="selectAgent(agent.id)"
               />
             </template>
-            <!-- Hover 详情卡片 -->
             <div class="agent-tip-card">
               <div class="agent-tip-header">
                 <img class="agent-tip-avatar" :src="getAgentIcon(agent.id)" :alt="agent.name" />
@@ -83,195 +193,263 @@
             </div>
           </el-popover>
 
-          <!-- ClaudeCode 动态角色 -->
-          <div
+          <button
             v-if="claudeCodeSessions.length > 0"
-            class="agent-card"
-            :class="{ active: selectedAgent === 'claude' }"
+            type="button"
+            class="claude-card"
+            :class="{ 'is-active': selectedAgent === 'claude' }"
             @click="selectAgent('claude')"
           >
-            <div class="agent-card__header">
-              <div class="agent-card__main">
-                <div class="agent-card__avatar claude-avatar-small"><i class="fas fa-robot"></i></div>
-                <div>
-                  <div class="agent-card__name">ClaudeCode</div>
-                  <div class="agent-card__role">代码执行者</div>
-                </div>
+            <div class="claude-card__header">
+              <div>
+                <strong>ClaudeCode</strong>
+                <span>代码执行者</span>
               </div>
-              <div class="status-badge-mini busy">
-                执行中
-              </div>
+              <span class="status-badge-mini busy">执行中</span>
             </div>
-            <div class="agent-card__desc">{{ claudeCodeSessions.length }} 个活跃会话</div>
-          </div>
+            <small>{{ claudeCodeSessions.length }} 个活跃会话</small>
+          </button>
         </div>
-      </div>
+      </aside>
 
-      <!-- 右侧：详情面板 -->
-      <div class="detail-panel">
-        <template v-if="selectedAgent && selectedAgent !== 'claude'">
-          <!-- 紧凑标题栏 -->
-          <div class="detail-topbar">
-            <img class="detail-topbar-avatar" :src="getAgentIcon(selectedAgent)" :alt="getAgentName(selectedAgent)" />
-            <span class="detail-topbar-name">{{ getAgentName(selectedAgent) }}</span>
-            <span class="detail-topbar-role">{{ getAgentRole(selectedAgent) }}</span>
-            <div class="detail-topbar-spacer"></div>
-            <!-- 产出文件 Tips -->
-            <el-popover
-              v-if="getAgentFiles(selectedAgent).length > 0"
-              trigger="click"
-              placement="bottom-end"
-              :width="320"
-              popper-class="file-list-popper"
-            >
-              <template #reference>
-                <button class="file-tip-btn" :class="{ 'has-new': hasNewFiles(selectedAgent) }">
-                  <i class="ri-folder-zip-line"></i>
-                  <span>{{ getAgentFiles(selectedAgent).length }}</span>
-                  <span v-if="hasNewFiles(selectedAgent)" class="file-red-dot"></span>
-                </button>
-              </template>
-              <div class="file-dropdown">
-                <div
-                  v-for="file in getAgentFiles(selectedAgent)"
-                  :key="file.name"
-                  class="file-dropdown-item"
-                  @click="previewFile(file)"
-                >
-                  <i :class="getFileIcon(file.name)"></i>
-                  <span class="file-dropdown-name">{{ file.name }}</span>
-                  <span class="file-dropdown-meta">{{ file.mtimeStr || '' }}</span>
-                </div>
-              </div>
-            </el-popover>
-            <div class="status-badge-mini" :class="getAgentStatus(selectedAgent)">
-              <i :class="getAgentStatusIcon(selectedAgent)"></i>
-              {{ getAgentStatusText(selectedAgent) }}
+      <aside v-else class="execution-rail">
+        <section class="execution-card">
+          <div class="execution-card__header">
+            <h3>执行对象</h3>
+            <span>{{ currentTargetLabel }}</span>
+          </div>
+          <button
+            v-for="agent in agentList"
+            :key="agent.id"
+            type="button"
+            class="execution-agent"
+            :class="{ 'is-active': selectedAgent === agent.id }"
+            @click="selectAgent(agent.id)"
+          >
+            <div>
+              <strong>{{ agent.name }}</strong>
+              <span>{{ getAgentStatusText(agent.id) }}</span>
+            </div>
+            <small>{{ agents[agent.id]?.messages.length || 0 }} 条消息</small>
+          </button>
+          <button
+            v-if="claudeCodeSessions.length > 0"
+            type="button"
+            class="execution-agent"
+            :class="{ 'is-active': selectedAgent === 'claude' }"
+            @click="selectAgent('claude')"
+          >
+            <div>
+              <strong>ClaudeCode</strong>
+              <span>{{ claudeCodeSessions.length }} 个活跃会话</span>
+            </div>
+            <small>执行编排</small>
+          </button>
+        </section>
+
+        <section class="execution-card">
+          <div class="execution-card__header">
+            <h3>执行摘要</h3>
+            <span>{{ taskElapsedText }}</span>
+          </div>
+          <div class="execution-metrics">
+            <div class="execution-metric">
+              <span>连接覆盖</span>
+              <strong>{{ connectedAgentCount }}/{{ agentList.length }}</strong>
+            </div>
+            <div class="execution-metric">
+              <span>忙碌 Agent</span>
+              <strong>{{ busyAgentCount }}</strong>
+            </div>
+            <div class="execution-metric">
+              <span>成果文件</span>
+              <strong>{{ totalOutputCount }}</strong>
             </div>
           </div>
+        </section>
+      </aside>
 
-          <!-- 详情内容：聊天区 -->
-          <div class="detail-content">
-            <TaskMessagePanel
-              v-model="taskInput"
-              :messages="agents[selectedAgent]?.messages || []"
-              :agent-name="getAgentName(selectedAgent)"
-              :agent-icon="getAgentIcon(selectedAgent)"
-              :connected="selectedAgentConnected"
-              :placeholder="chatInputPlaceholder"
-              @send="sendToSelectedAgent"
-            />
-          </div>
-        </template>
-        <template v-else-if="selectedAgent === 'claude'">
-          <div class="detail-topbar">
-            <div class="claude-avatar-topbar"><i class="fas fa-robot"></i></div>
-            <span class="detail-topbar-name">ClaudeCode</span>
-            <span class="detail-topbar-role" style="background: rgba(139, 92, 246, 0.1); color: var(--agent-claude); border-color: rgba(139, 92, 246, 0.2);">代码执行者</span>
-            <div class="detail-topbar-spacer"></div>
-            <span style="font-size: 11px; color: var(--text-tertiary);">{{ claudeCodeSessions.length }} 个活跃会话</span>
-            <div class="status-badge-mini busy">
-              <i class="ri-loader-4-line ri-spin"></i>
-              执行中
-            </div>
-          </div>
+      <section class="workstage-main">
+        <div v-if="activeStage === 'dispatch'" class="dispatch-brief">
+          <article class="dispatch-brief__card">
+            <span class="dispatch-brief__label">当前派发对象</span>
+            <strong>{{ currentTargetLabel }}</strong>
+            <small>{{ currentTargetMeta }}</small>
+          </article>
+          <article class="dispatch-brief__card">
+            <span class="dispatch-brief__label">连通性</span>
+            <strong>{{ aiStatusText }}</strong>
+            <small>{{ anyConnected ? '可以开始派发任务' : '请先建立 Gateway 连接' }}</small>
+          </article>
+          <article class="dispatch-brief__card">
+            <span class="dispatch-brief__label">成果回流</span>
+            <strong>{{ totalOutputCount }} 份</strong>
+            <small>{{ pendingReviewCount }} 份新增内容待审阅</small>
+          </article>
+        </div>
 
-          <div class="detail-content">
-            <div class="chat-section">
-              <!-- 会话选择器 -->
-              <div class="claude-session-selector">
-                <div
-                  v-for="session in claudeCodeSessions"
-                  :key="session.id"
-                  class="session-item"
-                  :class="{ active: selectedClaudeSession?.id === session.id }"
-                  @click="selectClaudeSession(session)"
-                >
-                  <span class="session-model-badge">{{ session.model }}</span>
-                  <span class="session-name">{{ getSessionDisplayName(session) }}</span>
-                  <span class="session-stats">{{ session.tokens }} tokens · {{ session.userMessages }}/{{ session.assistantMessages }}</span>
+        <div class="detail-panel">
+          <template v-if="selectedAgent && selectedAgent !== 'claude'">
+            <div class="detail-topbar">
+              <div class="detail-topbar__identity">
+                <img class="detail-topbar-avatar" :src="getAgentIcon(selectedAgent)" :alt="getAgentName(selectedAgent)" />
+                <div>
+                  <div class="detail-topbar-name">{{ getAgentName(selectedAgent) }}</div>
+                  <div class="detail-topbar-role">{{ getAgentRole(selectedAgent) }}</div>
                 </div>
               </div>
-
-              <!-- 消息列表 -->
-              <div v-if="selectedClaudeSession" class="claude-chat-container">
-                <div class="claude-messages-container" ref="claudeMessagesRef">
-                  <div v-if="claudeTranscriptLoading" class="chat-loading">
-                    <i class="ri-loader-4-line ri-spin"></i> 加载消息中...
-                  </div>
-                  <div v-else-if="claudeTranscript.length === 0" class="chat-empty-hint">
-                    暂无消息记录
-                  </div>
-                  <div v-else>
+              <div class="detail-topbar__actions">
+                <el-popover
+                  v-if="currentAgentFiles.length > 0"
+                  trigger="click"
+                  placement="bottom-end"
+                  :width="320"
+                  popper-class="file-list-popper"
+                >
+                  <template #reference>
+                    <button class="file-tip-btn" :class="{ 'has-new': hasNewFiles(selectedAgent) }">
+                      <i class="ri-folder-zip-line"></i>
+                      <span>{{ currentAgentFiles.length }}</span>
+                      <span v-if="hasNewFiles(selectedAgent)" class="file-red-dot"></span>
+                    </button>
+                  </template>
+                  <div class="file-dropdown">
                     <div
-                      v-for="(msg, idx) in claudeTranscript"
-                      :key="idx"
-                      class="chat-msg"
-                      :class="{ user: msg.role === 'user' }"
+                      v-for="file in currentAgentFiles"
+                      :key="reviewFileKey(file)"
+                      class="file-dropdown-item"
+                      @click="previewFile(file)"
                     >
-                      <div class="msg-avatar">
-                        <template v-if="msg.role === 'user'">
-                          <i class="ri-user-line"></i>
-                        </template>
-                        <template v-else>
-                          <i class="ri-robot-line"></i>
-                        </template>
-                      </div>
-                      <div>
+                      <i :class="getFileIcon(file.name)"></i>
+                      <span class="file-dropdown-name">{{ file.name }}</span>
+                      <span class="file-dropdown-meta">{{ file.mtimeStr || '' }}</span>
+                    </div>
+                  </div>
+                </el-popover>
+                <div class="status-badge-mini" :class="getAgentStatus(selectedAgent)">
+                  <i :class="getAgentStatusIcon(selectedAgent)"></i>
+                  {{ getAgentStatusText(selectedAgent) }}
+                </div>
+              </div>
+            </div>
+
+            <div class="detail-content">
+              <TaskMessagePanel
+                v-model="taskInput"
+                :messages="currentAgentMessages"
+                :agent-name="getAgentName(selectedAgent)"
+                :agent-icon="getAgentIcon(selectedAgent)"
+                :connected="selectedAgentConnected"
+                :placeholder="chatInputPlaceholder"
+                @send="sendToSelectedAgent"
+              />
+            </div>
+          </template>
+
+          <template v-else-if="selectedAgent === 'claude'">
+            <div class="detail-topbar">
+              <div class="detail-topbar__identity">
+                <div class="claude-avatar-topbar"><i class="fas fa-robot"></i></div>
+                <div>
+                  <div class="detail-topbar-name">ClaudeCode</div>
+                  <div class="detail-topbar-role">代码执行者</div>
+                </div>
+              </div>
+              <div class="detail-topbar__actions">
+                <span class="detail-topbar-meta">{{ claudeCodeSessions.length }} 个活跃会话</span>
+                <div class="status-badge-mini busy">
+                  <i class="ri-loader-4-line ri-spin"></i>
+                  执行中
+                </div>
+              </div>
+            </div>
+
+            <div class="detail-content">
+              <div class="claude-shell">
+                <div class="claude-session-selector">
+                  <button
+                    v-for="session in claudeCodeSessions"
+                    :key="session.id"
+                    type="button"
+                    class="session-item"
+                    :class="{ active: selectedClaudeSession?.id === session.id }"
+                    @click="selectClaudeSession(session)"
+                  >
+                    <span class="session-model-badge">{{ session.model }}</span>
+                    <span class="session-name">{{ getSessionDisplayName(session) }}</span>
+                    <span class="session-stats">{{ session.tokens }} tokens · {{ session.userMessages }}/{{ session.assistantMessages }}</span>
+                  </button>
+                </div>
+
+                <div class="claude-chat-container">
+                  <div class="claude-messages-container" ref="claudeMessagesRef">
+                    <div v-if="claudeTranscriptLoading" class="chat-loading">
+                      <i class="ri-loader-4-line ri-spin"></i> 加载消息中...
+                    </div>
+                    <div v-else-if="claudeTranscript.length === 0" class="empty-state">
+                      <i class="ri-chat-smile-2-line"></i>
+                      <span>暂无消息记录</span>
+                    </div>
+                    <div v-else class="claude-message-stream">
+                      <div
+                        v-for="(msg, idx) in claudeTranscript"
+                        :key="idx"
+                        class="chat-msg"
+                        :class="{ user: msg.role === 'user' }"
+                      >
+                        <div class="msg-avatar">
+                          <i :class="msg.role === 'user' ? 'ri-user-line' : 'ri-robot-line'"></i>
+                        </div>
                         <div class="msg-bubble">
                           <template v-for="(part, pidx) in msg.parts" :key="pidx">
                             <div v-if="part.type === 'text'">{{ part.text }}</div>
                             <div v-else-if="part.type === 'thinking'" class="msg-thinking"><i class="ri-brain-line"></i> {{ part.thinking }}</div>
-                            <div v-else-if="part.type === 'tool_use'" class="msg-tool">
-                              <span class="tool-name"><i class="ri-tools-line"></i> {{ part.name }}</span>
-                            </div>
+                            <div v-else-if="part.type === 'tool_use'" class="msg-tool"><i class="ri-tools-line"></i> {{ part.name }}</div>
                           </template>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
 
-                <!-- 发送消息 -->
-                <div class="claude-input-area">
-                  <input
-                    v-model="claudeInputMessage"
-                    type="text"
-                    placeholder="输入消息发送到 ClaudeCode..."
-                    class="claude-input"
-                    @keydown.enter="sendClaudeMessage"
-                    :disabled="claudeSending"
-                  />
-                  <button
-                    class="send-btn"
-                    @click="sendClaudeMessage"
-                    :disabled="!claudeInputMessage.trim() || claudeSending"
-                  >
-                    {{ claudeSending ? '...' : '发送' }}
-                  </button>
+                  <div class="claude-input-area">
+                    <input
+                      v-model="claudeInputMessage"
+                      type="text"
+                      placeholder="输入消息发送到 ClaudeCode..."
+                      class="claude-input"
+                      @keydown.enter="sendClaudeMessage"
+                      :disabled="claudeSending"
+                    />
+                    <button
+                      type="button"
+                      class="send-btn"
+                      @click="sendClaudeMessage"
+                      :disabled="!claudeInputMessage.trim() || claudeSending"
+                    >
+                      {{ claudeSending ? '...' : '发送' }}
+                    </button>
+                  </div>
+                  <div v-if="claudeSendError" class="send-error">{{ claudeSendError }}</div>
                 </div>
-                <div v-if="claudeSendError" class="send-error">{{ claudeSendError }}</div>
               </div>
             </div>
-          </div>
-        </template>
+          </template>
 
-        <!-- 未选中 Agent 的默认提示 -->
-        <div v-else class="no-agent-selected">
-          <i class="ri-arrow-left-line"></i>
-          <span>请在左侧选择一个 Agent 查看详情</span>
+          <div v-else class="empty-state">
+            <i class="ri-arrow-left-line"></i>
+            <span>请先选择一个执行对象</span>
+          </div>
         </div>
-      </div>
+      </section>
     </div>
 
-    <!-- 文件预览对话框 -->
     <el-dialog
       v-model="showPreviewDialog"
       :title="previewFileItem?.name || '文件预览'"
       width="900px"
       :close-on-click-modal="true"
     >
-      <div class="file-preview-container">
+      <div class="preview-dialog-body">
         <div v-if="previewLoading" class="preview-loading">
           <el-icon class="is-loading"><Loading /></el-icon>
           <span>加载文件中...</span>
@@ -297,85 +475,77 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Loading, Warning, Document } from '@element-plus/icons-vue'
+import { Document, Loading, Warning } from '@element-plus/icons-vue'
+import MarkdownIt from 'markdown-it'
+import TaskAgentCard from '@/components/task-center/TaskAgentCard.vue'
+import TaskControlBar from '@/components/task-center/TaskControlBar.vue'
+import TaskMessagePanel from '@/components/task-center/TaskMessagePanel.vue'
+import { AGENT_CONFIG } from '@/simulation'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
 import { useThemeStore } from '@/stores/theme'
-import { AGENT_CONFIG } from '@/simulation'
-import MarkdownIt from 'markdown-it'
-import TaskControlBar from '@/components/task-center/TaskControlBar.vue'
-import TaskAgentCard from '@/components/task-center/TaskAgentCard.vue'
-import TaskMessagePanel from '@/components/task-center/TaskMessagePanel.vue'
 
+type WorkspaceStage = 'dispatch' | 'execution' | 'review'
+
+interface AgentFile {
+  name: string
+  content: string
+  type: string
+  path?: string
+  gitUrl?: string
+  mtimeStr?: string
+}
+
+const route = useRoute()
+const router = useRouter()
 const multiAgentStore = useMultiAgentChatStore()
 const themeStore = useThemeStore()
 const md = new MarkdownIt({
   html: false,
   linkify: true,
-  typographer: true
+  typographer: true,
 })
 
-// Agent 列表配置
+const workspaceStages = [
+  { key: 'dispatch', label: '任务创建 / 派发', meta: '选择执行对象、建立上下文并发送指令' },
+  { key: 'execution', label: '执行会话', meta: '跟踪 Agent 与 ClaudeCode 的执行链路' },
+  { key: 'review', label: '产出审阅', meta: '集中查看文档、代码与阶段性成果' },
+] as const
+
 const agentList = [
   { id: 'xiaomu', name: '小呦', role: '项目统筹', desc: '项目统筹与任务协调，负责分配任务给其他 Agent 并跟踪进度。', tags: ['项目管理', '任务分配', '进度跟踪'] },
   { id: 'xiaoyan', name: '研究员', role: '调研分析', desc: '深度调研与信息分析，生成调研报告和数据分析结果。', tags: ['调研分析', '数据处理', '报告生成'] },
   { id: 'xiaochan', name: '产品经理', role: '产品设计', desc: '产品需求分析与设计，输出产品方案和功能规格说明。', tags: ['需求分析', '产品设计', '文档编写'] },
   { id: 'xiaokai', name: '研发工程师', role: '技术开发', desc: '代码开发与技术实现，完成功能开发和代码提交。', tags: ['代码开发', '技术实现', 'Git'] },
-  { id: 'xiaoce', name: '测试员', role: '质量检查', desc: '代码质量检查与测试，发现 Bug 并输出测试报告。', tags: ['代码审查', '测试', 'Bug 发现'] }
+  { id: 'xiaoce', name: '测试员', role: '质量检查', desc: '代码质量检查与测试，发现 Bug 并输出测试报告。', tags: ['代码审查', '测试', 'Bug 发现'] },
 ]
 
-// 连接状态
-const aiStatus = ref<'connected' | 'disconnected' | 'error'>('connected')
-const aiStatusText = computed(() => {
-  if (allConnected.value) return '所有 Agent 已连接'
-  if (anyConnected.value) return '部分 Agent 已连接'
-  return '未连接 Gateway'
-})
-
-const allConnected = computed(() => multiAgentStore.allConnected)
-const anyConnected = computed(() => multiAgentStore.anyConnected)
-const isLight = computed(() => themeStore.isLight)
-
-// 切换主题
-function toggleTheme() {
-  themeStore.toggle()
+const AGENT_TO_ROLE_ID: Record<string, string> = {
+  xiaomu: 'ceo',
+  xiaoyan: 'researcher',
+  xiaochan: 'pm',
+  xiaokai: 'tech-lead',
+  xiaoce: 'team-qa',
 }
 
-// 任务输入
+const aiStatus = ref<'connected' | 'disconnected' | 'error'>('connected')
 const taskInput = ref('')
-const isSending = ref(false)
-
-// Agent 状态
-const agents = computed(() => multiAgentStore.agents)
-// 选中的 Agent
 const selectedAgent = ref<string | null>(null)
-
-// 选中的 Agent 是否已连接
-const selectedAgentConnected = computed(() => {
-  if (!selectedAgent.value || selectedAgent.value === 'claude') return false
-  return multiAgentStore.agents[selectedAgent.value]?.isConnected || false
-})
-
-// 聊天输入框占位符
-const chatInputPlaceholder = computed(() => {
-  if (!selectedAgent.value) return '选择一个 Agent 后开始派发任务...'
-  const name = getAgentName(selectedAgent.value)
-  if (selectedAgent.value === 'xiaomu') return `输入任务内容，${name} 将负责拆解分配...`
-  return `向 ${name} 派发指令...`
-})
-
-// 文件预览对话框
+const selectedReviewAgentId = ref<string | null>(null)
 const showPreviewDialog = ref(false)
-const previewFileItem = ref<{ name: string; content: string; type: string; path?: string; gitUrl?: string } | null>(null)
+const previewFileItem = ref<AgentFile | null>(null)
 const previewLoading = ref(false)
 const previewError = ref<string | null>(null)
-const previewContent = ref<{ type: string; content: string }>({ type: '', content: '' })
+const previewContent = ref({ type: '', content: '' })
+const taskStartTime = ref(0)
+const taskEndTime = ref(0)
+const fileCache = ref<Record<string, { files: AgentFile[]; timestamp: number }>>({})
+const fileChangeCount = ref<Record<string, number>>({})
+const forceRefresh = ref(0)
 
-// ClaudeCode 会话数据
 const claudeCodeSessions = ref<any[]>([])
-let claudeCodePollInterval: ReturnType<typeof setInterval> | null = null
-
 const selectedClaudeSession = ref<any>(null)
 const claudeTranscript = ref<any[]>([])
 const claudeTranscriptLoading = ref(false)
@@ -383,37 +553,128 @@ const claudeInputMessage = ref('')
 const claudeSending = ref(false)
 const claudeSendError = ref('')
 const claudeMessagesRef = ref<HTMLElement | null>(null)
+let claudeCodePollInterval: ReturnType<typeof setInterval> | null = null
 
-// 任务时间追踪
-const taskStartTime = ref<number>(0)
-const taskEndTime = ref<number>(0)
+const lastMessageTime = ref<Record<string, number>>({
+  xiaomu: 0,
+  xiaoyan: 0,
+  xiaochan: 0,
+  xiaokai: 0,
+  xiaoce: 0,
+})
 
-// 文件缓存
-const fileCache = ref<Record<string, { files: any[]; timestamp: number }>>({})
-const forceRefresh = ref(0)
-const fileChangeCount = ref<Record<string, number>>({})
+const activeStage = computed<WorkspaceStage>(() => {
+  const stage = route.query.stage
+  if (stage === 'execution' || stage === 'review') {
+    return stage
+  }
+  return 'dispatch'
+})
 
-// Agent 到角色 ID 的映射
-const AGENT_TO_ROLE_ID: Record<string, string> = {
-  xiaomu: 'ceo',
-  xiaoyan: 'researcher',
-  xiaochan: 'pm',
-  xiaokai: 'tech-lead',
-  xiaoce: 'team-qa'
+const agents = computed(() => multiAgentStore.agents)
+const allConnected = computed(() => multiAgentStore.allConnected)
+const anyConnected = computed(() => multiAgentStore.anyConnected)
+const isLight = computed(() => themeStore.isLight)
+const aiStatusText = computed(() => {
+  if (allConnected.value) return '所有 Agent 已连接'
+  if (anyConnected.value) return '部分 Agent 已连接'
+  return '未连接 Gateway'
+})
+const connectedAgentCount = computed(() => agentList.filter(agent => agents.value[agent.id]?.isConnected).length)
+const selectedAgentConnected = computed(() => {
+  if (!selectedAgent.value || selectedAgent.value === 'claude') return false
+  return agents.value[selectedAgent.value]?.isConnected || false
+})
+const currentAgentMessages = computed(() => {
+  if (!selectedAgent.value || selectedAgent.value === 'claude') return []
+  return agents.value[selectedAgent.value]?.messages || []
+})
+const currentAgentFiles = computed(() => {
+  if (!selectedAgent.value || selectedAgent.value === 'claude') return []
+  return getAgentFiles(selectedAgent.value)
+})
+const busyAgentCount = computed(() => agentList.filter(agent => getAgentStatus(agent.id) === 'busy').length)
+const currentTargetLabel = computed(() => {
+  if (selectedAgent.value === 'claude') return 'ClaudeCode'
+  return getAgentName(selectedAgent.value || 'xiaomu')
+})
+const currentTargetMeta = computed(() => {
+  if (selectedAgent.value === 'claude') return '代码执行通道'
+  return getAgentRole(selectedAgent.value || 'xiaomu')
+})
+const chatInputPlaceholder = computed(() => {
+  if (!selectedAgent.value) return '选择一个 Agent 后开始派发任务...'
+  const name = getAgentName(selectedAgent.value)
+  if (selectedAgent.value === 'xiaomu') return `输入任务内容，${name} 将负责拆解分配...`
+  return `向 ${name} 派发指令...`
+})
+const outputReviewGroups = computed(() => {
+  void forceRefresh.value
+  return agentList
+    .map(agent => ({
+      id: agent.id,
+      name: agent.name,
+      role: agent.role,
+      files: getAgentFiles(agent.id),
+    }))
+    .filter(group => group.files.length > 0)
+})
+const totalOutputCount = computed(() => outputReviewGroups.value.reduce((sum, group) => sum + group.files.length, 0))
+const pendingReviewCount = computed(() => Object.values(fileChangeCount.value).reduce((sum, count) => sum + count, 0))
+const selectedReviewAgentName = computed(() => {
+  if (!selectedReviewAgentId.value) return '未选择产出主体'
+  return getAgentName(selectedReviewAgentId.value)
+})
+const reviewSelectionKey = computed(() => reviewFileKey(previewFileItem.value))
+const taskElapsedText = computed(() => {
+  if (!taskStartTime.value) return '尚未开始派发'
+  const end = taskEndTime.value || Date.now()
+  const duration = Math.max(0, Math.floor((end - taskStartTime.value) / 1000))
+  if (duration < 60) return `${duration}s`
+  return `${Math.floor(duration / 60)}m ${duration % 60}s`
+})
+
+function toggleTheme() {
+  themeStore.toggle()
 }
 
-// 选择 Agent
-const selectAgent = (agentId: string) => {
+function setStage(stage: WorkspaceStage) {
+  router.replace({
+    path: '/task-center-2',
+    query: stage === 'dispatch' ? {} : { stage },
+  })
+}
+
+function selectAgent(agentId: string) {
   selectedAgent.value = agentId
 }
 
-// 检查是否有新文件
-const hasNewFiles = (agentId: string) => {
-  return (fileChangeCount.value[agentId] || 0) > 0
+function getAgentName(agentId: string) {
+  return agentList.find(agent => agent.id === agentId)?.name || agentId
 }
 
-// 获取 Agent 状态
-const getAgentStatus = (agentId: string) => {
+function getAgentRole(agentId: string) {
+  const roles: Record<string, string> = {
+    xiaomu: '项目统筹 · agent:ceo:main',
+    xiaoyan: '调研分析 · agent:researcher:main',
+    xiaochan: '产品设计 · agent:pm:main',
+    xiaokai: '技术开发 · agent:tech-lead:main',
+    xiaoce: '质量检查 · agent:team-qa:main',
+  }
+  return roles[agentId] || ''
+}
+
+function getAgentIcon(agentId: string) {
+  return AGENT_CONFIG[agentId]?.icon || ''
+}
+
+function isAgentBusy(agentId: string) {
+  const agent = agents.value[agentId]
+  if (!agent) return false
+  return Date.now() - (lastMessageTime.value[agentId] || 0) < 2000
+}
+
+function getAgentStatus(agentId: string) {
   if (agentId === 'claude') return 'busy'
   const agent = agents.value[agentId]
   if (!agent?.isConnected) return 'offline'
@@ -421,56 +682,25 @@ const getAgentStatus = (agentId: string) => {
   return 'idle'
 }
 
-// 获取 Agent 状态图标
-const getAgentStatusIcon = (agentId: string) => {
+function getAgentStatusIcon(agentId: string) {
   const status = getAgentStatus(agentId)
   if (status === 'busy') return 'ri-loader-4-line ri-spin'
   if (status === 'offline') return 'ri-cloud-off-line'
   return 'ri-checkbox-circle-line'
 }
 
-// 获取 Agent 状态文本
-const getAgentStatusText = (agentId: string) => {
+function getAgentStatusText(agentId: string) {
   const status = getAgentStatus(agentId)
   if (status === 'busy') return '工作中'
   if (status === 'offline') return '未连接'
   return '空闲'
 }
 
-// 判断 Agent 是否忙碌
-const isAgentBusy = (agentId: string) => {
-  const agent = agents.value[agentId]
-  if (!agent) return false
-  const lastTime = lastMessageTime.value[agentId] || 0
-  const now = Date.now()
-  return now - lastTime < 2000
+function hasNewFiles(agentId: string) {
+  return (fileChangeCount.value[agentId] || 0) > 0
 }
 
-// 获取 Agent 名称
-const getAgentName = (agentId: string) => {
-  const a = agentList.find(a => a.id === agentId)
-  return a?.name || agentId
-}
-
-// 获取 Agent 角色
-const getAgentRole = (agentId: string) => {
-  const roles: Record<string, string> = {
-    xiaomu: '项目统筹 · agent:ceo:main',
-    xiaoyan: '调研分析 · agent:researcher:main',
-    xiaochan: '产品设计 · agent:pm:main',
-    xiaokai: '技术开发 · agent:tech-lead:main',
-    xiaoce: '质量检查 · agent:team-qa:main'
-  }
-  return roles[agentId] || ''
-}
-
-// 获取 Agent 图标
-const getAgentIcon = (agentId: string) => {
-  return AGENT_CONFIG[agentId]?.icon || ''
-}
-
-// 获取 Agent 文件
-const getAgentFiles = (agentId: string) => {
+function getAgentFiles(agentId: string): AgentFile[] {
   const roleId = AGENT_TO_ROLE_ID[agentId]
   if (!roleId) return []
 
@@ -489,46 +719,40 @@ const getAgentFiles = (agentId: string) => {
     .then(res => res.json())
     .then(data => {
       if (data.success && data.files) {
-        const newFiles = data.files.map((f: any) => ({
-          name: f.name,
+        const newFiles: AgentFile[] = data.files.map((file: any) => ({
+          name: file.name,
           content: '',
-          type: f.type,
-          path: f.path,
-          icon: f.icon,
-          mtime: f.mtime,
-          mtimeStr: f.mtimeStr
+          type: file.type,
+          path: file.path,
+          gitUrl: file.gitUrl,
+          mtimeStr: file.mtimeStr,
         }))
 
-        // 检测新文件
         const oldCount = cached?.files.length || 0
         if (oldCount > 0 && newFiles.length > oldCount) {
           fileChangeCount.value[agentId] = (fileChangeCount.value[agentId] || 0) + (newFiles.length - oldCount)
         }
 
+        if (agentId === 'xiaokai' && data.gitUrl && !newFiles.find(file => file.name === '代码仓库')) {
+          newFiles.push({
+            name: '代码仓库',
+            content: '代码已提交到仓库',
+            type: 'text',
+            gitUrl: data.gitUrl,
+          })
+        }
+
         fileCache.value[cacheKey] = {
           files: newFiles,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         }
-
-        if (agentId === 'xiaokai' && data.gitUrl) {
-          const gitFile = fileCache.value[cacheKey].files.find((f: any) => f.name === '代码仓库')
-          if (!gitFile) {
-            fileCache.value[cacheKey].files.push({
-              name: '代码仓库',
-              content: '代码已提交到仓库',
-              type: 'code',
-              gitUrl: data.gitUrl
-            })
-          }
-        }
-
-        forceRefresh.value++
-      } else if (data.files && data.files.length === 0) {
+        forceRefresh.value += 1
+      } else if (Array.isArray(data.files) && data.files.length === 0) {
         fileCache.value[cacheKey] = {
           files: [],
-          timestamp: Date.now()
+          timestamp: Date.now(),
         }
-        forceRefresh.value++
+        forceRefresh.value += 1
       }
     })
     .catch(err => {
@@ -538,39 +762,18 @@ const getAgentFiles = (agentId: string) => {
   return fileCache.value[cacheKey]?.files || []
 }
 
-// 记录每个 Agent 最后收到消息的时间
-const lastMessageTime = ref<Record<string, number>>({
-  xiaomu: 0,
-  xiaoyan: 0,
-  xiaochan: 0,
-  xiaokai: 0,
-  xiaoce: 0
-})
-
-// 监听消息变化，更新最后消息时间
-watch(
-  () => agents.value,
-  () => {
-    const agentIds = ['xiaomu', 'xiaoyan', 'xiaochan', 'xiaokai', 'xiaoce']
-    agentIds.forEach(agentId => {
-      const agent = agents.value[agentId]
-      if (agent && agent.messages.length > 0) {
-        const lastMsg = agent.messages[agent.messages.length - 1]
-        lastMessageTime.value[agentId] = lastMsg.timestamp
-      }
-    })
-  },
-  { deep: true, immediate: true }
-)
-
-const renderPreviewContent = () => {
-  if (previewContent.value.type === 'markdown') {
-    return md.render(previewContent.value.content)
-  }
-  return previewContent.value.content
+function reviewFileKey(file?: AgentFile | null) {
+  if (!file) return ''
+  return file.path || file.gitUrl || file.name
 }
 
-const escapeHtml = (content: string) => {
+function renderPreviewContent() {
+  return previewContent.value.type === 'markdown'
+    ? md.render(previewContent.value.content)
+    : previewContent.value.content
+}
+
+function escapeHtml(content: string) {
   if (!content) return ''
   return content
     .replace(/&/g, '&amp;')
@@ -580,8 +783,7 @@ const escapeHtml = (content: string) => {
     .replace(/'/g, '&#039;')
 }
 
-// 获取文件图标
-const getFileIcon = (fileName: string) => {
+function getFileIcon(fileName: string) {
   if (/\.(md|markdown)$/i.test(fileName)) return 'fas fa-file-code'
   if (/\.txt$/i.test(fileName)) return 'fas fa-file-alt'
   if (/\.html?$/i.test(fileName)) return 'fas fa-globe'
@@ -591,12 +793,12 @@ const getFileIcon = (fileName: string) => {
   return 'fas fa-file'
 }
 
-// 预览文件
-const previewFile = (file: { name: string; content: string; type: string; path?: string }) => {
+function loadPreviewFile(file: AgentFile, openDialog = true) {
   previewFileItem.value = file
   previewLoading.value = true
   previewError.value = null
-  showPreviewDialog.value = true
+  previewContent.value = { type: '', content: '' }
+  showPreviewDialog.value = openDialog
 
   if (file.path) {
     fetch(`/api/files/content?path=${encodeURIComponent(file.path)}`)
@@ -606,7 +808,7 @@ const previewFile = (file: { name: string; content: string; type: string; path?:
         if (data.success) {
           previewContent.value = {
             type: file.type,
-            content: data.content
+            content: data.content,
           }
         } else {
           previewError.value = data.error || '读取文件失败'
@@ -614,41 +816,47 @@ const previewFile = (file: { name: string; content: string; type: string; path?:
       })
       .catch(err => {
         previewLoading.value = false
-        previewError.value = '读取文件失败：' + err.message
+        previewError.value = `读取文件失败：${err.message}`
       })
   } else {
     previewLoading.value = false
     previewContent.value = {
       type: file.type,
-      content: file.content
+      content: file.content,
     }
   }
 }
 
-const downloadFile = () => {
+function previewFile(file: AgentFile) {
+  loadPreviewFile(file, true)
+}
+
+function inspectReviewFile(agentId: string, file: AgentFile) {
+  selectedReviewAgentId.value = agentId
+  loadPreviewFile(file, false)
+}
+
+function downloadFile() {
   if (!previewFileItem.value) return
   const blob = new Blob([previewFileItem.value.content], { type: 'text/plain' })
   const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = previewFileItem.value.name
-  a.click()
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = previewFileItem.value.name
+  anchor.click()
   URL.revokeObjectURL(url)
   ElMessage.success('文件已开始下载')
 }
 
-// 发送消息给选中的 Agent
-const sendToSelectedAgent = async () => {
+async function sendToSelectedAgent() {
   if (!taskInput.value.trim() || !selectedAgent.value) return
   if (!selectedAgentConnected.value) {
     ElMessage.warning(`${getAgentName(selectedAgent.value)} 未连接，请先点击全连按钮`)
     return
   }
 
-  isSending.value = true
   taskStartTime.value = Date.now()
   taskEndTime.value = 0
-
   const content = taskInput.value.trim()
 
   try {
@@ -656,68 +864,65 @@ const sendToSelectedAgent = async () => {
     ElMessage.success(`任务已派发给 ${getAgentName(selectedAgent.value)}`)
     taskInput.value = ''
   } catch (err) {
-    ElMessage.error('派发失败：' + (err instanceof Error ? err.message : '未知错误'))
-  } finally {
-    isSending.value = false
+    ElMessage.error(`派发失败：${err instanceof Error ? err.message : '未知错误'}`)
   }
 }
 
-// 全连
-const handleConnectAll = () => {
+function handleConnectAll() {
   multiAgentStore.connectAll()
   aiStatus.value = 'connected'
   ElMessage.success('正在连接所有 Agent...')
 }
 
-// 全断
-const handleDisconnectAll = () => {
+function handleDisconnectAll() {
   multiAgentStore.disconnectAll()
   aiStatus.value = 'disconnected'
   ElMessage.warning('已断开所有 Agent 连接')
 }
 
-// 重置
-const handleReset = () => {
+function handleReset() {
   ElMessageBox.confirm('确定要清空所有 Agent 的会话内容吗？此操作不可恢复。', '确认重置', {
     confirmButtonText: '确定',
     cancelButtonText: '取消',
-    type: 'warning'
+    type: 'warning',
   }).then(() => {
     taskEndTime.value = Date.now()
-    const agentIds = ['xiaomu', 'xiaoyan', 'xiaochan', 'xiaokai', 'xiaoce']
-    agentIds.forEach(agentId => {
+    Object.keys(AGENT_TO_ROLE_ID).forEach(agentId => {
       multiAgentStore.clearMessages(agentId)
       lastMessageTime.value[agentId] = 0
+      fileChangeCount.value[agentId] = 0
     })
     ElMessage.success('已清空所有会话内容')
   }).catch(() => {})
 }
 
-// 获取 ClaudeCode 会话
-const fetchClaudeCodeSessions = async () => {
+async function fetchClaudeCodeSessions() {
   try {
     const response = await fetch('/api/claude-sessions')
     const data = await response.json()
     if (data.success && data.sessions) {
       claudeCodeSessions.value = data.sessions
+      if (!selectedClaudeSession.value && data.sessions.length > 0) {
+        selectedClaudeSession.value = data.sessions[0]
+      }
     }
   } catch (err) {
     console.error('[TaskCenter2] Failed to fetch ClaudeCode sessions:', err)
   }
 }
 
-const getSessionDisplayName = (session: any) => {
+function getSessionDisplayName(session: any) {
   if (!session.workingDir) return session.key || session.id
   const parts = session.workingDir.split('/')
   return parts[parts.length - 1] || session.key
 }
 
-const selectClaudeSession = async (session: any) => {
+async function selectClaudeSession(session: any) {
   selectedClaudeSession.value = session
   await fetchClaudeTranscript(session.id)
 }
 
-const fetchClaudeTranscript = async (sessionId: string) => {
+async function fetchClaudeTranscript(sessionId: string) {
   claudeTranscriptLoading.value = true
   claudeTranscript.value = []
   try {
@@ -738,15 +943,14 @@ const fetchClaudeTranscript = async (sessionId: string) => {
   }
 }
 
-const refreshClaudeTranscript = async () => {
+async function refreshClaudeTranscript() {
   if (selectedClaudeSession.value) {
     await fetchClaudeTranscript(selectedClaudeSession.value.id)
   }
 }
 
-const sendClaudeMessage = async () => {
+async function sendClaudeMessage() {
   if (!claudeInputMessage.value.trim() || !selectedClaudeSession.value || claudeSending.value) return
-
   claudeSending.value = true
   claudeSendError.value = ''
 
@@ -754,9 +958,8 @@ const sendClaudeMessage = async () => {
     const response = await fetch(`/api/claude-sessions/${selectedClaudeSession.value.id}/send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: claudeInputMessage.value.trim() })
+      body: JSON.stringify({ message: claudeInputMessage.value.trim() }),
     })
-
     const data = await response.json()
     if (data.success) {
       claudeInputMessage.value = ''
@@ -764,22 +967,54 @@ const sendClaudeMessage = async () => {
     } else {
       claudeSendError.value = data.error || '发送失败'
     }
-  } catch (err) {
+  } catch {
     claudeSendError.value = '发送失败，请稍后重试'
   } finally {
     claudeSending.value = false
   }
 }
 
+watch(
+  () => agents.value,
+  () => {
+    Object.keys(AGENT_TO_ROLE_ID).forEach(agentId => {
+      const agent = agents.value[agentId]
+      if (agent?.messages?.length) {
+        lastMessageTime.value[agentId] = agent.messages[agent.messages.length - 1].timestamp
+      }
+    })
+  },
+  { deep: true, immediate: true },
+)
+
+watch(
+  [activeStage, outputReviewGroups],
+  ([stage, groups]) => {
+    if (stage !== 'review') return
+    if (groups.length === 0) {
+      selectedReviewAgentId.value = null
+      previewFileItem.value = null
+      previewContent.value = { type: '', content: '' }
+      return
+    }
+
+    const currentExists = groups.some(group =>
+      group.id === selectedReviewAgentId.value &&
+      group.files.some(file => reviewFileKey(file) === reviewSelectionKey.value),
+    )
+
+    if (!currentExists) {
+      inspectReviewFile(groups[0].id, groups[0].files[0])
+    }
+  },
+  { immediate: true, deep: true },
+)
+
 onMounted(() => {
   multiAgentStore.loadMessages()
-
-  // 默认选中第一个 Agent
   if (!selectedAgent.value) {
     selectedAgent.value = 'xiaomu'
   }
-
-  // ClaudeCode 会话
   fetchClaudeCodeSessions()
   claudeCodePollInterval = setInterval(fetchClaudeCodeSessions, 5000)
 })
@@ -794,1259 +1029,625 @@ onUnmounted(() => {
 
 <style scoped>
 .task-center-2 {
-  max-width: 1600px;
-  margin: 0 auto;
-  padding: 0 16px 8px;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  gap: 18px;
   height: 100%;
-  overflow: hidden;
-}
-
-/* Header — reference style top bar */
-.task-center__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  padding: 0 32px;
-  height: 64px;
-  border-bottom: 1px solid var(--border-default);
-  background: rgba(22, 27, 34, 0.8);
-  backdrop-filter: blur(10px);
-  flex-shrink: 0;
-}
-
-.task-center__title-wrap {
-  min-width: 0;
-}
-
-.title-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
-  color: white;
-  font-size: 12px;
-  flex-shrink: 0;
-}
-
-.task-center__title h1 {
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--text-primary);
-  letter-spacing: 0;
-  margin: 0;
-}
-
-.task-center__title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.task-center__mode {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--color-primary-bg) 80%, transparent);
-  color: var(--text-tertiary);
-  font-size: 10px;
-  font-family: var(--font-mono);
-  letter-spacing: 0.04em;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 6px;
-}
-
-.btn-theme-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.btn-theme-toggle .theme-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.btn-theme-toggle .theme-icon .el-icon {
-  font-size: 14px;
-}
-
-.theme-label {
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.ai-status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 20px;
-  background: rgba(46, 160, 67, 0.1);
-  border: 1px solid rgba(46, 160, 67, 0.2);
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-  color: var(--color-success);
-}
-
-.ai-status.status--connected {
-  background: rgba(46, 160, 67, 0.1);
-  border-color: rgba(46, 160, 67, 0.2);
-  color: var(--color-success);
-}
-
-.ai-status .status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-success);
-  box-shadow: 0 0 8px var(--color-success);
-}
-
-.ai-status.status--connected .status-dot {
-  background: var(--color-success);
-  box-shadow: 0 0 8px var(--color-success);
-}
-
-.ai-status .status-label {
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.ai-status.status--connected .status-label {
-  color: var(--color-success);
-}
-
-.connection-hint {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-}
-
-.connection-hint.connected {
-  color: var(--color-success);
-}
-
-.connection-hint .hint-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text-tertiary);
-}
-
-.connection-hint.connected .hint-dot {
-  background: var(--color-success);
-  box-shadow: 0 0 6px var(--color-success-glow);
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.6; transform: scale(0.95); }
-}
-
-/* Main Layout: Sidebar + Detail */
-.main-layout {
-  display: flex;
-  gap: 24px;
-  flex: 1;
   min-height: 0;
-  padding: 24px;
+  padding: 0 16px 16px;
 }
 
-/* Sidebar */
-.sidebar {
-  width: 380px;
-  flex-shrink: 0;
-  background: var(--bg-panel);
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
+.workspace-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.9fr);
+  gap: 16px;
+  padding: 22px 24px;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(99, 102, 241, 0.16), transparent 30%),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(22, 27, 34, 0.96));
   border: 1px solid var(--border-default);
+}
+
+.workspace-kicker {
+  margin: 0 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.workspace-hero h1 {
+  margin: 0;
+  font-size: 30px;
+  color: var(--text-primary);
+}
+
+.workspace-desc {
+  margin: 12px 0 0;
+  max-width: 48rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
+}
+
+.workspace-hero__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workspace-stat-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.56);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.workspace-stat-card__label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.workspace-stat-card strong {
+  font-size: 28px;
+  color: var(--text-primary);
+}
+
+.workspace-stat-card small {
+  color: var(--text-secondary);
+}
+
+.workspace-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workspace-tab {
+  display: grid;
+  gap: 4px;
+  padding: 16px 18px;
+  border: 1px solid var(--border-default);
+  border-radius: 18px;
+  background: var(--bg-panel);
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.workspace-tab strong {
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.workspace-tab span {
+  font-size: 12px;
+}
+
+.workspace-tab.is-active {
+  border-color: color-mix(in oklab, var(--color-primary) 50%, var(--border-default));
+  background: color-mix(in oklab, var(--color-primary) 10%, var(--bg-panel));
+}
+
+.workspace-layout,
+.review-layout {
+  display: grid;
+  gap: 16px;
+  min-height: 0;
+  flex: 1;
+}
+
+.workspace-layout {
+  grid-template-columns: 320px minmax(0, 1fr);
+}
+
+.review-layout {
+  grid-template-columns: 340px minmax(0, 1fr);
+}
+
+.dispatch-sidebar,
+.execution-rail,
+.review-sidebar,
+.detail-panel,
+.review-preview {
+  min-height: 0;
+  border-radius: 22px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-panel);
   overflow: hidden;
 }
 
-.sidebar-header {
-  padding: 16px 20px;
+.panel-header,
+.review-sidebar__header,
+.review-preview__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 20px;
   border-bottom: 1px solid var(--border-default);
 }
 
-.sidebar-header .section-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  letter-spacing: 0;
+.panel-title {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.sidebar-header .section-title::after {
-  display: none;
-}
-
-.sidebar-header .agent-count {
-  background: rgba(88, 166, 255, 0.1);
-  color: var(--color-primary);
-  padding: 2px 8px;
-  border-radius: 10px;
+  color: var(--text-secondary);
   font-size: 12px;
-  font-weight: 500;
+  letter-spacing: 0.12em;
 }
 
-.agent-list {
-  flex: 1;
+.panel-title strong {
+  color: var(--text-primary);
+  font-size: 18px;
+  letter-spacing: normal;
+}
+
+.agent-list,
+.review-sidebar {
   overflow-y: auto;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
 
-.agent-list::-webkit-scrollbar {
-  width: 4px;
-}
-.agent-list::-webkit-scrollbar-thumb {
-  background: var(--border-subtle);
-  border-radius: 4px;
-}
-
-/* Agent Card — reference style */
-.agent-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
-  padding: 16px;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.agent-card:hover {
-  border-color: var(--color-primary);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-}
-
-.agent-card.active {
-  border-color: var(--color-primary);
-  background: rgba(88, 166, 255, 0.05);
-}
-
-.agent-card__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-.agent-card__main {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.agent-card__avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  background: #30363d;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  overflow: hidden;
-}
-
-.agent-card__avatar img {
+.claude-card,
+.execution-agent,
+.review-file {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 8px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
 }
 
-.agent-card__name {
-  font-weight: 600;
-  font-size: 15px;
-  color: var(--text-primary);
-  margin-bottom: 2px;
+.claude-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-top: 1px solid var(--border-default);
 }
 
-.agent-card__role {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.agent-card__desc {
-  font-size: 13px;
-  color: var(--text-primary);
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.agent-card__footer {
+.claude-card__header {
   display: flex;
   justify-content: space-between;
+  gap: 12px;
   align-items: center;
-  font-size: 12px;
-  color: var(--text-secondary);
-  padding-top: 12px;
-  border-top: 1px dashed var(--border-default);
 }
 
-.agent-card__tags {
+.claude-card strong {
+  display: block;
+  color: var(--text-primary);
+}
+
+.claude-card span,
+.claude-card small {
+  color: var(--text-secondary);
+}
+
+.claude-card.is-active {
+  background: rgba(99, 102, 241, 0.12);
+}
+
+.execution-rail {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  padding: 16px;
+}
+
+.execution-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.52);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.execution-card__header {
   display: flex;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
 }
 
-.agent-card__tags .tag {
-  padding: 2px 6px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 4px;
-  font-size: 12px;
+.execution-card__header h3,
+.review-sidebar__header h3,
+.review-preview__header h3 {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.execution-card__header span,
+.review-sidebar__header span,
+.review-preview__meta {
   color: var(--text-secondary);
+  font-size: 12px;
 }
 
-.agent-card__meta {
+.execution-agent {
   display: flex;
+  justify-content: space-between;
+  gap: 12px;
   align-items: center;
-  gap: 4px;
-  font-size: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.execution-agent div {
+  display: grid;
+  gap: 2px;
+}
+
+.execution-agent strong {
+  color: var(--text-primary);
+}
+
+.execution-agent span,
+.execution-agent small {
   color: var(--text-secondary);
 }
 
-.claude-avatar-small {
-  width: 40px;
-  height: 40px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #8957e5, #a371f7);
+.execution-agent.is-active {
+  background: rgba(99, 102, 241, 0.14);
+}
+
+.execution-metrics {
+  display: grid;
+  gap: 10px;
+}
+
+.execution-metric {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 20px;
-}
-
-.status-badge-mini {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  width: fit-content;
-}
-
-.status-badge-mini.idle {
-  background: rgba(139, 148, 158, 0.1);
+  justify-content: space-between;
+  gap: 12px;
   color: var(--text-secondary);
-  border: 1px solid rgba(139, 148, 158, 0.2);
 }
 
-.status-badge-mini.busy {
-  background: rgba(210, 153, 34, 0.1);
-  color: var(--color-warning);
-  border: 1px solid rgba(210, 153, 34, 0.2);
+.execution-metric strong {
+  color: var(--text-primary);
 }
 
-.status-badge-mini.offline {
-  background: rgba(248, 81, 73, 0.1);
-  color: var(--color-error);
-  border: 1px solid rgba(248, 81, 73, 0.2);
+.workstage-main {
+  display: grid;
+  gap: 16px;
+  min-height: 0;
 }
 
-/* 新文件红点提示 */
-.new-file-dot {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-error);
-  box-shadow: 0 0 8px var(--color-error);
-  animation: pulse-red 1.5s ease-in-out infinite;
+.dispatch-brief {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
 
-@keyframes pulse-red {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.2); opacity: 0.7; }
-}
-
-/* Detail Panel */
-.detail-panel {
-  flex: 1;
+.dispatch-brief__card {
+  display: grid;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid var(--border-default);
   background: var(--bg-panel);
-  border-radius: 12px;
+}
+
+.dispatch-brief__label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.dispatch-brief__card strong {
+  color: var(--text-primary);
+  font-size: 18px;
+}
+
+.dispatch-brief__card small {
+  color: var(--text-secondary);
+}
+
+.detail-panel {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border-default);
-  overflow: hidden;
 }
 
-/* Compact Topbar (replaces old detail-header) */
 .detail-topbar {
   display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.detail-topbar__identity,
+.detail-topbar__actions {
+  display: flex;
   align-items: center;
   gap: 12px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-default);
-  flex-shrink: 0;
-  background: rgba(33, 38, 45, 0.5);
+}
+
+.detail-topbar-avatar,
+.claude-avatar-topbar {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--text-primary);
 }
 
 .detail-topbar-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
   object-fit: cover;
-  border: none;
-  flex-shrink: 0;
 }
 
 .detail-topbar-name {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.detail-topbar-role {
-  font-size: 12px;
-  color: var(--text-secondary);
-  background: none;
-  padding: 0;
-  border-radius: 0;
-  border: none;
-}
-
-.detail-topbar-spacer {
-  flex: 1;
-}
-
-/* Agent Hover Tip Card */
-.agent-tip-card {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.agent-tip-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.agent-tip-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 1.5px solid var(--border-subtle);
-  flex-shrink: 0;
-}
-
-.agent-tip-title {
-  flex: 1;
-  min-width: 0;
-}
-
-.agent-tip-name {
-  font-size: 14px;
   font-weight: 700;
   color: var(--text-primary);
 }
 
-.agent-tip-role {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--color-cyan);
-}
-
-.agent-tip-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.agent-tip-tags .tag {
-  padding: 2px 7px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--border-subtle);
-  border-radius: 4px;
-  font-size: 10px;
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-}
-
-.agent-tip-desc {
+.detail-topbar-role,
+.detail-topbar-meta {
   font-size: 12px;
-  line-height: 1.5;
   color: var(--text-secondary);
 }
 
-.agent-tip-stats {
-  display: flex;
-  gap: 14px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border-subtle);
+.detail-content,
+.review-preview__body,
+.preview-dialog-body {
+  flex: 1;
+  min-height: 0;
 }
 
-.agent-tip-stat {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.claude-avatar-large {
-  width: 100%;
-  height: 100%;
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 24px;
-}
-
-.claude-avatar-topbar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: white;
-  font-size: 13px;
-  flex-shrink: 0;
-}
-
-/* 产出文件 Tips 按钮 */
 .file-tip-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: 12px;
-  border: 1px solid var(--border-subtle);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-family: var(--font-mono);
-  cursor: pointer;
-  transition: all 0.2s;
-  position: relative;
-}
-
-.file-tip-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  gap: 8px;
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(99, 102, 241, 0.12);
   color: var(--text-primary);
+  cursor: pointer;
 }
 
 .file-tip-btn.has-new {
-  border-color: rgba(239, 68, 68, 0.3);
-  background: rgba(239, 68, 68, 0.08);
-  color: var(--color-error);
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.35);
 }
 
 .file-red-dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: var(--color-error);
-  box-shadow: 0 0 6px var(--color-error);
-  animation: pulse-red 1.5s ease-in-out infinite;
+  background: var(--color-warning);
 }
 
-/* 文件下拉面板 */
 .file-dropdown {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.file-dropdown::-webkit-scrollbar {
-  width: 4px;
-}
-.file-dropdown::-webkit-scrollbar-thumb {
-  background: var(--border-subtle);
-  border-radius: 4px;
+  display: grid;
+  gap: 6px;
 }
 
 .file-dropdown-item {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
   gap: 10px;
-  padding: 8px 10px;
-  border-radius: 8px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 10px;
   cursor: pointer;
-  transition: background 0.2s;
-  font-size: 13px;
-  color: var(--text-primary);
 }
 
 .file-dropdown-item:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.file-dropdown-item i {
-  font-size: 14px;
-  color: var(--color-primary);
-  width: 20px;
-  text-align: center;
-  flex-shrink: 0;
+  background: rgba(99, 102, 241, 0.08);
 }
 
 .file-dropdown-name {
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-family: var(--font-mono);
+  color: var(--text-primary);
 }
 
 .file-dropdown-meta {
-  font-size: 11px;
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-  flex-shrink: 0;
-}
-
-.stat-label {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.stat-value {
-  font-family: var(--font-mono);
-  font-size: 14px;
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-/* Detail Content: Full width chat */
-.detail-content {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-
-/* Chat section: full width */
-.chat-section {
-  flex: 1;
-  padding: 20px 24px;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-/* Module Title */
-.module-title {
-  font-family: var(--font-mono);
-  font-size: 14px;
-  color: var(--text-primary);
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.module-title i {
-  color: var(--color-success);
-  font-size: 16px;
-}
-
-/* Chat Container */
-.chat-container {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  padding-right: 8px;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-  background-size: 20px 20px;
-}
-
-.chat-container::-webkit-scrollbar {
-  width: 4px;
-}
-.chat-container::-webkit-scrollbar-thumb {
-  background: var(--border-subtle);
-  border-radius: 4px;
-}
-
-/* Chat Input Bar — dispatch console */
-.chat-input-bar {
-  flex-shrink: 0;
-  padding: 20px 0 0;
-  border-top: 1px solid var(--border-default);
-}
-
-.chat-input-row {
-  display: flex;
-  gap: 12px;
-  background: var(--bg-base);
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
-  padding: 12px;
-  transition: border-color 0.2s;
-}
-
-.chat-input-row:focus-within {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 1px var(--color-primary);
-}
-
-.chat-input {
-  flex: 1;
-}
-
-.chat-input :deep(.el-textarea__inner) {
-  background: transparent;
-  border: none;
-  color: var(--text-primary);
-  font-size: 14px;
-  line-height: 1.6;
-  resize: none;
-  border-radius: 0;
-  padding: 0;
-  min-height: 24px !important;
-  box-shadow: none !important;
-}
-
-.chat-input :deep(.el-textarea__inner):focus {
-  border-color: transparent;
-  box-shadow: none !important;
-}
-
-.chat-input :deep(.el-textarea__inner)::placeholder {
-  color: var(--text-muted);
-}
-
-.dispatch-send-btn {
-  align-self: flex-end;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border: none;
-  border-radius: 8px;
-  background: var(--color-primary);
-  color: white;
-  font-size: 16px;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background-color 0.2s;
-}
-
-.dispatch-send-btn span {
-  display: none;
-}
-
-.dispatch-send-btn:hover:not(:disabled) {
-  background: var(--color-primary-dark);
-}
-
-.dispatch-send-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.dispatch-send-btn i {
-  font-size: 16px;
-}
-
-.chat-input-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 4px 2px 0;
-}
-
-.input-shortcut {
-  font-size: 10px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-}
-
-.chat-empty-hint {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 60px 0;
+  font-size: 12px;
   color: var(--text-tertiary);
-  font-size: 14px;
 }
 
-.chat-empty-hint i {
-  font-size: 40px;
-  opacity: 0.5;
-}
-
-.chat-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 20px;
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-/* Chat Messages */
-.chat-msg {
-  display: flex;
+.claude-shell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
   gap: 16px;
-  max-width: 80%;
-}
-
-.chat-msg.user {
-  align-self: flex-end;
-  flex-direction: row-reverse;
-}
-
-.msg-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  background: var(--bg-card);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border: none;
-  font-size: 16px;
-  color: var(--text-secondary);
-}
-
-.chat-msg.user .msg-avatar {
-  background: #30363d;
-  color: var(--text-primary);
-  border-color: transparent;
-}
-
-.msg-avatar img {
-  width: 100%;
   height: 100%;
-  border-radius: 8px;
-  object-fit: cover;
-}
-
-.msg-bubble {
-  background: var(--bg-card);
   padding: 16px;
-  border-radius: 12px;
-  border-top-left-radius: 4px;
-  font-size: 14px;
-  line-height: 1.6;
-  color: var(--text-primary);
-  border: 1px solid var(--border-default);
-  word-break: break-word;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
-.chat-msg.user .msg-bubble {
-  background: rgba(88, 166, 255, 0.1);
-  border-radius: 12px;
-  border-top-right-radius: 4px;
-  border-color: rgba(88, 166, 255, 0.2);
-}
-
-.msg-bubble :deep(p) {
-  margin: 4px 0;
-}
-
-.msg-bubble :deep(pre) {
-  background: var(--gray-900);
-  padding: 8px 12px;
-  border-radius: 6px;
-  overflow-x: auto;
-  margin: 6px 0;
-  font-size: 11px;
-}
-
-.msg-bubble :deep(code) {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  background: rgba(110, 118, 129, 0.2);
-  padding: 1px 4px;
-  border-radius: 3px;
-}
-
-.msg-time {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  margin-top: 4px;
-  font-family: var(--font-mono);
-}
-
-.chat-msg.user .msg-time {
-  text-align: right;
-}
-
-.msg-thinking {
-  color: var(--text-tertiary);
-  font-style: italic;
-  padding: 6px 10px;
-  background: var(--bg-panel);
-  border-radius: 6px;
-  margin: 4px 0;
-  font-size: 12px;
-}
-
-.msg-tool {
-  margin: 4px 0;
-  padding: 8px 10px;
-  background: var(--bg-panel);
-  border-radius: 6px;
-  font-size: 12px;
-}
-
-.tool-name {
-  font-size: 11px;
-  color: var(--color-warning);
-  font-weight: 600;
-}
-
-/* File List */
-.file-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.file-card {
-  background: var(--bg-surface);
-  padding: 12px;
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border: 1px solid var(--border-subtle);
-  transition: all 0.2s ease;
-  cursor: pointer;
-}
-
-.file-card:hover {
-  border-color: var(--text-secondary);
-  background: var(--bg-card);
-  transform: translateX(2px);
-}
-
-.file-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  flex-shrink: 0;
-}
-
-.file-icon.icon-markdown { background: rgba(52, 211, 153, 0.1); color: var(--color-primary); }
-.file-icon.icon-text { background: rgba(255, 255, 255, 0.05); color: var(--text-secondary); }
-.file-icon.icon-html { background: rgba(251, 146, 60, 0.1); color: var(--color-warning); }
-.file-icon.icon-word { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
-.file-icon.icon-ppt { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
-
-.file-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.file-name {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.file-meta {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-}
-
-.file-action {
-  color: var(--text-tertiary);
-  font-size: 18px;
-  padding: 6px;
-  transition: color 0.2s;
-}
-
-.file-card:hover .file-action {
-  color: var(--text-primary);
-}
-
-.file-empty {
-  text-align: center;
-  padding: 20px;
-  color: var(--text-tertiary);
-  font-size: 13px;
-}
-
-/* Execution Overview (legacy, kept for compatibility) */
-.exec-overview {
-  background: var(--bg-surface);
-  border-radius: var(--radius-md);
-  padding: 16px;
-  border: 1px solid var(--border-subtle);
-}
-
-.exec-status {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--border-subtle);
-  margin-bottom: 12px;
-}
-
-.exec-label {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.exec-value {
-  font-size: 13px;
-  font-weight: 600;
-  font-family: var(--font-mono);
-}
-
-.exec-value.idle { color: var(--color-success); }
-.exec-value.busy { color: var(--color-accent); }
-.exec-value.offline { color: var(--text-tertiary); }
-
-.exec-stats {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.exec-stat {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-}
-
-.exec-stat-label {
-  color: var(--text-secondary);
-}
-
-.exec-stat-value {
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-weight: 600;
-}
-
-/* ClaudeCode Session Selector */
 .claude-session-selector {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-bottom: 16px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--border-subtle);
-  max-height: 200px;
-  overflow-y: auto;
+  display: grid;
+  gap: 10px;
+  align-content: start;
 }
 
 .session-item {
-  padding: 10px 12px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  text-align: left;
   cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.session-item:hover {
-  background: var(--bg-card);
 }
 
 .session-item.active {
-  border-color: var(--agent-claude);
-  background: rgba(139, 92, 246, 0.08);
+  background: rgba(139, 92, 246, 0.12);
+  border-color: rgba(139, 92, 246, 0.34);
 }
 
 .session-model-badge {
-  font-size: 10px;
-  color: var(--agent-claude);
-  background: rgba(139, 92, 246, 0.1);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-family: var(--font-mono);
-  font-weight: 600;
-  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
 
 .session-name {
-  font-size: 12px;
   color: var(--text-primary);
   font-weight: 600;
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .session-stats {
-  font-size: 10px;
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .claude-chat-container {
-  flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  border: 1px solid var(--border-default);
+  border-radius: 16px;
+  overflow: hidden;
 }
 
 .claude-messages-container {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding-right: 8px;
+  padding: 16px;
 }
 
-.claude-messages-container::-webkit-scrollbar {
-  width: 4px;
+.claude-message-stream {
+  display: grid;
+  gap: 14px;
 }
 
-.claude-messages-container::-webkit-scrollbar-thumb {
-  background: var(--border-subtle);
-  border-radius: 4px;
+.chat-msg {
+  display: flex;
+  gap: 12px;
 }
 
-/* ClaudeCode Input Area */
+.chat-msg.user {
+  flex-direction: row-reverse;
+}
+
+.msg-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.msg-bubble {
+  max-width: 720px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+.msg-thinking,
+.msg-tool {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
 .claude-input-area {
   display: flex;
-  gap: 8px;
-  padding: 12px 0;
-  border-top: 1px solid var(--border-subtle);
-  flex-shrink: 0;
+  gap: 12px;
+  padding: 16px;
+  border-top: 1px solid var(--border-default);
 }
 
 .claude-input {
   flex: 1;
-  padding: 8px 12px;
-  font-size: 13px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
   color: var(--text-primary);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 6px;
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-.claude-input:focus {
-  border-color: var(--agent-claude);
-}
-
-.claude-input::placeholder {
-  color: var(--text-tertiary);
+  padding: 12px 14px;
 }
 
 .send-btn {
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-inverse);
-  background: linear-gradient(135deg, var(--agent-claude) 0%, var(--color-primary) 100%);
-  border: none;
-  border-radius: 6px;
+  min-width: 88px;
+  border: 0;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  color: white;
   cursor: pointer;
-  transition: all 0.2s;
-}
-
-.send-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px var(--color-primary-glow);
 }
 
 .send-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
 .send-error {
-  padding: 6px 12px;
-  font-size: 12px;
+  padding: 0 16px 16px;
   color: var(--color-error);
-  background: rgba(239, 68, 68, 0.1);
-  border-radius: 6px;
+  font-size: 12px;
 }
 
-/* No Agent Selected */
-.no-agent-selected {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.review-group {
+  display: grid;
   gap: 8px;
-  color: var(--text-tertiary);
-  font-size: 14px;
+  padding: 16px;
+  border-top: 1px solid var(--border-default);
 }
 
-/* File Preview */
-.file-preview-container {
-  min-height: 400px;
+.review-group__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.review-group__header strong {
+  color: var(--text-primary);
+}
+
+.review-group__header span,
+.review-file small {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.review-file {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
+}
+
+.review-file.is-active {
+  background: rgba(99, 102, 241, 0.14);
+}
+
+.review-preview {
+  display: flex;
+  flex-direction: column;
+}
+
+.review-preview__body {
+  overflow: auto;
+  padding: 20px;
 }
 
 .preview-loading,
-.preview-error {
+.preview-error,
+.empty-state,
+.review-empty {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 60px 20px;
-  color: var(--text-tertiary);
+  gap: 10px;
+  min-height: 180px;
+  color: var(--text-secondary);
 }
 
 .preview-error {
@@ -2054,145 +1655,98 @@ onUnmounted(() => {
 }
 
 .preview-content pre {
-  background: var(--gray-950);
-  border: none;
-  padding: 16px;
-  border-radius: 6px;
-  overflow-x: auto;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.6;
+  margin: 0;
+  padding: 18px;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.72);
   color: var(--text-primary);
-  max-height: 500px;
-  overflow-y: auto;
-}
-
-.preview-content .markdown-rendered {
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--text-primary);
-}
-
-.preview-content .markdown-rendered :deep(h1),
-.preview-content .markdown-rendered :deep(h2),
-.preview-content .markdown-rendered :deep(h3) {
-  margin-top: 24px;
-  margin-bottom: 16px;
-  font-weight: 600;
-  color: var(--color-primary);
-}
-
-.preview-content .markdown-rendered :deep(p) {
-  margin-top: 0;
-  margin-bottom: 16px;
-}
-
-.preview-content .markdown-rendered :deep(code) {
-  padding: 0.2em 0.4em;
-  font-size: 85%;
-  font-family: var(--font-mono);
-  background: rgba(110, 118, 129, 0.2);
-  border-radius: 6px;
-}
-
-.preview-content .markdown-rendered :deep(pre) {
-  padding: 16px;
   overflow: auto;
-  font-size: 85%;
-  background-color: var(--gray-950);
+  white-space: pre-wrap;
+}
+
+.markdown-rendered {
+  color: var(--text-primary);
+  line-height: 1.8;
+}
+
+.markdown-rendered :deep(h1),
+.markdown-rendered :deep(h2),
+.markdown-rendered :deep(h3) {
+  margin-top: 0;
+  color: var(--text-primary);
+}
+
+.markdown-rendered :deep(code) {
+  padding: 2px 6px;
   border-radius: 6px;
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.markdown-rendered :deep(pre) {
+  padding: 16px;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.72);
+  overflow: auto;
 }
 
 .preview-unsupported {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 48px 24px;
+  color: var(--text-secondary);
+}
+
+.status-badge-mini {
+  display: inline-flex;
   align-items: center;
-  gap: 16px;
-  padding: 60px 20px;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: rgba(148, 163, 184, 0.12);
   color: var(--text-tertiary);
 }
 
-.preview-unsupported .el-icon {
-  font-size: 48px;
+.status-badge-mini.idle {
+  color: var(--color-success);
+  background: rgba(46, 160, 67, 0.12);
 }
 
-/* Responsive */
-@media (max-width: 1024px) {
-  .main-layout {
-    flex-direction: column;
-    padding: 12px;
-    gap: 12px;
+.status-badge-mini.busy {
+  color: var(--color-warning);
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.status-badge-mini.offline {
+  color: var(--color-error);
+  background: rgba(220, 38, 38, 0.12);
+}
+
+@media (max-width: 1280px) {
+  .workspace-hero {
+    grid-template-columns: 1fr;
   }
 
-  .sidebar {
-    width: 100%;
-    max-height: 200px;
+  .workspace-hero__stats {
+    grid-template-columns: 1fr;
   }
 
-  .agent-list {
-    flex-direction: row;
-    overflow-x: auto;
-    overflow-y: hidden;
-  }
-
-  .agent-card {
-    min-width: 260px;
+  .workspace-layout,
+  .review-layout,
+  .claude-shell {
+    grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 960px) {
+  .workspace-tabs,
+  .dispatch-brief {
+    grid-template-columns: 1fr;
+  }
+
   .task-center-2 {
-    padding: 0;
-    height: auto;
+    padding: 0 12px 12px;
   }
-
-  .task-center__header {
-    padding: 0 16px;
-    height: 56px;
-  }
-
-  .task-center__header {
-    flex-wrap: wrap;
-  }
-
-  .header-actions {
-    width: 100%;
-    justify-content: flex-start;
-  }
-
-  .detail-topbar {
-    flex-wrap: wrap;
-  }
-}
-</style>
-
-<style>
-/* Popover rendered outside scoped component — needs global style */
-.agent-tip-popper.el-popper {
-  background: var(--bg-panel) !important;
-  border: 1px solid var(--border-subtle) !important;
-  border-radius: 14px !important;
-  box-shadow: var(--shadow-md) !important;
-  padding: 14px !important;
-}
-
-.agent-tip-popper .el-popper__arrow::before {
-  background: var(--bg-panel) !important;
-  border-color: var(--border-subtle) !important;
-}
-
-/* File list popover */
-.file-list-popper.el-popper {
-  background: var(--bg-card) !important;
-  border: 1px solid var(--border-default) !important;
-  border-radius: 8px !important;
-  box-shadow: var(--shadow-md) !important;
-  padding: 8px !important;
-  color: var(--text-primary) !important;
-}
-
-.file-list-popper .el-popper__arrow::before {
-  background: var(--bg-card) !important;
-  border-color: var(--border-default) !important;
 }
 </style>
