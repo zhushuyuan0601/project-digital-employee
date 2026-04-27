@@ -15,20 +15,22 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/dashboard',
     name: 'dashboard',
-    component: () => import('@/views/Dashboard.vue'),
+    component: () => import('@/views/ObservabilityCenter.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/team-output',
+    name: 'team-output',
+    component: () => import('@/views/TeamOutputCenter.vue'),
     meta: { requiresAuth: true }
   },
   {
     path: '/agents',
-    name: 'agents',
-    component: () => import('@/views/Agents.vue'),
-    meta: { requiresAuth: true }
+    redirect: { path: '/team-output', query: { tab: 'team' } }
   },
   {
     path: '/digital-employee',
-    name: 'digital-employee',
-    component: () => import('@/views/DigitalEmployee.vue'),
-    meta: { requiresAuth: true }
+    redirect: { path: '/team-output', query: { tab: 'projects' } }
   },
   {
     path: '/task-center-2',
@@ -44,25 +46,31 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/logs',
-    name: 'logs',
-    component: () => import('@/views/Logs.vue'),
-    meta: { requiresAuth: true }
+    redirect: { path: '/dashboard', query: { tab: 'events' } }
   },
   {
     path: '/status',
-    name: 'status',
-    component: () => import('@/views/Status.vue'),
-    meta: { requiresAuth: true }
+    redirect: { path: '/dashboard', query: { tab: 'health' } }
   },
   {
-    path: '/tools',
-    name: 'tools',
-    component: () => import('@/views/Tools.vue'),
+    path: '/capability',
+    name: 'capability',
+    component: () => import('@/views/CapabilityCenter.vue'),
     meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
   },
   {
     path: '/chat',
     redirect: '/dashboard'
+  },
+  {
+    path: '/automation',
+    name: 'automation',
+    component: () => import('@/views/AutomationIntegrationCenter.vue'),
+    meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
+  },
+  {
+    path: '/tools',
+    redirect: { path: '/capability', query: { tab: 'tools' } }
   },
   {
     path: '/group-chat',
@@ -72,13 +80,11 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/skills',
-    name: 'skills',
-    component: () => import('@/views/SkillsHub.vue'),
-    meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
+    redirect: { path: '/capability', query: { tab: 'skills' } }
   },
   {
     path: '/skills-old',
-    redirect: '/skills'
+    redirect: { path: '/capability', query: { tab: 'skills' } }
   },
   {
     path: '/tokens',
@@ -100,15 +106,11 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/cron',
-    name: 'cron',
-    component: () => import('@/views/Cron.vue'),
-    meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
+    redirect: { path: '/automation', query: { tab: 'cron' } }
   },
   {
     path: '/webhooks',
-    name: 'webhooks',
-    component: () => import('@/views/Webhooks.vue'),
-    meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
+    redirect: { path: '/automation', query: { tab: 'webhooks' } }
   }
 ]
 

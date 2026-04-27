@@ -7,7 +7,7 @@
     <!-- 内容区域 -->
     <div class="content-wrapper relative z-10">
       <!-- 顶部导航栏 -->
-    <nav class="glass-card border-b border-white/10 sticky top-0 z-50">
+    <nav v-if="showShellHeader" class="glass-card border-b border-white/10 sticky top-0 z-50">
       <div class="max-w-7xl mx-auto px-6 py-4">
         <div class="flex items-center justify-between">
           <div class="flex items-center space-x-4">
@@ -40,7 +40,7 @@
 
     <div class="max-w-7xl mx-auto px-6 py-8 relative z-10">
       <!-- 统计卡片 -->
-      <div class="stats-grid mb-8">
+      <div v-if="showStatsCards" class="stats-grid mb-8">
         <div class="stat-card stat-card--blue">
           <div class="stat-card-inner">
             <div class="stat-info">
@@ -88,11 +88,11 @@
       </div>
 
       <!-- 数字员工 -->
-      <h2 class="section-title">
+      <h2 v-if="showTeamSection" class="section-title">
         <i class="fas fa-users"></i>
         <span>数字员工</span>
       </h2>
-      <div class="team-members-grid mb-8">
+      <div v-if="showTeamSection" class="team-members-grid mb-8">
         <DigitalEmployeeAgentCard
           v-for="member in teamMembers"
           :key="member.id"
@@ -101,12 +101,12 @@
       </div>
 
       <!-- 工作成果 -->
-      <h2 class="section-title">
+      <h2 v-if="showOutputsSection" class="section-title">
         <i class="fas fa-trophy"></i>
         <span>工作成果</span>
         <span class="section-title__sub">OPC · 数字员工团队所有任务输出</span>
       </h2>
-      <div class="glass-card outputs-panel mb-8">
+      <div v-if="showOutputsSection" class="glass-card outputs-panel mb-8">
         <!-- 筛选工具栏 -->
         <div class="outputs-filter-bar">
           <div class="filter-group">
@@ -216,11 +216,11 @@
       </div>
 
       <!-- 实时工作流 -->
-      <h2 class="text-lg font-bold mb-4 flex items-center space-x-2">
+      <h2 v-if="showWorkflowSection" class="text-lg font-bold mb-4 flex items-center space-x-2">
         <i class="fas fa-calendar-day text-green-400"></i>
         <span>实时工作流</span>
       </h2>
-      <div class="glass-card p-5 mb-8">
+      <div v-if="showWorkflowSection" class="glass-card p-5 mb-8">
         <div class="flex flex-wrap items-center gap-3 mb-4 pb-4 border-b border-white/10">
           <input v-model="filterDateStart" @change="applyFilters" type="date" class="dark-input text-sm">
           <span class="text-gray-500">至</span>
@@ -262,12 +262,12 @@
       </div>
 
       <!-- 项目进度 -->
-      <h2 class="section-title">
+      <h2 v-if="showProjectsSection" class="section-title">
         <i class="fas fa-chart-line"></i>
         <span>项目进度</span>
         <span class="section-title__sub">PROJECT MONITORING</span>
       </h2>
-      <div class="glass-card projects-panel" id="projectsList">
+      <div v-if="showProjectsSection" class="glass-card projects-panel" id="projectsList">
         <div v-if="loading" class="loading-state">
           <div class="loading-spinner">
             <div class="spinner-ring"></div>
@@ -332,6 +332,14 @@ import { Loading, Warning, Document } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 import DigitalEmployeeAgentCard from '@/components/digital-employee/DigitalEmployeeAgentCard.vue'
 import ProjectCard from '@/components/digital-employee/ProjectCard.vue'
+
+const props = withDefaults(defineProps<{
+  viewMode?: 'all' | 'projects' | 'outputs'
+  embedded?: boolean
+}>(), {
+  viewMode: 'all',
+  embedded: false,
+})
 
 type AgentId = 'xiaomu' | 'xiaokai' | 'xiaochan' | 'xiaoyan' | 'xiaoce'
 type OutputType = 'code' | 'doc' | 'report' | 'markdown' | 'text' | 'html' | 'pdf' | 'unsupported' | 'json'
@@ -403,6 +411,13 @@ interface TeamMemberCard {
 
 const agentsStore = useAgentsStore()
 const md = new MarkdownIt()
+
+const showShellHeader = computed(() => !props.embedded)
+const showStatsCards = computed(() => props.viewMode === 'all')
+const showTeamSection = computed(() => props.viewMode === 'all')
+const showOutputsSection = computed(() => props.viewMode === 'all' || props.viewMode === 'outputs')
+const showWorkflowSection = computed(() => props.viewMode === 'all' || props.viewMode === 'outputs')
+const showProjectsSection = computed(() => props.viewMode === 'all' || props.viewMode === 'projects')
 
 // 状态
 const loading = ref(true)
