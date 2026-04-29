@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "analysis:start": "bash ./start-analysis-dev.sh",
+    "analysis:stop": "bash ./stop-analysis-dev.sh",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"

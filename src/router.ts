@@ -99,6 +99,12 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
   },
   {
+    path: '/analysis',
+    name: 'analysis',
+    component: () => import('@/views/AnalysisWorkbench.vue'),
+    meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
+  },
+  {
     path: '/security',
     name: 'security',
     component: () => import('@/views/Security.vue'),

@@ -12,8 +12,10 @@ import { dirname, join, resolve } from 'path'
 import http from 'http'
 import skillsRouter from './routes/skills.js'
 import agentChatRouter, { initAgentChatRoutes } from './routes/agent-chat.js'
+import analysisRouter from './routes/analysis.js'
 import { initializeSchema } from './db/index.js'
 import { initializeAgentChatSchema } from './db/agent-chat.js'
+import { initializeAnalysisSchema } from './db/analysis.js'
 import Database from 'better-sqlite3'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -2161,10 +2163,12 @@ function getActivityStatus(type) {
 // ============ Agent Chat API ============
 // 初始化 Agent Chat 数据库表
 initializeAgentChatSchema()
+initializeAnalysisSchema()
 // 初始化默认 Agents
 initAgentChatRoutes()
 
 app.use('/api', agentChatRouter)
+app.use('/api/analysis', analysisRouter)
 
 // 启动服务器
 app.listen(PORT, () => {
