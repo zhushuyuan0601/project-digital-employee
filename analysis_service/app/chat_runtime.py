@@ -6,7 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Iterable
 
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 from .execution import collect_artifacts, execute_python, snapshot_workspace
 from .settings import settings
@@ -55,12 +55,12 @@ def prepare_messages(messages: list[dict[str, Any]], session_id: str) -> list[di
     return prepared
 
 
-def create_client(runtime: dict[str, Any]) -> OpenAI:
+def create_client(runtime: dict[str, Any]) -> AsyncOpenAI:
     api_base = str(runtime.get("api_base") or settings.default_api_base).strip()
     api_key = str(runtime.get("api_key") or settings.default_api_key).strip() or "dummy"
     if not api_base:
         raise ValueError("A model API base URL is required")
-    return OpenAI(base_url=api_base.rstrip("/"), api_key=api_key)
+    return AsyncOpenAI(base_url=api_base.rstrip("/"), api_key=api_key)
 
 
 def chunk_payload(delta: str | None = None, *, finish_reason: str | None = None, extra_delta: dict[str, Any] | None = None) -> str:
@@ -148,7 +148,7 @@ async def run_analysis(messages: list[dict[str, Any]], runtime: dict[str, Any], 
 
     for _ in range(max_rounds):
         try:
-            response = client.chat.completions.create(
+            response = await client.chat.completions.create(
                 model=model,
                 messages=prepared,
                 temperature=temperature,
@@ -162,7 +162,7 @@ async def run_analysis(messages: list[dict[str, Any]], runtime: dict[str, Any], 
 
         segment = ""
         finished = False
-        for chunk in response:
+        async for chunk in response:
             delta = chunk.choices[0].delta.content if chunk.choices else None
             if delta is None:
                 continue

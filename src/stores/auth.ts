@@ -11,11 +11,13 @@ export interface AuthUser {
 
 const AUTH_STORAGE_KEY = 'unicom_auth_session'
 
-const DEFAULT_USERS: Record<string, { password: string; displayName: string; role: UserRole }> = {
+const DEV_USERS: Record<string, { password: string; displayName: string; role: UserRole }> = {
   admin: { password: 'admin123', displayName: '系统管理员', role: 'admin' },
   operator: { password: 'operator123', displayName: '平台操作员', role: 'operator' },
   readonly: { password: 'readonly123', displayName: '审计只读用户', role: 'readonly' },
 }
+
+const DEFAULT_USERS = import.meta.env.DEV ? DEV_USERS : {} as typeof DEV_USERS
 
 function readStoredUser() {
   if (typeof localStorage === 'undefined') return null

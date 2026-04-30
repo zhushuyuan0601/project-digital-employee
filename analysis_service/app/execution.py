@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -9,6 +10,24 @@ import tempfile
 from pathlib import Path
 
 from .settings import settings
+
+SAFE_ENV_KEYS = {"PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "MPLBACKEND", "QT_QPA_PLATFORM"}
+
+_MAX_MEMORY_BYTES = 512 * 1024 * 1024  # 512 MB
+_MAX_OPEN_FILES = 256
+
+
+def _preexec_sandbox(timeout: int) -> None:
+    """Applied in the child process before exec. Sets resource limits (Unix only)."""
+    try:
+        import resource
+        resource.setrlimit(resource.RLIMIT_AS, (_MAX_MEMORY_BYTES, _MAX_MEMORY_BYTES))
+        resource.setrlimit(resource.RLIMIT_NOFILE, (_MAX_OPEN_FILES, _MAX_OPEN_FILES))
+        resource.setrlimit(resource.RLIMIT_CPU, (timeout, timeout))
+        if hasattr(resource, "RLIMIT_NPROC"):
+            resource.setrlimit(resource.RLIMIT_NPROC, (64, 64))
+    except (ImportError, ValueError, OSError):
+        pass
 
 
 def snapshot_workspace(root: Path) -> dict[Path, tuple[int, int]]:
@@ -57,16 +76,23 @@ def collect_artifacts(before: dict[Path, tuple[int, int]], after: dict[Path, tup
 
 
 async def execute_python(code: str, workspace: Path, timeout_sec: int | None = None) -> str:
+    # NOTE: This provides process-level sandboxing only.
+    # Production deployments MUST run this service in a container with --network=none and --read-only.
     timeout = timeout_sec or settings.execution_timeout_sec
     workspace.mkdir(parents=True, exist_ok=True)
     fd, tmp_path = tempfile.mkstemp(suffix=".py", dir=str(workspace))
     os.close(fd)
     try:
         Path(tmp_path).write_text(code, encoding="utf-8")
-        env = os.environ.copy()
-        env.setdefault("MPLBACKEND", "Agg")
-        env.setdefault("QT_QPA_PLATFORM", "offscreen")
-        env.pop("DISPLAY", None)
+        env = {k: v for k, v in os.environ.items() if k in SAFE_ENV_KEYS}
+        env["MPLBACKEND"] = "Agg"
+        env["QT_QPA_PLATFORM"] = "offscreen"
+        env["PYTHONPATH"] = str(workspace)
+
+        preexec = None
+        if platform.system() != "Windows":
+            preexec = lambda: _preexec_sandbox(timeout)
+
         process = await asyncio.create_subprocess_exec(
             sys.executable,
             tmp_path,
@@ -74,6 +100,7 @@ async def execute_python(code: str, workspace: Path, timeout_sec: int | None = N
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
+            preexec_fn=preexec,
         )
         try:
             stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)

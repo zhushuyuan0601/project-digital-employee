@@ -29,8 +29,19 @@ const GATEWAY_HOST = process.env.GATEWAY_HOST || '127.0.0.1'
 const GATEWAY_PORT = process.env.GATEWAY_PORT || 18789
 
 // 中间件
-app.use(cors())
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173'
+app.use(cors({ origin: CORS_ORIGIN.split(',').map(s => s.trim()) }))
 app.use(express.json())
+
+// 认证中间件：若设置 API_AUTH_TOKEN 则对 /api/* 路由启用 Bearer token 校验
+const API_AUTH_TOKEN = process.env.API_AUTH_TOKEN || ''
+function requireAuth(req, res, next) {
+  if (!API_AUTH_TOKEN) return next()
+  const auth = req.headers.authorization || ''
+  if (auth === `Bearer ${API_AUTH_TOKEN}`) return next()
+  return res.status(401).json({ error: 'Unauthorized: invalid or missing token' })
+}
+app.use('/api', requireAuth)
 
 // 用户主目录
 const HOME_DIR = process.env.HOME || process.env.USERPROFILE || ''
@@ -78,6 +89,19 @@ function resolvePath(path) {
     return path
   }
   return resolve(path)
+}
+
+// 文件访问路径白名单
+const FILE_ROOTS = (process.env.FILE_ROOTS || '')
+  .split(',')
+  .map(p => p.trim())
+  .filter(Boolean)
+  .map(p => resolvePath(p))
+
+function isPathAllowed(resolvedPath) {
+  if (FILE_ROOTS.length === 0) return true
+  const normalized = resolve(resolvedPath)
+  return FILE_ROOTS.some(root => normalized.startsWith(root + '/') || normalized === root)
 }
 
 /**
@@ -306,6 +330,11 @@ app.get('/api/files/scan', async (req, res) => {
       })
     }
 
+    const resolved = resolvePath(path)
+    if (!isPathAllowed(resolved)) {
+      return res.status(403).json({ success: false, error: 'Access denied: path not in allowed roots' })
+    }
+
     console.log(`[API] Scan request: path=${path}, startTime=${startTime}, endTime=${endTime}`)
 
     const files = await scanDirectory(path,
@@ -345,6 +374,11 @@ app.get('/api/files/content', async (req, res) => {
       })
     }
 
+    const resolved = resolvePath(path)
+    if (!isPathAllowed(resolved)) {
+      return res.status(403).json({ success: false, error: 'Access denied: path not in allowed roots' })
+    }
+
     console.log(`[API] Read file request: path=${path}`)
 
     const result = await readFileContent(path)
@@ -373,6 +407,11 @@ app.get('/api/file', async (req, res) => {
         success: false,
         error: 'Missing required parameter: path'
       })
+    }
+
+    const resolved = resolvePath(path)
+    if (!isPathAllowed(resolved)) {
+      return res.status(403).json({ success: false, error: 'Access denied: path not in allowed roots' })
     }
 
     console.log(`[API] Read file request (legacy): path=${path}`)
@@ -2171,7 +2210,7 @@ app.use('/api', agentChatRouter)
 app.use('/api/analysis', analysisRouter)
 
 // 启动服务器
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`
 ╔════════════════════════════════════════════════════════╗
 ║          Unicom File Scanner API Server                 ║
@@ -2209,3 +2248,20 @@ app.listen(PORT, () => {
 ╚════════════════════════════════════════════════════════╝
   `)
 })
+
+function gracefulShutdown(signal) {
+  console.log(`[Server] Received ${signal}, shutting down gracefully...`)
+  server.close(() => {
+    if (claudeDb) {
+      try { claudeDb.close() } catch {}
+    }
+    console.log('[Server] Closed.')
+    process.exit(0)
+  })
+  setTimeout(() => {
+    console.error('[Server] Forced shutdown after timeout')
+    process.exit(1)
+  }, 10000)
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
+process.on('SIGINT', () => gracefulShutdown('SIGINT'))

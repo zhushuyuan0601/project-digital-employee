@@ -2,6 +2,7 @@ import express from 'express'
 import multer from 'multer'
 import { Readable } from 'stream'
 import { randomUUID } from 'crypto'
+import dns from 'dns/promises'
 import {
   deleteAnalysisSession,
   getAnalysisSession,
@@ -14,6 +15,51 @@ const router = express.Router()
 const upload = multer({ storage: multer.memoryStorage() })
 
 const ANALYSIS_SERVICE_BASE_URL = (process.env.ANALYSIS_SERVICE_BASE_URL || 'http://127.0.0.1:18900').replace(/\/$/, '')
+const ALLOW_PRIVATE_URLS = process.env.ALLOW_PRIVATE_URLS === 'true'
+
+function isPrivateIP(ip) {
+  if (ip === '127.0.0.1' || ip === '::1' || ip === 'localhost') return true
+  const parts = ip.split('.').map(Number)
+  if (parts.length === 4) {
+    if (parts[0] === 10) return true
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true
+    if (parts[0] === 192 && parts[1] === 168) return true
+    if (parts[0] === 169 && parts[1] === 254) return true
+    if (parts[0] === 127) return true
+    if (parts[0] === 0) return true
+  }
+  if (ip.startsWith('fc') || ip.startsWith('fd') || ip.startsWith('fe80')) return true
+  return false
+}
+
+async function validateExternalUrl(urlString) {
+  if (ALLOW_PRIVATE_URLS) return { ok: true }
+  let parsed
+  try {
+    parsed = new URL(urlString)
+  } catch {
+    return { ok: false, error: 'Invalid URL format' }
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    return { ok: false, error: 'Only http/https protocols allowed' }
+  }
+  const hostname = parsed.hostname
+  if (isPrivateIP(hostname)) {
+    return { ok: false, error: 'Private/internal URLs are not allowed' }
+  }
+  try {
+    const addresses = await dns.resolve4(hostname).catch(() => [])
+    const addresses6 = await dns.resolve6(hostname).catch(() => [])
+    for (const addr of [...addresses, ...addresses6]) {
+      if (isPrivateIP(addr)) {
+        return { ok: false, error: 'URL resolves to a private/internal IP address' }
+      }
+    }
+  } catch {
+    // DNS resolution failed — allow the request to fail naturally at fetch time
+  }
+  return { ok: true }
+}
 
 function buildAnalysisUrl(path, query = undefined) {
   const url = new URL(`${ANALYSIS_SERVICE_BASE_URL}${path}`)
@@ -144,6 +190,10 @@ router.post('/test-connection', async (req, res) => {
       console.log('[Analysis API] test-connection: api_base missing')
       return res.status(400).send(JSON.stringify({ ok: false, error: 'api_base is required' }))
     }
+    const validation = await validateExternalUrl(api_base)
+    if (!validation.ok) {
+      return res.status(403).send(JSON.stringify({ ok: false, error: validation.error }))
+    }
     const base = String(api_base).replace(/\/+$/, '')
     const fetchHeaders = {}
     if (api_key) fetchHeaders['Authorization'] = `Bearer ${api_key}`
@@ -160,7 +210,6 @@ router.post('/test-connection', async (req, res) => {
       clearTimeout(timer)
       const ms = Date.now() - start
       console.log('[Analysis API] test-connection: response status', response.status, 'ms:', ms)
-      // Any HTTP response means the server is reachable — treat as success
       res.send(JSON.stringify({ ok: true, ms, status: response.status }))
     } catch (fetchErr) {
       clearTimeout(timer)

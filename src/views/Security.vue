@@ -1,304 +1,308 @@
 <template>
   <div class="security-page">
-    <header class="security-hero">
-      <div class="security-hero__copy">
-        <p class="security-kicker">Security Governance Center</p>
-        <h1>安全治理中心</h1>
-        <p class="security-desc">把密钥治理、MCP 安全、提示词注入防护和审计事件拆成独立工作分区，便于按风险面持续运营。</p>
-      </div>
-      <div class="security-hero__actions">
-        <button class="btn btn-warning btn-sm" @click="runSecurityScan" :disabled="scanning">
-          <span>⚡</span> {{ scanning ? '扫描中...' : '运行安全扫描' }}
-        </button>
-        <button class="btn btn-secondary btn-sm" @click="refreshData" :disabled="loading">
-          <span>⟳</span> 刷新
-        </button>
-      </div>
-    </header>
-
-    <section class="security-overview">
-      <article class="score-card">
+    <!-- 左侧边栏 -->
+    <aside class="security-sidebar">
+      <!-- 安全评分 -->
+      <div class="sidebar-section">
+        <div class="sidebar-section__title">安全评分</div>
         <div class="score-circle" :class="scoreClass">
           <svg viewBox="0 0 100 100" class="score-svg">
             <circle class="score-bg" cx="50" cy="50" r="45" />
             <circle class="score-progress" cx="50" cy="50" r="45" :style="scoreStyle" />
           </svg>
           <div class="score-value">{{ securityScore }}</div>
-          <div class="score-label">安全评分</div>
+          <div class="score-label">风险等级</div>
         </div>
-        <div class="score-details">
-          <div class="detail-item">
-            <span class="detail-label">当前风险等级</span>
-            <span :class="['risk-badge', riskLevel]">{{ riskText }}</span>
+        <div class="score-meta">
+          <div class="score-meta__row">
+            <span class="score-meta__label">最后刷新</span>
+            <span class="score-meta__value">{{ lastRefreshText }}</span>
           </div>
-          <div class="detail-item">
-            <span class="detail-label">最后刷新</span>
-            <span class="detail-value">{{ lastRefreshText }}</span>
-          </div>
-          <div class="detail-item">
-            <span class="detail-label">待处理密钥问题</span>
-            <span class="detail-value warning">{{ secrets.length }} 个</span>
+          <div class="score-meta__row">
+            <span class="score-meta__label">待处理问题</span>
+            <span class="score-meta__value warning">{{ secrets.length }} 个</span>
           </div>
         </div>
-      </article>
-
-      <div class="quick-stats">
-        <article class="stat-card">
-          <span class="stat-icon">🔑</span>
-          <div class="stat-content">
+        <div class="score-stats">
+          <div class="score-stat">
             <strong>{{ secretsDetected }}</strong>
             <span>密钥检测</span>
           </div>
-        </article>
-        <article class="stat-card">
-          <span class="stat-icon">🔌</span>
-          <div class="stat-content">
+          <div class="score-stat">
             <strong>{{ mcpConnections }}</strong>
             <span>MCP 连接</span>
           </div>
-        </article>
-        <article class="stat-card">
-          <span class="stat-icon">⚠️</span>
-          <div class="stat-content">
+          <div class="score-stat">
             <strong>{{ injectionAttemptsCount }}</strong>
             <span>注入尝试</span>
           </div>
-        </article>
-        <article class="stat-card">
-          <span class="stat-icon">✅</span>
-          <div class="stat-content">
+          <div class="score-stat">
             <strong>{{ passedChecks }}</strong>
             <span>通过检查</span>
           </div>
-        </article>
+        </div>
       </div>
-    </section>
 
-    <div class="security-tabs">
-      <button
-        v-for="tab in securityTabs"
-        :key="tab.key"
-        type="button"
-        class="security-tab"
-        :class="{ 'is-active': activeTab === tab.key }"
-        @click="setTab(tab.key)"
-      >
-        <strong>{{ tab.label }}</strong>
-        <span>{{ tab.meta }}</span>
-      </button>
-    </div>
-
-    <section v-if="activeTab === 'secrets'" class="security-stage security-stage--split">
-      <article class="section-card">
-        <div class="section-header">
-          <h3 class="section-title">密钥治理</h3>
-          <span :class="['status-badge', secretsStatus]">{{ secretsStatusText }}</span>
+      <!-- 安全分区 -->
+      <div class="sidebar-section">
+        <div class="sidebar-section__title">安全分区</div>
+        <div
+          v-for="tab in securityTabs"
+          :key="tab.key"
+          class="sidebar-item"
+          :class="{ active: activeTab === tab.key }"
+          @click="setTab(tab.key)"
+        >
+          <div class="sidebar-item__left">
+            <i :class="tab.icon"></i>
+            <span>{{ tab.label }}</span>
+          </div>
+          <span class="sidebar-badge" :class="getBadgeClass(tab.key)">{{ getBadgeCount(tab.key) }}</span>
         </div>
-        <div class="result-list">
-          <div v-for="item in secrets" :key="item.id" class="result-item">
-            <div class="result-left">
-              <span :class="['result-icon', item.type]">{{ item.type === 'api_key' ? '🔑' : '🔐' }}</span>
-              <div class="result-info">
-                <strong>{{ item.type }} · {{ item.severity }}</strong>
-                <span>{{ item.location }}</span>
+      </div>
+
+      <!-- 快捷操作 -->
+      <div class="sidebar-section">
+        <div class="sidebar-section__title">快捷操作</div>
+        <button class="sidebar-btn sidebar-btn--primary" @click="runSecurityScan" :disabled="scanning">
+          <i class="ri-shield-flash-line"></i>
+          {{ scanning ? '扫描中...' : '运行安全扫描' }}
+        </button>
+        <button class="sidebar-btn" @click="refreshData" :disabled="loading">
+          <i class="ri-refresh-line"></i>
+          刷新数据
+        </button>
+      </div>
+    </aside>
+
+    <!-- 主内容区 -->
+    <main class="security-main">
+      <div class="page-header">
+        <div>
+          <h1 class="page-title">{{ currentPageTitle }}</h1>
+          <p class="page-subtitle">{{ currentPageDesc }}</p>
+        </div>
+        <div class="page-header__right">
+          <span :class="['status-badge', currentStatusClass]">{{ currentStatusText }}</span>
+        </div>
+      </div>
+
+      <!-- 密钥治理 -->
+      <section v-if="activeTab === 'secrets'" class="content-area">
+        <article class="section-card">
+          <div class="section-header">
+            <h3 class="section-title">检测结果</h3>
+            <span :class="['status-badge', secretsStatus]">{{ secretsStatusText }}</span>
+          </div>
+          <div class="result-list">
+            <div v-for="item in secrets" :key="item.id" class="result-item">
+              <div class="result-left">
+                <span :class="['result-icon', item.type]">{{ item.type === 'api_key' ? '🔑' : '🔐' }}</span>
+                <div class="result-info">
+                  <strong>{{ item.type }} · {{ item.severity }}</strong>
+                  <span>{{ item.location }}</span>
+                </div>
+              </div>
+              <div class="result-actions">
+                <button class="btn btn-sm btn-secondary" @click="viewSecret(item)">查看</button>
+                <button class="btn btn-sm btn-secondary" @click="ignoreSecret(item)">忽略</button>
+                <button class="btn btn-sm btn-warning" @click="revokeSecret(item)">撤销</button>
               </div>
             </div>
-            <div class="result-actions">
-              <button class="btn btn-sm btn-secondary" @click="viewSecret(item)">查看</button>
-              <button class="btn btn-sm btn-secondary" @click="ignoreSecret(item)">忽略</button>
-              <button class="btn btn-sm btn-warning" @click="revokeSecret(item)">撤销</button>
+            <div v-if="secrets.length === 0" class="empty-result">
+              <span class="empty-icon">✅</span>
+              <span class="empty-text">未发现密钥泄露风险</span>
             </div>
           </div>
-          <div v-if="secrets.length === 0" class="empty-result">
-            <span class="empty-icon">✅</span>
-            <span class="empty-text">未发现密钥泄露风险</span>
-          </div>
-        </div>
-      </article>
+        </article>
 
-      <article class="section-card">
-        <div class="section-header">
-          <h3 class="section-title">治理建议</h3>
-        </div>
-        <div class="governance-list">
-          <div class="governance-item">
-            <strong>集中收口高危密钥</strong>
-            <span>先处理高危和可直接撤销的凭证，再逐步补充忽略规则。</span>
+        <article class="section-card">
+          <div class="section-header">
+            <h3 class="section-title">治理建议</h3>
           </div>
-          <div class="governance-item">
-            <strong>减少重复暴露面</strong>
-            <span>把环境变量、示例配置和测试数据中的敏感片段统一脱敏。</span>
+          <div class="governance-list">
+            <div class="governance-item">
+              <strong>集中收口高危密钥</strong>
+              <span>先处理高危和可直接撤销的凭证，再逐步补充忽略规则。</span>
+            </div>
+            <div class="governance-item">
+              <strong>减少重复暴露面</strong>
+              <span>把环境变量、示例配置和测试数据中的敏感片段统一脱敏。</span>
+            </div>
+            <div class="governance-item">
+              <strong>建立轮换节奏</strong>
+              <span>把密钥检测接入发布前检查，避免问题进入主干或交付物。</span>
+            </div>
           </div>
-          <div class="governance-item">
-            <strong>建立轮换节奏</strong>
-            <span>把密钥检测接入发布前检查，避免问题进入主干或交付物。</span>
-          </div>
-        </div>
-      </article>
-    </section>
+        </article>
+      </section>
 
-    <section v-else-if="activeTab === 'mcp'" class="security-stage security-stage--split">
-      <article class="section-card">
-        <div class="section-header">
-          <h3 class="section-title">MCP 服务器审计</h3>
-          <span class="status-badge info">已连接 {{ mcpServers.length }} 个</span>
-        </div>
-        <div class="mcp-list">
-          <div class="mcp-item" v-for="server in mcpServers" :key="server.id">
-            <div class="mcp-info">
-              <span class="mcp-icon">🔌</span>
-              <div class="mcp-details">
-                <strong>{{ server.name }}</strong>
-                <span>{{ server.url }}</span>
+      <!-- MCP 安全 -->
+      <section v-else-if="activeTab === 'mcp'" class="content-area">
+        <article class="section-card">
+          <div class="section-header">
+            <h3 class="section-title">MCP 服务器审计</h3>
+            <span class="status-badge info">已连接 {{ mcpServers.length }} 个</span>
+          </div>
+          <div class="mcp-list">
+            <div class="mcp-item" v-for="server in mcpServers" :key="server.id">
+              <div class="mcp-info">
+                <span class="mcp-icon">🔌</span>
+                <div class="mcp-details">
+                  <strong>{{ server.name }}</strong>
+                  <span>{{ server.url }}</span>
+                </div>
+              </div>
+              <div class="mcp-status">
+                <span :class="['status-dot', server.status]"></span>
+                <span>{{ getStatusText(server.status) }}</span>
               </div>
             </div>
-            <div class="mcp-status">
-              <span :class="['status-dot', server.status]"></span>
-              <span>{{ getStatusText(server.status) }}</span>
+            <div v-if="mcpServers.length === 0" class="empty-result">
+              <span class="empty-icon">ℹ️</span>
+              <span class="empty-text">暂无 MCP 连接记录</span>
             </div>
           </div>
-          <div v-if="mcpServers.length === 0" class="empty-result">
-            <span class="empty-icon">ℹ️</span>
-            <span class="empty-text">暂无 MCP 连接记录</span>
-          </div>
-        </div>
-      </article>
+        </article>
 
-      <article class="section-card">
-        <div class="section-header">
-          <h3 class="section-title">Hook 与边界控制</h3>
-        </div>
-        <div class="hook-list">
-          <div class="hook-item">
-            <div class="hook-info">
-              <strong>Pre-Execute Hook</strong>
-              <span>~/.openclaw/hooks/pre-execute.js</span>
-            </div>
-            <span class="hook-status active"></span>
+        <article class="section-card">
+          <div class="section-header">
+            <h3 class="section-title">Hook 与边界控制</h3>
           </div>
-          <div class="hook-item">
-            <div class="hook-info">
-              <strong>Post-Execute Hook</strong>
-              <span>~/.openclaw/hooks/post-execute.js</span>
-            </div>
-            <span class="hook-status active"></span>
-          </div>
-          <div class="governance-item">
-            <strong>建议</strong>
-            <span>后续可将 Hook 白名单、命令审计和审批策略统一并入同一治理面板。</span>
-          </div>
-        </div>
-      </article>
-    </section>
-
-    <section v-else-if="activeTab === 'injection'" class="security-stage security-stage--split">
-      <article class="section-card">
-        <div class="section-header">
-          <h3 class="section-title">提示词注入防护</h3>
-          <span :class="['status-badge', injectionStatus]">{{ injectionStatusText }}</span>
-        </div>
-        <div class="injection-log">
-          <div class="log-item" v-for="log in injectionAttempts" :key="log.id">
-            <span :class="['log-level', log.blocked ? 'success' : 'warning']">{{ log.blocked ? 'BLOCKED' : 'WARN' }}</span>
-            <span class="log-message">{{ log.type }} · {{ log.source }}</span>
-            <span class="log-time">{{ formatTime(log.timestamp) }}</span>
-          </div>
-          <div v-if="injectionAttempts.length === 0" class="empty-result">
-            <span class="empty-icon">✅</span>
-            <span class="empty-text">无注入尝试记录</span>
-          </div>
-        </div>
-      </article>
-
-      <article class="section-card">
-        <div class="section-header">
-          <h3 class="section-title">相关安全事件</h3>
-        </div>
-        <div class="timeline">
-          <div
-            v-for="event in injectionEvents"
-            :key="event.id"
-            class="timeline-item"
-            :class="event.severity"
-          >
-            <div class="timeline-marker" :class="event.severity"></div>
-            <div class="timeline-content">
-              <div class="timeline-header">
-                <span class="timeline-title">{{ event.type }}</span>
-                <span class="timeline-time">{{ formatTime(event.timestamp) }}</span>
+          <div class="hook-list">
+            <div class="hook-item">
+              <div class="hook-info">
+                <strong>Pre-Execute Hook</strong>
+                <span>~/.openclaw/hooks/pre-execute.js</span>
               </div>
-              <p class="timeline-description">{{ event.description }}</p>
-              <div class="timeline-meta">
-                <span :class="['timeline-badge', event.severity]">{{ getSeverityText(event.severity) }}</span>
-                <span class="timeline-source">{{ event.status }}</span>
+              <span class="hook-status active"></span>
+            </div>
+            <div class="hook-item">
+              <div class="hook-info">
+                <strong>Post-Execute Hook</strong>
+                <span>~/.openclaw/hooks/post-execute.js</span>
+              </div>
+              <span class="hook-status active"></span>
+            </div>
+            <div class="governance-item">
+              <strong>建议</strong>
+              <span>后续可将 Hook 白名单、命令审计和审批策略统一并入同一治理面板。</span>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <!-- 注入防护 -->
+      <section v-else-if="activeTab === 'injection'" class="content-area">
+        <article class="section-card">
+          <div class="section-header">
+            <h3 class="section-title">提示词注入防护</h3>
+            <span :class="['status-badge', injectionStatus]">{{ injectionStatusText }}</span>
+          </div>
+          <div class="injection-log">
+            <div class="log-item" v-for="log in injectionAttempts" :key="log.id">
+              <span :class="['log-level', log.blocked ? 'success' : 'warning']">{{ log.blocked ? 'BLOCKED' : 'WARN' }}</span>
+              <span class="log-message">{{ log.type }} · {{ log.source }}</span>
+              <span class="log-time">{{ formatTime(log.timestamp) }}</span>
+            </div>
+            <div v-if="injectionAttempts.length === 0" class="empty-result">
+              <span class="empty-icon">✅</span>
+              <span class="empty-text">无注入尝试记录</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="section-card">
+          <div class="section-header">
+            <h3 class="section-title">相关安全事件</h3>
+          </div>
+          <div class="timeline">
+            <div
+              v-for="event in injectionEvents"
+              :key="event.id"
+              class="timeline-item"
+              :class="event.severity"
+            >
+              <div class="timeline-marker" :class="event.severity"></div>
+              <div class="timeline-content">
+                <div class="timeline-header">
+                  <span class="timeline-title">{{ event.type }}</span>
+                  <span class="timeline-time">{{ formatTime(event.timestamp) }}</span>
+                </div>
+                <p class="timeline-description">{{ event.description }}</p>
+                <div class="timeline-meta">
+                  <span :class="['timeline-badge', event.severity]">{{ getSeverityText(event.severity) }}</span>
+                  <span class="timeline-source">{{ event.status }}</span>
+                </div>
               </div>
             </div>
+            <div v-if="injectionEvents.length === 0" class="empty-result">
+              <span class="empty-icon">ℹ️</span>
+              <span class="empty-text">暂无注入相关安全事件</span>
+            </div>
           </div>
-          <div v-if="injectionEvents.length === 0" class="empty-result">
-            <span class="empty-icon">ℹ️</span>
-            <span class="empty-text">暂无注入相关安全事件</span>
-          </div>
-        </div>
-      </article>
-    </section>
+        </article>
+      </section>
 
-    <section v-else class="security-stage">
-      <article class="section-card">
-        <div class="section-header">
-          <h3 class="section-title">安全事件时间线</h3>
-          <button class="btn btn-secondary btn-sm">导出日志</button>
-        </div>
-        <div class="timeline">
-          <div
-            v-for="event in events"
-            :key="event.id"
-            class="timeline-item"
-            :class="event.severity"
-          >
-            <div class="timeline-marker" :class="event.severity"></div>
-            <div class="timeline-content">
-              <div class="timeline-header">
-                <span class="timeline-title">{{ event.type }}</span>
-                <span class="timeline-time">{{ formatTime(event.timestamp) }}</span>
-              </div>
-              <p class="timeline-description">{{ event.description }}</p>
-              <div class="timeline-meta">
-                <span :class="['timeline-badge', event.severity]">{{ getSeverityText(event.severity) }}</span>
-                <span class="timeline-source">{{ event.status }}</span>
+      <!-- 审计事件 -->
+      <section v-else class="content-area">
+        <article class="section-card">
+          <div class="section-header">
+            <h3 class="section-title">安全事件时间线</h3>
+            <button class="btn btn-secondary btn-sm">导出日志</button>
+          </div>
+          <div class="timeline">
+            <div
+              v-for="event in events"
+              :key="event.id"
+              class="timeline-item"
+              :class="event.severity"
+            >
+              <div class="timeline-marker" :class="event.severity"></div>
+              <div class="timeline-content">
+                <div class="timeline-header">
+                  <span class="timeline-title">{{ event.type }}</span>
+                  <span class="timeline-time">{{ formatTime(event.timestamp) }}</span>
+                </div>
+                <p class="timeline-description">{{ event.description }}</p>
+                <div class="timeline-meta">
+                  <span :class="['timeline-badge', event.severity]">{{ getSeverityText(event.severity) }}</span>
+                  <span class="timeline-source">{{ event.status }}</span>
+                </div>
               </div>
             </div>
+            <div v-if="events.length === 0" class="empty-result">
+              <span class="empty-icon">✅</span>
+              <span class="empty-text">暂无安全事件</span>
+            </div>
           </div>
-          <div v-if="events.length === 0" class="empty-result">
-            <span class="empty-icon">✅</span>
-            <span class="empty-text">暂无安全事件</span>
-          </div>
-        </div>
-      </article>
+        </article>
 
-      <article class="section-card">
-        <div class="section-header">
-          <h3 class="section-title">信任评分构成</h3>
-        </div>
-        <div class="trust-grid">
-          <div v-for="factor in trustFactors" :key="factor.name" class="trust-item">
-            <div class="trust-header">
-              <span class="trust-name">{{ factor.name }}</span>
-              <span :class="['trust-score', factor.score >= 80 ? 'excellent' : factor.score >= 60 ? 'good' : 'warning']">
-                {{ factor.score }}分
-              </span>
-            </div>
-            <div class="trust-bar">
-              <div
-                class="trust-fill"
-                :class="factor.score >= 80 ? 'excellent' : factor.score >= 60 ? 'good' : 'warning'"
-                :style="{ width: (factor.score / factor.maxScore) * 100 + '%' }"
-              ></div>
-            </div>
-            <div class="trust-description">{{ factor.name }}得分率 {{ ((factor.score / factor.maxScore) * 100).toFixed(0) }}%</div>
+        <article class="section-card">
+          <div class="section-header">
+            <h3 class="section-title">信任评分构成</h3>
           </div>
-        </div>
-      </article>
-    </section>
+          <div class="trust-grid">
+            <div v-for="factor in trustFactors" :key="factor.name" class="trust-item">
+              <div class="trust-header">
+                <span class="trust-name">{{ factor.name }}</span>
+                <span :class="['trust-score', factor.score >= 80 ? 'excellent' : factor.score >= 60 ? 'good' : 'warning']">
+                  {{ factor.score }}分
+                </span>
+              </div>
+              <div class="trust-bar">
+                <div
+                  class="trust-fill"
+                  :class="factor.score >= 80 ? 'excellent' : factor.score >= 60 ? 'good' : 'warning'"
+                  :style="{ width: (factor.score / factor.maxScore) * 100 + '%' }"
+                ></div>
+              </div>
+              <div class="trust-description">{{ factor.name }}得分率 {{ ((factor.score / factor.maxScore) * 100).toFixed(0) }}%</div>
+            </div>
+          </div>
+        </article>
+      </section>
+    </main>
   </div>
 </template>
 
@@ -317,10 +321,10 @@ const notification = useNotification()
 const lastRefreshAt = ref<Date | null>(null)
 
 const securityTabs = [
-  { key: 'secrets', label: '密钥治理', meta: '凭证检测、忽略与撤销' },
-  { key: 'mcp', label: 'MCP 安全', meta: '服务连接、Hook 与边界控制' },
-  { key: 'injection', label: '注入防护', meta: '攻击尝试与拦截结果' },
-  { key: 'audit', label: '审计事件', meta: '事件时间线与信任评分' },
+  { key: 'secrets', label: '密钥治理', icon: 'ri-key-2-line', meta: '凭证检测、忽略与撤销' },
+  { key: 'mcp', label: 'MCP 安全', icon: 'ri-plug-line', meta: '服务连接、Hook 与边界控制' },
+  { key: 'injection', label: '注入防护', icon: 'ri-shield-keyhole-line', meta: '攻击尝试与拦截结果' },
+  { key: 'audit', label: '审计事件', icon: 'ri-file-list-3-line', meta: '事件时间线与信任评分' },
 ] as const
 
 const activeTab = computed<SecurityTab>(() => {
@@ -367,21 +371,42 @@ const scoreStyle = computed(() => {
   }
 })
 
-const riskLevel = computed(() => {
-  if (securityScore.value >= 80) return 'low'
-  if (securityScore.value >= 60) return 'medium'
-  if (securityScore.value >= 40) return 'high'
-  return 'critical'
+// dynamic badge helpers
+function getBadgeCount(key: SecurityTab) {
+  const map: Record<SecurityTab, number> = {
+    secrets: secretsDetected.value,
+    mcp: mcpConnections.value,
+    injection: injectionAttemptsCount.value,
+    audit: events.value?.length || 0,
+  }
+  return map[key]
+}
+
+function getBadgeClass(key: SecurityTab) {
+  if (key === 'secrets' && secretsDetected.value > 0) return 'warning'
+  if (key === 'injection' && injectionAttemptsCount.value > 0) return 'warning'
+  return ''
+}
+
+// dynamic page header content
+const currentPageTitle = computed(() => {
+  const tab = securityTabs.find(t => t.key === activeTab.value)
+  return tab?.label || '安全治理'
+})
+const currentPageDesc = computed(() => {
+  const tab = securityTabs.find(t => t.key === activeTab.value)
+  return tab?.meta || ''
 })
 
-const riskText = computed(() => {
-  const map: Record<string, string> = {
-    low: '低',
-    medium: '中',
-    high: '高',
-    critical: '严重',
-  }
-  return map[riskLevel.value] || '未知'
+const currentStatusClass = computed(() => {
+  if (activeTab.value === 'secrets') return secretsStatus.value
+  if (activeTab.value === 'injection') return injectionStatus.value
+  return 'success'
+})
+const currentStatusText = computed(() => {
+  if (activeTab.value === 'secrets') return secretsStatusText.value
+  if (activeTab.value === 'injection') return injectionStatusText.value
+  return '安全'
 })
 
 const secretsStatus = computed(() => secretsDetected.value > 0 ? 'warning' : 'success')
@@ -468,78 +493,41 @@ onMounted(() => {
 
 <style scoped>
 .security-page {
-  display: grid;
-  gap: 18px;
-  max-width: 1480px;
-  margin: 0 auto;
-  padding: 20px;
-}
-
-.security-hero {
   display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: flex-start;
-  padding: 24px 28px;
-  border-radius: 24px;
-  background:
-    radial-gradient(circle at top left, rgba(34, 197, 94, 0.14), transparent 30%),
-    var(--bg-panel);
-  border: 1px solid var(--grid-line);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.security-kicker {
-  margin: 0 0 8px;
-  font-size: 11px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
-}
-
-.security-hero h1 {
-  margin: 0;
-  font-size: 30px;
-  color: var(--text-primary);
-}
-
-.security-desc {
-  margin: 12px 0 0;
-  max-width: 48rem;
-  line-height: 1.7;
-  color: var(--text-secondary);
-}
-
-.security-hero__actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.security-overview {
-  display: grid;
-  grid-template-columns: minmax(340px, 0.9fr) minmax(0, 1.1fr);
-  gap: 16px;
-}
-
-.score-card,
-.section-card {
+/* 侧边栏 */
+.security-sidebar {
+  width: 240px;
+  flex-shrink: 0;
   background: var(--bg-panel);
-  border: 1px solid var(--grid-line);
-  border-radius: 20px;
-}
-
-.score-card {
+  border-right: 1px solid var(--border-default);
+  padding: 20px 12px;
+  overflow-y: auto;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 24px;
-  padding: 24px;
 }
 
+.sidebar-section__title {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  padding: 0 12px;
+  font-weight: 600;
+}
+
+/* 安全评分 */
 .score-circle {
   position: relative;
-  width: 120px;
-  height: 120px;
-  flex-shrink: 0;
+  width: 100px;
+  height: 100px;
+  margin: 0 auto 12px;
 }
 
 .score-svg {
@@ -570,56 +558,212 @@ onMounted(() => {
 .score-value {
   position: absolute;
   inset: 50% auto auto 50%;
-  transform: translate(-50%, -56%);
-  font-size: 30px;
+  transform: translate(-50%, -60%);
+  font-size: 24px;
   font-weight: 700;
   color: var(--text-primary);
 }
 
 .score-label {
   position: absolute;
-  inset: auto auto 12px 50%;
+  inset: auto auto 10px 50%;
   transform: translateX(-50%);
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-tertiary);
 }
 
-.score-details {
-  display: grid;
-  gap: 12px;
-  flex: 1;
+.score-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 8px;
+  margin-bottom: 12px;
 }
 
-.detail-item {
+.score-meta__row {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-  padding-bottom: 12px;
-  border-bottom: 1px solid var(--grid-line-dim);
+  font-size: 11px;
 }
 
-.detail-item:last-child {
-  padding-bottom: 0;
-  border-bottom: 0;
-}
-
-.detail-label {
+.score-meta__label {
   color: var(--text-tertiary);
-  font-size: 12px;
 }
 
-.detail-value {
+.score-meta__value {
   color: var(--text-primary);
   font-weight: 600;
 }
 
-.detail-value.warning {
+.score-meta__value.warning {
   color: var(--color-warning);
 }
 
-.risk-badge,
-.status-badge {
+.score-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 0 4px;
+}
+
+.score-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 4px;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, 0.04);
+}
+
+.score-stat strong {
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.score-stat span {
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+/* 导航项 */
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  border-radius: 6px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-bottom: 2px;
+  font-size: 13px;
+}
+
+.sidebar-item__left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebar-item i {
+  color: var(--text-tertiary);
+  font-size: 16px;
+  width: 18px;
+  text-align: center;
+}
+
+.sidebar-item:hover {
+  background: var(--bg-panel-hover);
+}
+
+.sidebar-item.active {
+  background: rgba(var(--color-primary-rgb), 0.1);
+  color: var(--color-primary);
+}
+
+.sidebar-item.active i {
+  color: var(--color-primary);
+}
+
+.sidebar-badge {
+  background: var(--bg-panel-hover);
+  color: var(--text-secondary);
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  min-width: 24px;
+  text-align: center;
+}
+
+.sidebar-badge.warning {
+  background: rgba(var(--color-warning-rgb, 245, 158, 11), 0.15);
+  color: var(--color-warning);
+}
+
+/* 快捷按钮 */
+.sidebar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-bottom: 6px;
+}
+
+.sidebar-btn:hover:not(:disabled) {
+  background: var(--bg-panel-hover);
+  border-color: var(--color-primary-dim);
+}
+
+.sidebar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sidebar-btn--primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--text-inverse);
+}
+
+.sidebar-btn--primary:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+  border-color: var(--color-primary-dark);
+}
+
+.sidebar-btn i {
+  font-size: 14px;
+}
+
+/* 主内容区 */
+.security-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 32px 0;
+  flex-shrink: 0;
+}
+
+.page-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.page-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 6px 0 0;
+}
+
+.page-header__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 状态徽章 */
+.status-badge,
+.risk-badge {
   display: inline-flex;
   align-items: center;
   padding: 4px 12px;
@@ -634,7 +778,6 @@ onMounted(() => {
   color: var(--color-success);
 }
 
-.risk-badge.medium,
 .status-badge.info {
   background: rgba(59, 130, 246, 0.12);
   color: #60a5fa;
@@ -647,80 +790,21 @@ onMounted(() => {
   color: var(--color-warning);
 }
 
-.quick-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.stat-card {
-  display: flex;
-  gap: 14px;
-  align-items: center;
-  padding: 18px;
-  border-radius: 18px;
-  background: var(--bg-panel);
-  border: 1px solid var(--grid-line);
-}
-
-.stat-icon {
-  font-size: 24px;
-}
-
-.stat-content {
-  display: grid;
-  gap: 4px;
-}
-
-.stat-content strong {
-  color: var(--text-primary);
-  font-size: 22px;
-}
-
-.stat-content span {
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.security-tabs {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.security-tab {
-  display: grid;
-  gap: 4px;
-  padding: 16px 18px;
-  border: 1px solid var(--grid-line);
-  border-radius: 18px;
-  background: var(--bg-panel);
-  text-align: left;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.security-tab strong {
-  color: var(--text-primary);
-  font-size: 15px;
-}
-
-.security-tab span {
-  font-size: 12px;
-}
-
-.security-tab.is-active {
-  background: color-mix(in oklab, var(--color-success) 10%, var(--bg-panel));
-  border-color: color-mix(in oklab, var(--color-success) 50%, var(--grid-line));
-}
-
-.security-stage {
+/* 内容区 */
+.content-area {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px 32px;
   display: grid;
   gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.security-stage--split {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.section-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--grid-line);
+  border-radius: 20px;
 }
 
 .section-header {
@@ -955,30 +1039,81 @@ onMounted(() => {
   color: var(--text-secondary);
 }
 
-@media (max-width: 1180px) {
-  .security-overview,
-  .security-stage--split {
-    grid-template-columns: 1fr;
-  }
+/* 通用按钮 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
 
-  .quick-stats,
-  .security-tabs {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--bg-panel-hover);
+  border-color: var(--color-primary-dim);
+}
+
+.btn-warning {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+}
+
+.btn-warning:hover:not(:disabled) {
+  background: var(--color-warning);
+  color: var(--text-inverse);
+}
+
+@media (max-width: 1180px) {
+  .content-area {
+    grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 860px) {
   .security-page {
-    padding: 12px;
-  }
-
-  .security-hero {
     flex-direction: column;
   }
 
-  .quick-stats,
-  .security-tabs {
-    grid-template-columns: 1fr;
+  .security-sidebar {
+    width: 100%;
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 12px;
+    gap: 8px;
+    border-right: none;
+    border-bottom: 1px solid var(--border-default);
+  }
+
+  .score-circle {
+    width: 60px;
+    height: 60px;
+  }
+
+  .score-stats {
+    display: none;
+  }
+
+  .page-header {
+    padding: 16px 20px 0;
+  }
+
+  .content-area {
+    padding: 16px 20px;
   }
 }
 </style>

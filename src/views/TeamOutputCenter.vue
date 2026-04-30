@@ -1,25 +1,25 @@
 <template>
   <div class="center-page">
-    <header class="center-header">
+    <header class="page-header">
       <div>
-        <p class="center-kicker">Agent Team Operations</p>
-        <h1>团队与产出中心</h1>
-        <p class="center-desc">围绕团队成员、项目推进和成果资产组织统一经营入口，减少“看状态”和“看产出”分散在不同页面的问题。</p>
+        <h1 class="page-title">{{ currentPageTitle }}</h1>
+        <p class="page-subtitle">{{ currentPageDesc }}</p>
       </div>
     </header>
 
-    <div class="center-tabs">
-      <button
-        v-for="tab in tabs"
-        :key="tab.key"
-        type="button"
-        class="center-tab"
-        :class="{ 'is-active': activeTab === tab.key }"
-        @click="setTab(tab.key)"
-      >
-        <strong>{{ tab.label }}</strong>
-        <span>{{ tab.meta }}</span>
-      </button>
+    <div class="filters-bar">
+      <div class="tab-group">
+        <button
+          v-for="tab in tabs"
+          :key="tab.key"
+          type="button"
+          class="tab-btn"
+          :class="{ active: activeTab === tab.key }"
+          @click="setTab(tab.key)"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
     </div>
 
     <section class="center-panel">
@@ -55,6 +55,16 @@ const activeTab = computed<TeamTab>(() => {
   return 'team'
 })
 
+const currentPageTitle = computed(() => {
+  const t = tabs.find(t => t.key === activeTab.value)
+  return t?.label || '团队与产出中心'
+})
+
+const currentPageDesc = computed(() => {
+  const t = tabs.find(t => t.key === activeTab.value)
+  return t?.meta || ''
+})
+
 function setTab(tab: TeamTab) {
   router.replace({
     path: '/team-output',
@@ -65,79 +75,94 @@ function setTab(tab: TeamTab) {
 
 <style scoped>
 .center-page {
-  display: grid;
-  gap: 18px;
-  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.center-header {
-  padding: 24px 28px;
-  border-radius: 24px;
-  background:
-    radial-gradient(circle at top left, color-mix(in oklab, var(--color-secondary) 10%, transparent), transparent 36%),
-    var(--bg-panel);
-  box-shadow: inset 0 0 0 1px var(--border-default);
+/* 页面头部 */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 32px 0;
+  flex-shrink: 0;
 }
 
-.center-kicker {
-  margin: 0 0 8px;
-  color: var(--text-secondary);
-  font-size: 0.74rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.center-header h1 {
+.page-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
   margin: 0;
-  color: var(--text-primary);
-  font-size: 2rem;
 }
 
-.center-desc {
-  margin: 10px 0 0;
-  max-width: 52rem;
+.page-subtitle {
+  font-size: 13px;
   color: var(--text-secondary);
-  line-height: 1.7;
+  margin: 6px 0 0;
 }
 
-.center-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+/* 筛选栏 */
+.filters-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 32px;
+  margin-top: 16px;
+  border-bottom: 1px solid var(--border-default);
+  flex-shrink: 0;
+  gap: 16px;
 }
 
-.center-tab {
-  display: grid;
+.tab-group {
+  display: flex;
   gap: 4px;
-  padding: 16px 18px;
-  border: 0;
-  border-radius: 20px;
-  text-align: left;
-  background: var(--bg-panel);
-  box-shadow: inset 0 0 0 1px var(--border-default);
+}
+
+.tab-btn {
+  padding: 7px 14px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: none;
   color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
-.center-tab strong {
+.tab-btn:hover {
   color: var(--text-primary);
-  font-size: 1rem;
+  background: var(--bg-panel);
 }
 
-.center-tab span {
-  font-size: 0.82rem;
+.tab-btn.active {
+  color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb), 0.1);
+  border-color: rgba(var(--color-primary-rgb), 0.2);
 }
 
-.center-tab.is-active {
-  background: color-mix(in oklab, var(--color-secondary) 10%, var(--bg-panel));
+/* 内容面板 */
+.center-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px 32px;
 }
 
-@media (max-width: 860px) {
-  .center-page {
-    padding: 12px;
+@media (max-width: 768px) {
+  .page-header {
+    padding: 16px 20px 0;
   }
 
-  .center-tabs {
-    grid-template-columns: 1fr;
+  .filters-bar {
+    padding: 12px 20px;
+  }
+
+  .center-panel {
+    padding: 16px 20px;
   }
 }
 </style>

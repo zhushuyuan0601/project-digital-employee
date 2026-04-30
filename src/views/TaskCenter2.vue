@@ -6,441 +6,422 @@
       :all-connected="allConnected"
       :any-connected="anyConnected"
       :is-light="isLight"
+      :timestamp-text="timestampText"
+      :current-user="currentUserLabel"
       @toggle-theme="toggleTheme"
       @connect-all="handleConnectAll"
       @disconnect-all="handleDisconnectAll"
       @reset="handleReset"
     />
 
-    <section class="workspace-hero">
-      <div class="workspace-hero__copy">
-        <p class="workspace-kicker">Task Dispatch / Execution / Review</p>
-        <h1>任务指挥中心 II</h1>
-        <p class="workspace-desc">把任务派发、执行会话和产出审阅拆成连续工作流，降低一个页面承载多种职责的复杂度。</p>
-      </div>
-      <div class="workspace-hero__stats">
-        <article class="workspace-stat-card">
-          <span class="workspace-stat-card__label">在线 Agent</span>
-          <strong>{{ connectedAgentCount }}/{{ agentList.length }}</strong>
-          <small>{{ busyAgentCount }} 个正在执行</small>
-        </article>
-        <article class="workspace-stat-card">
-          <span class="workspace-stat-card__label">Claude 会话</span>
-          <strong>{{ claudeCodeSessions.length }}</strong>
-          <small>代码执行与协同窗口</small>
-        </article>
-        <article class="workspace-stat-card">
-          <span class="workspace-stat-card__label">待审成果</span>
-          <strong>{{ totalOutputCount }}</strong>
-          <small>{{ pendingReviewCount }} 个新增文件待关注</small>
-        </article>
-      </div>
-    </section>
-
-    <div class="workspace-tabs">
-      <button
-        v-for="stage in workspaceStages"
-        :key="stage.key"
-        type="button"
-        class="workspace-tab"
-        :class="{ 'is-active': activeStage === stage.key }"
-        @click="setStage(stage.key)"
-      >
-        <strong>{{ stage.label }}</strong>
-        <span>{{ stage.meta }}</span>
-      </button>
-    </div>
-
-    <div v-if="activeStage === 'review'" class="review-layout">
-      <aside class="review-sidebar">
-        <div class="review-sidebar__header">
-          <div>
-            <p class="workspace-kicker">Output Library</p>
-            <h3>成果资产库</h3>
-          </div>
-          <span>{{ totalOutputCount }} 份文件</span>
-        </div>
-
-        <div v-if="outputReviewGroups.length === 0" class="review-empty">
-          暂无可审阅成果
-        </div>
-
-        <div
-          v-for="group in outputReviewGroups"
-          :key="group.id"
-          class="review-group"
-        >
-          <div class="review-group__header">
-            <strong>{{ group.name }}</strong>
-            <span>{{ group.files.length }} 项</span>
-          </div>
-          <button
-            v-for="file in group.files"
-            :key="reviewFileKey(file)"
-            type="button"
-            class="review-file"
-            :class="{ 'is-active': selectedReviewAgentId === group.id && reviewSelectionKey === reviewFileKey(file) }"
-            @click="inspectReviewFile(group.id, file)"
-          >
-            <i :class="getFileIcon(file.name)"></i>
-            <span>{{ file.name }}</span>
-            <small>{{ file.mtimeStr || group.role }}</small>
-          </button>
-        </div>
-      </aside>
-
-      <section class="review-preview">
-        <div class="review-preview__header">
-          <div>
-            <p class="workspace-kicker">Output Review</p>
-            <h3>{{ previewFileItem?.name || '选择成果开始审阅' }}</h3>
-          </div>
-          <span class="review-preview__meta">{{ selectedReviewAgentName }}</span>
-        </div>
-
-        <div class="review-preview__body">
-          <div v-if="previewLoading" class="preview-loading">
-            <el-icon class="is-loading"><Loading /></el-icon>
-            <span>加载文件中...</span>
-          </div>
-          <div v-else-if="previewError" class="preview-error">
-            <el-icon><Warning /></el-icon>
-            <span>{{ previewError }}</span>
-          </div>
-          <div v-else-if="previewFileItem" class="preview-content preview-content--inline">
-            <div v-if="previewContent.type === 'markdown'" class="markdown-rendered" v-html="renderPreviewContent()"></div>
-            <pre v-else-if="previewContent.type === 'text'" v-html="escapeHtml(previewContent.content)"></pre>
-            <div v-else-if="previewContent.type === 'html'" v-html="previewContent.content"></div>
-            <div v-else class="preview-unsupported">
-              <el-icon><Document /></el-icon>
-              <p>该文件类型暂不支持在线预览</p>
-              <p class="hint">{{ previewFileItem?.name }}</p>
-              <el-button type="primary" @click="downloadFile">下载文件</el-button>
+    <div class="main-container">
+      <!-- 左侧面板 -->
+      <aside class="left-panel">
+        <!-- 活跃任务 -->
+        <section class="panel task-list-panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <i class="ri-list-check-2"></i>
+              <span>活跃任务</span>
             </div>
+            <span class="panel-badge">{{ missionCards.length }}</span>
           </div>
-          <div v-else class="empty-state">
-            <i class="ri-folder-open-line"></i>
-            <span>从左侧成果列表中选择文件开始审阅</span>
-          </div>
-        </div>
-      </section>
-    </div>
-
-    <div v-else class="workspace-layout">
-      <aside v-if="activeStage === 'dispatch'" class="dispatch-sidebar">
-        <div class="panel-header">
-          <div class="panel-title">
-            <span>ACTIVE AGENTS</span>
-            <strong>{{ agentList.length }}</strong>
-          </div>
-        </div>
-
-        <div class="agent-list">
-          <el-popover
-            v-for="agent in agentList"
-            :key="agent.id"
-            trigger="hover"
-            placement="right-start"
-            :width="320"
-            :show-after="300"
-            :hide-after="0"
-            popper-class="agent-tip-popper"
-          >
-            <template #reference>
-              <TaskAgentCard
-                :name="agent.name"
-                :role="agent.role"
-                :desc="agent.desc"
-                :tags="agent.tags"
-                :icon-src="getAgentIcon(agent.id)"
-                :active="selectedAgent === agent.id"
-                :status-class="getAgentStatus(agent.id)"
-                :status-text="getAgentStatusText(agent.id)"
-                :message-count="agents[agent.id]?.messages.length || 0"
-                @click="selectAgent(agent.id)"
-              />
-            </template>
-            <div class="agent-tip-card">
-              <div class="agent-tip-header">
-                <img class="agent-tip-avatar" :src="getAgentIcon(agent.id)" :alt="agent.name" />
-                <div class="agent-tip-title">
-                  <div class="agent-tip-name">{{ agent.name }}</div>
-                  <div class="agent-tip-role">{{ getAgentRole(agent.id) }}</div>
-                </div>
-                <div class="status-badge-mini" :class="getAgentStatus(agent.id)">
-                  <i :class="getAgentStatusIcon(agent.id)"></i>
-                  {{ getAgentStatusText(agent.id) }}
-                </div>
+          <div class="panel-content">
+            <div
+              v-for="mission in missionCards"
+              :key="mission.id"
+              class="list-item"
+              :class="{ active: selectedAgent === mission.agentId }"
+              @click="selectAgent(mission.agentId)"
+            >
+              <div class="list-item__icon">
+                <i :class="mission.icon"></i>
               </div>
-              <div class="agent-tip-tags">
-                <span class="tag" v-for="tag in agent.tags" :key="tag">{{ tag }}</span>
+              <div class="list-item__info">
+                <div class="list-item__name">{{ mission.title }}</div>
+                <div class="list-item__desc">{{ mission.desc }}</div>
               </div>
-              <div class="agent-tip-desc">{{ agent.desc }}</div>
-              <div class="agent-tip-stats">
-                <div class="agent-tip-stat">
-                  <span class="stat-label">消息</span>
-                  <span class="stat-value">{{ agents[agent.id]?.messages.length || 0 }}</span>
-                </div>
-                <div class="agent-tip-stat">
-                  <span class="stat-label">产出文件</span>
-                  <span class="stat-value">{{ getAgentFiles(agent.id).length }}</span>
-                </div>
-                <div class="agent-tip-stat">
-                  <span class="stat-label">状态</span>
-                  <span class="stat-value">{{ getAgentStatusText(agent.id) }}</span>
-                </div>
-              </div>
-            </div>
-          </el-popover>
-
-          <button
-            v-if="claudeCodeSessions.length > 0"
-            type="button"
-            class="claude-card"
-            :class="{ 'is-active': selectedAgent === 'claude' }"
-            @click="selectAgent('claude')"
-          >
-            <div class="claude-card__header">
-              <div>
-                <strong>ClaudeCode</strong>
-                <span>代码执行者</span>
-              </div>
-              <span class="status-badge-mini busy">执行中</span>
-            </div>
-            <small>{{ claudeCodeSessions.length }} 个活跃会话</small>
-          </button>
-        </div>
-      </aside>
-
-      <aside v-else class="execution-rail">
-        <section class="execution-card">
-          <div class="execution-card__header">
-            <h3>执行对象</h3>
-            <span>{{ currentTargetLabel }}</span>
-          </div>
-          <button
-            v-for="agent in agentList"
-            :key="agent.id"
-            type="button"
-            class="execution-agent"
-            :class="{ 'is-active': selectedAgent === agent.id }"
-            @click="selectAgent(agent.id)"
-          >
-            <div>
-              <strong>{{ agent.name }}</strong>
-              <span>{{ getAgentStatusText(agent.id) }}</span>
-            </div>
-            <small>{{ agents[agent.id]?.messages.length || 0 }} 条消息</small>
-          </button>
-          <button
-            v-if="claudeCodeSessions.length > 0"
-            type="button"
-            class="execution-agent"
-            :class="{ 'is-active': selectedAgent === 'claude' }"
-            @click="selectAgent('claude')"
-          >
-            <div>
-              <strong>ClaudeCode</strong>
-              <span>{{ claudeCodeSessions.length }} 个活跃会话</span>
-            </div>
-            <small>执行编排</small>
-          </button>
-        </section>
-
-        <section class="execution-card">
-          <div class="execution-card__header">
-            <h3>执行摘要</h3>
-            <span>{{ taskElapsedText }}</span>
-          </div>
-          <div class="execution-metrics">
-            <div class="execution-metric">
-              <span>连接覆盖</span>
-              <strong>{{ connectedAgentCount }}/{{ agentList.length }}</strong>
-            </div>
-            <div class="execution-metric">
-              <span>忙碌 Agent</span>
-              <strong>{{ busyAgentCount }}</strong>
-            </div>
-            <div class="execution-metric">
-              <span>成果文件</span>
-              <strong>{{ totalOutputCount }}</strong>
+              <span class="list-item__status" :class="mission.statusClass">{{ mission.status }}</span>
             </div>
           </div>
         </section>
-      </aside>
 
-      <section class="workstage-main">
-        <div v-if="activeStage === 'dispatch'" class="dispatch-brief">
-          <article class="dispatch-brief__card">
-            <span class="dispatch-brief__label">当前派发对象</span>
-            <strong>{{ currentTargetLabel }}</strong>
-            <small>{{ currentTargetMeta }}</small>
-          </article>
-          <article class="dispatch-brief__card">
-            <span class="dispatch-brief__label">连通性</span>
-            <strong>{{ aiStatusText }}</strong>
-            <small>{{ anyConnected ? '可以开始派发任务' : '请先建立 Gateway 连接' }}</small>
-          </article>
-          <article class="dispatch-brief__card">
-            <span class="dispatch-brief__label">成果回流</span>
-            <strong>{{ totalOutputCount }} 份</strong>
-            <small>{{ pendingReviewCount }} 份新增内容待审阅</small>
-          </article>
-        </div>
-
-        <div class="detail-panel">
-          <template v-if="selectedAgent && selectedAgent !== 'claude'">
-            <div class="detail-topbar">
-              <div class="detail-topbar__identity">
-                <img class="detail-topbar-avatar" :src="getAgentIcon(selectedAgent)" :alt="getAgentName(selectedAgent)" />
-                <div>
-                  <div class="detail-topbar-name">{{ getAgentName(selectedAgent) }}</div>
-                  <div class="detail-topbar-role">{{ getAgentRole(selectedAgent) }}</div>
-                </div>
-              </div>
-              <div class="detail-topbar__actions">
-                <el-popover
-                  v-if="currentAgentFiles.length > 0"
-                  trigger="click"
-                  placement="bottom-end"
-                  :width="320"
-                  popper-class="file-list-popper"
+        <!-- 在线 Agent -->
+        <section class="panel agent-list-panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <i class="ri-group-line"></i>
+              <span>在线 Agent</span>
+            </div>
+            <span class="panel-badge">{{ connectedAgentCount }}/{{ agentList.length }}</span>
+          </div>
+          <div class="panel-content">
+            <el-popover
+              v-for="agent in agentList"
+              :key="agent.id"
+              trigger="hover"
+              placement="right-start"
+              :width="320"
+              :show-after="300"
+              :hide-after="0"
+              popper-class="agent-tip-popper"
+            >
+              <template #reference>
+                <div
+                  class="list-item agent-item"
+                  :class="{ active: selectedAgent === agent.id, offline: getAgentStatus(agent.id) === 'offline' }"
+                  @click="selectAgent(agent.id)"
                 >
-                  <template #reference>
-                    <button class="file-tip-btn" :class="{ 'has-new': hasNewFiles(selectedAgent) }">
-                      <i class="ri-folder-zip-line"></i>
-                      <span>{{ currentAgentFiles.length }}</span>
-                      <span v-if="hasNewFiles(selectedAgent)" class="file-red-dot"></span>
-                    </button>
-                  </template>
-                  <div class="file-dropdown">
-                    <div
-                      v-for="file in currentAgentFiles"
-                      :key="reviewFileKey(file)"
-                      class="file-dropdown-item"
-                      @click="previewFile(file)"
-                    >
-                      <i :class="getFileIcon(file.name)"></i>
-                      <span class="file-dropdown-name">{{ file.name }}</span>
-                      <span class="file-dropdown-meta">{{ file.mtimeStr || '' }}</span>
-                    </div>
+                  <div class="agent-avatar">
+                    <img :src="getAgentIcon(agent.id)" :alt="agent.name" />
+                    <div class="agent-status-dot" :class="getAgentStatus(agent.id)"></div>
                   </div>
-                </el-popover>
-                <div class="status-badge-mini" :class="getAgentStatus(selectedAgent)">
-                  <i :class="getAgentStatusIcon(selectedAgent)"></i>
+                  <div class="list-item__info">
+                    <div class="list-item__name">
+                      {{ agent.name }}
+                      <i v-if="agent.id === 'xiaomu'" class="ri-verified-badge-fill" style="color: var(--color-primary); font-size: 14px;"></i>
+                    </div>
+                    <div class="list-item__desc">{{ agent.role }}</div>
+                  </div>
+                </div>
+              </template>
+              <div class="agent-tip-card">
+                <div class="agent-tip-header">
+                  <img class="agent-tip-avatar" :src="getAgentIcon(agent.id)" :alt="agent.name" />
+                  <div class="agent-tip-title">
+                    <div class="agent-tip-name">{{ agent.name }}</div>
+                    <div class="agent-tip-role">{{ getAgentRole(agent.id) }}</div>
+                  </div>
+                  <div class="status-badge-mini" :class="getAgentStatus(agent.id)">
+                    <i :class="getAgentStatusIcon(agent.id)"></i>
+                    {{ getAgentStatusText(agent.id) }}
+                  </div>
+                </div>
+                <div class="agent-tip-tags">
+                  <span class="tag" v-for="tag in agent.tags" :key="tag">{{ tag }}</span>
+                </div>
+                <div class="agent-tip-desc">{{ agent.desc }}</div>
+                <div class="agent-tip-stats">
+                  <div class="agent-tip-stat">
+                    <span class="stat-label">消息</span>
+                    <span class="stat-value">{{ agents[agent.id]?.messages.length || 0 }}</span>
+                  </div>
+                  <div class="agent-tip-stat">
+                    <span class="stat-label">产出文件</span>
+                    <span class="stat-value">{{ getAgentFiles(agent.id).length }}</span>
+                  </div>
+                  <div class="agent-tip-stat">
+                    <span class="stat-label">状态</span>
+                    <span class="stat-value">{{ getAgentStatusText(agent.id) }}</span>
+                  </div>
+                </div>
+              </div>
+            </el-popover>
+
+            <div
+              v-if="claudeCodeSessions.length > 0"
+              class="list-item agent-item claude-item"
+              :class="{ active: selectedAgent === 'claude' }"
+              @click="selectAgent('claude')"
+            >
+              <div class="agent-avatar claude-avatar">
+                <i class="ri-robot-line"></i>
+                <div class="agent-status-dot busy"></div>
+              </div>
+              <div class="list-item__info">
+                <div class="list-item__name">ClaudeCode</div>
+                <div class="list-item__desc">{{ claudeCodeSessions.length }} 个活跃会话</div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </aside>
+
+      <!-- 中间面板：对话区域 -->
+      <section class="panel middle-panel">
+        <template v-if="selectedAgent && selectedAgent !== 'claude'">
+          <div class="chat-header">
+            <div class="chat-header__agent">
+              <div class="agent-avatar agent-avatar--sm">
+                <img :src="getAgentIcon(selectedAgent)" :alt="getAgentName(selectedAgent)" />
+                <div class="agent-status-dot" :class="getAgentStatus(selectedAgent)"></div>
+              </div>
+              <div>
+                <div class="chat-header__name">{{ getAgentName(selectedAgent) }}</div>
+                <div class="chat-header__status">
+                  <span class="status-dot-sm" :class="getAgentStatus(selectedAgent)"></span>
                   {{ getAgentStatusText(selectedAgent) }}
                 </div>
               </div>
             </div>
-
-            <div class="detail-content">
-              <TaskMessagePanel
-                v-model="taskInput"
-                :messages="currentAgentMessages"
-                :agent-name="getAgentName(selectedAgent)"
-                :agent-icon="getAgentIcon(selectedAgent)"
-                :connected="selectedAgentConnected"
-                :placeholder="chatInputPlaceholder"
-                @send="sendToSelectedAgent"
-              />
-            </div>
-          </template>
-
-          <template v-else-if="selectedAgent === 'claude'">
-            <div class="detail-topbar">
-              <div class="detail-topbar__identity">
-                <div class="claude-avatar-topbar"><i class="fas fa-robot"></i></div>
-                <div>
-                  <div class="detail-topbar-name">ClaudeCode</div>
-                  <div class="detail-topbar-role">代码执行者</div>
-                </div>
-              </div>
-              <div class="detail-topbar__actions">
-                <span class="detail-topbar-meta">{{ claudeCodeSessions.length }} 个活跃会话</span>
-                <div class="status-badge-mini busy">
-                  <i class="ri-loader-4-line ri-spin"></i>
-                  执行中
-                </div>
-              </div>
-            </div>
-
-            <div class="detail-content">
-              <div class="claude-shell">
-                <div class="claude-session-selector">
-                  <button
-                    v-for="session in claudeCodeSessions"
-                    :key="session.id"
-                    type="button"
-                    class="session-item"
-                    :class="{ active: selectedClaudeSession?.id === session.id }"
-                    @click="selectClaudeSession(session)"
-                  >
-                    <span class="session-model-badge">{{ session.model }}</span>
-                    <span class="session-name">{{ getSessionDisplayName(session) }}</span>
-                    <span class="session-stats">{{ session.tokens }} tokens · {{ session.userMessages }}/{{ session.assistantMessages }}</span>
+            <div class="chat-header__actions">
+              <el-popover
+                v-if="currentAgentFiles.length > 0"
+                trigger="click"
+                placement="bottom-end"
+                :width="320"
+                popper-class="file-list-popper"
+              >
+                <template #reference>
+                  <button class="header-action-btn" :class="{ 'has-new': hasNewFiles(selectedAgent) }">
+                    <i class="ri-folder-zip-line"></i>
+                    <span>{{ currentAgentFiles.length }}</span>
+                    <span v-if="hasNewFiles(selectedAgent)" class="red-dot"></span>
                   </button>
+                </template>
+                <div class="file-dropdown">
+                  <div
+                    v-for="file in currentAgentFiles"
+                    :key="reviewFileKey(file)"
+                    class="file-dropdown-item"
+                    @click="previewFile(file)"
+                  >
+                    <i :class="getFileIcon(file.name)"></i>
+                    <span class="file-dropdown-name">{{ file.name }}</span>
+                    <span class="file-dropdown-meta">{{ file.mtimeStr || '' }}</span>
+                  </div>
                 </div>
+              </el-popover>
+              <button class="header-action-btn" @click="toggleTheme" :title="isLight ? '深色模式' : '浅色模式'">
+                <el-icon><Sunny v-if="isLight" /><Moon v-else /></el-icon>
+              </button>
+            </div>
+          </div>
 
-                <div class="claude-chat-container">
-                  <div class="claude-messages-container" ref="claudeMessagesRef">
-                    <div v-if="claudeTranscriptLoading" class="chat-loading">
-                      <i class="ri-loader-4-line ri-spin"></i> 加载消息中...
-                    </div>
-                    <div v-else-if="claudeTranscript.length === 0" class="empty-state">
-                      <i class="ri-chat-smile-2-line"></i>
-                      <span>暂无消息记录</span>
-                    </div>
-                    <div v-else class="claude-message-stream">
-                      <div
-                        v-for="(msg, idx) in claudeTranscript"
-                        :key="idx"
-                        class="chat-msg"
-                        :class="{ user: msg.role === 'user' }"
-                      >
-                        <div class="msg-avatar">
-                          <i :class="msg.role === 'user' ? 'ri-user-line' : 'ri-robot-line'"></i>
-                        </div>
-                        <div class="msg-bubble">
-                          <template v-for="(part, pidx) in msg.parts" :key="pidx">
-                            <div v-if="part.type === 'text'">{{ part.text }}</div>
-                            <div v-else-if="part.type === 'thinking'" class="msg-thinking"><i class="ri-brain-line"></i> {{ part.thinking }}</div>
-                            <div v-else-if="part.type === 'tool_use'" class="msg-tool"><i class="ri-tools-line"></i> {{ part.name }}</div>
-                          </template>
-                        </div>
+          <div class="detail-content">
+            <TaskMessagePanel
+              v-model="taskInput"
+              :messages="currentAgentMessages"
+              :agent-name="getAgentName(selectedAgent)"
+              :agent-icon="getAgentIcon(selectedAgent)"
+              :connected="selectedAgentConnected"
+              :placeholder="chatInputPlaceholder"
+              @send="sendToSelectedAgent"
+            />
+          </div>
+        </template>
+
+        <template v-else-if="selectedAgent === 'claude'">
+          <div class="chat-header">
+            <div class="chat-header__agent">
+              <div class="agent-avatar agent-avatar--sm claude-avatar">
+                <i class="ri-robot-line"></i>
+                <div class="agent-status-dot busy"></div>
+              </div>
+              <div>
+                <div class="chat-header__name">ClaudeCode</div>
+                <div class="chat-header__status">
+                  <span class="status-dot-sm busy"></span>
+                  执行中 · {{ claudeCodeSessions.length }} 个会话
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="detail-content">
+            <div class="claude-shell">
+              <div class="claude-session-selector">
+                <button
+                  v-for="session in claudeCodeSessions"
+                  :key="session.id"
+                  type="button"
+                  class="session-item"
+                  :class="{ active: selectedClaudeSession?.id === session.id }"
+                  @click="selectClaudeSession(session)"
+                >
+                  <span class="session-model-badge">{{ session.model }}</span>
+                  <span class="session-name">{{ getSessionDisplayName(session) }}</span>
+                  <span class="session-stats">{{ session.tokens }} tokens</span>
+                </button>
+              </div>
+
+              <div class="claude-chat-container">
+                <div class="claude-messages-container" ref="claudeMessagesRef">
+                  <div v-if="claudeTranscriptLoading" class="chat-loading">
+                    <i class="ri-loader-4-line ri-spin"></i> 加载消息中...
+                  </div>
+                  <div v-else-if="claudeTranscript.length === 0" class="empty-state">
+                    <i class="ri-chat-smile-2-line"></i>
+                    <span>暂无消息记录</span>
+                  </div>
+                  <div v-else class="claude-message-stream">
+                    <div
+                      v-for="(msg, idx) in claudeTranscript"
+                      :key="idx"
+                      class="chat-msg"
+                      :class="{ user: msg.role === 'user' }"
+                    >
+                      <div class="msg-avatar">
+                        <i :class="msg.role === 'user' ? 'ri-user-line' : 'ri-robot-line'"></i>
+                      </div>
+                      <div class="msg-bubble">
+                        <template v-for="(part, pidx) in msg.parts" :key="pidx">
+                          <div v-if="part.type === 'text'">{{ part.text }}</div>
+                          <div v-else-if="part.type === 'thinking'" class="msg-thinking"><i class="ri-brain-line"></i> {{ part.thinking }}</div>
+                          <div v-else-if="part.type === 'tool_use'" class="msg-tool"><i class="ri-tools-line"></i> {{ part.name }}</div>
+                        </template>
                       </div>
                     </div>
                   </div>
+                </div>
 
-                  <div class="claude-input-area">
-                    <input
-                      v-model="claudeInputMessage"
-                      type="text"
-                      placeholder="输入消息发送到 ClaudeCode..."
-                      class="claude-input"
-                      @keydown.enter="sendClaudeMessage"
-                      :disabled="claudeSending"
-                    />
-                    <button
-                      type="button"
-                      class="send-btn"
-                      @click="sendClaudeMessage"
-                      :disabled="!claudeInputMessage.trim() || claudeSending"
-                    >
-                      {{ claudeSending ? '...' : '发送' }}
-                    </button>
-                  </div>
-                  <div v-if="claudeSendError" class="send-error">{{ claudeSendError }}</div>
+                <div class="claude-input-area">
+                  <input
+                    v-model="claudeInputMessage"
+                    type="text"
+                    placeholder="输入消息发送到 ClaudeCode..."
+                    class="claude-input"
+                    @keydown.enter="sendClaudeMessage"
+                    :disabled="claudeSending"
+                  />
+                  <button
+                    type="button"
+                    class="send-btn"
+                    @click="sendClaudeMessage"
+                    :disabled="!claudeInputMessage.trim() || claudeSending"
+                  >
+                    {{ claudeSending ? '...' : '发送' }}
+                  </button>
+                </div>
+                <div v-if="claudeSendError" class="send-error">{{ claudeSendError }}</div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <div v-else class="empty-state">
+          <i class="ri-arrow-left-line"></i>
+          <span>请先选择一个执行对象</span>
+        </div>
+      </section>
+
+      <!-- 右侧面板 -->
+      <aside class="right-panel">
+        <!-- 执行状态 -->
+        <section class="panel execution-panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <i class="ri-radar-line"></i>
+              <span>执行状态</span>
+            </div>
+            <span class="panel-badge">{{ connectedAgentCount }}/{{ agentList.length }}</span>
+          </div>
+          <div class="panel-content">
+            <div class="execution-metrics">
+              <div class="execution-metric">
+                <span>连接覆盖</span>
+                <strong>{{ connectedAgentCount }}/{{ agentList.length }}</strong>
+              </div>
+              <div class="execution-metric">
+                <span>忙碌 Agent</span>
+                <strong>{{ busyAgentCount }}</strong>
+              </div>
+              <div class="execution-metric">
+                <span>执行时长</span>
+                <strong>{{ taskElapsedText }}</strong>
+              </div>
+            </div>
+            <div class="status-timeline">
+              <div
+                v-for="item in commandTimeline"
+                :key="item.id"
+                class="timeline-item"
+                :class="[item.state, { active: item.state === 'active', completed: item.state === 'completed' }]"
+              >
+                <span class="timeline-dot"></span>
+                <div class="timeline-time">{{ item.time }}</div>
+                <div class="timeline-content">
+                  <strong>{{ item.title }}</strong>
+                  <p>{{ item.desc }}</p>
                 </div>
               </div>
             </div>
-          </template>
-
-          <div v-else class="empty-state">
-            <i class="ri-arrow-left-line"></i>
-            <span>请先选择一个执行对象</span>
           </div>
-        </div>
-      </section>
+        </section>
+
+        <!-- 成果资产 -->
+        <section class="panel output-panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <i class="ri-folder-open-line"></i>
+              <span>成果资产</span>
+            </div>
+            <span class="panel-badge">{{ totalOutputCount }}</span>
+          </div>
+          <div class="panel-content">
+            <div v-if="outputReviewGroups.length === 0" class="review-empty">
+              暂无可审阅成果
+            </div>
+
+            <div
+              v-for="group in outputReviewGroups"
+              :key="group.id"
+              class="review-group"
+            >
+              <div class="review-group__header">
+                <strong>{{ group.name }}</strong>
+                <span>{{ group.files.length }} 项</span>
+              </div>
+              <button
+                v-for="file in group.files"
+                :key="reviewFileKey(file)"
+                type="button"
+                class="review-file"
+                :class="{ 'is-active': selectedReviewAgentId === group.id && reviewSelectionKey === reviewFileKey(file) }"
+                @click="inspectReviewFile(group.id, file)"
+              >
+                <i :class="getFileIcon(file.name)"></i>
+                <span>{{ file.name }}</span>
+                <small>{{ file.mtimeStr || group.role }}</small>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 文件预览 -->
+        <section class="panel preview-panel">
+          <div class="panel-header">
+            <div class="panel-title">
+              <i class="ri-file-search-line"></i>
+              <span>{{ previewFileItem?.name || '文件预览' }}</span>
+            </div>
+            <button
+              v-if="previewFileItem"
+              type="button"
+              class="header-action-btn"
+              @click="showPreviewDialog = true"
+            >
+              <i class="ri-fullscreen-line"></i>
+            </button>
+          </div>
+
+          <div class="panel-content preview-content-area">
+            <div v-if="previewLoading" class="preview-loading">
+              <el-icon class="is-loading"><Loading /></el-icon>
+              <span>加载文件中...</span>
+            </div>
+            <div v-else-if="previewError" class="preview-error">
+              <el-icon><Warning /></el-icon>
+              <span>{{ previewError }}</span>
+            </div>
+            <div v-else-if="previewFileItem" class="preview-content preview-content--inline">
+              <div v-if="previewContent.type === 'markdown'" class="markdown-rendered" v-html="renderPreviewContent()"></div>
+              <pre v-else-if="previewContent.type === 'text'" v-html="escapeHtml(previewContent.content)"></pre>
+              <div v-else-if="previewContent.type === 'html'" v-html="sanitizeHtml(previewContent.content)"></div>
+              <div v-else class="preview-unsupported">
+                <el-icon><Document /></el-icon>
+                <p>该文件类型暂不支持在线预览</p>
+                <p class="hint">{{ previewFileItem?.name }}</p>
+                <el-button type="primary" @click="downloadFile">下载文件</el-button>
+              </div>
+            </div>
+            <div v-else class="empty-state">
+              <i class="ri-folder-open-line"></i>
+              <span>选择成果文件开始审阅</span>
+            </div>
+          </div>
+        </section>
+      </aside>
     </div>
 
     <el-dialog
@@ -461,7 +442,7 @@
         <div v-else class="preview-content">
           <div v-if="previewContent.type === 'markdown'" class="markdown-rendered" v-html="renderPreviewContent()"></div>
           <pre v-else-if="previewContent.type === 'text'" v-html="escapeHtml(previewContent.content)"></pre>
-          <div v-else-if="previewContent.type === 'html'" v-html="previewContent.content"></div>
+          <div v-else-if="previewContent.type === 'html'" v-html="sanitizeHtml(previewContent.content)"></div>
           <div v-else class="preview-unsupported">
             <el-icon><Document /></el-icon>
             <p>该文件类型暂不支持在线预览</p>
@@ -476,18 +457,16 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, Loading, Warning } from '@element-plus/icons-vue'
+import { Document, Loading, Moon, Sunny, Warning } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
-import TaskAgentCard from '@/components/task-center/TaskAgentCard.vue'
+import { sanitizeHtml } from '@/utils/sanitize'
 import TaskControlBar from '@/components/task-center/TaskControlBar.vue'
 import TaskMessagePanel from '@/components/task-center/TaskMessagePanel.vue'
 import { AGENT_CONFIG } from '@/simulation'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
 import { useThemeStore } from '@/stores/theme'
-
-type WorkspaceStage = 'dispatch' | 'execution' | 'review'
+import { useAuthStore } from '@/stores/auth'
 
 interface AgentFile {
   name: string
@@ -498,21 +477,14 @@ interface AgentFile {
   mtimeStr?: string
 }
 
-const route = useRoute()
-const router = useRouter()
 const multiAgentStore = useMultiAgentChatStore()
 const themeStore = useThemeStore()
+const authStore = useAuthStore()
 const md = new MarkdownIt({
   html: false,
   linkify: true,
   typographer: true,
 })
-
-const workspaceStages = [
-  { key: 'dispatch', label: '任务创建 / 派发', meta: '选择执行对象、建立上下文并发送指令' },
-  { key: 'execution', label: '执行会话', meta: '跟踪 Agent 与 ClaudeCode 的执行链路' },
-  { key: 'review', label: '产出审阅', meta: '集中查看文档、代码与阶段性成果' },
-] as const
 
 const agentList = [
   { id: 'xiaomu', name: '小呦', role: '项目统筹', desc: '项目统筹与任务协调，负责分配任务给其他 Agent 并跟踪进度。', tags: ['项目管理', '任务分配', '进度跟踪'] },
@@ -534,17 +506,16 @@ const aiStatus = ref<'connected' | 'disconnected' | 'error'>('connected')
 const taskInput = ref('')
 const selectedAgent = ref<string | null>(null)
 const selectedReviewAgentId = ref<string | null>(null)
-const showPreviewDialog = ref(false)
 const previewFileItem = ref<AgentFile | null>(null)
+const previewContent = ref<{ type: string; content: string }>({ type: '', content: '' })
 const previewLoading = ref(false)
 const previewError = ref<string | null>(null)
-const previewContent = ref({ type: '', content: '' })
-const taskStartTime = ref(0)
-const taskEndTime = ref(0)
+const showPreviewDialog = ref(false)
 const fileCache = ref<Record<string, { files: AgentFile[]; timestamp: number }>>({})
 const fileChangeCount = ref<Record<string, number>>({})
-const forceRefresh = ref(0)
-
+const taskStartTime = ref<number>(0)
+const taskEndTime = ref<number>(0)
+const currentTimeMs = ref(Date.now())
 const claudeCodeSessions = ref<any[]>([])
 const selectedClaudeSession = ref<any>(null)
 const claudeTranscript = ref<any[]>([])
@@ -553,37 +524,35 @@ const claudeInputMessage = ref('')
 const claudeSending = ref(false)
 const claudeSendError = ref('')
 const claudeMessagesRef = ref<HTMLElement | null>(null)
+
+let clockTimer: ReturnType<typeof setInterval> | null = null
 let claudeCodePollInterval: ReturnType<typeof setInterval> | null = null
-
-const lastMessageTime = ref<Record<string, number>>({
-  xiaomu: 0,
-  xiaoyan: 0,
-  xiaochan: 0,
-  xiaokai: 0,
-  xiaoce: 0,
-})
-
-const activeStage = computed<WorkspaceStage>(() => {
-  const stage = route.query.stage
-  if (stage === 'execution' || stage === 'review') {
-    return stage
-  }
-  return 'dispatch'
-})
+let fileRefreshTimer: ReturnType<typeof setInterval> | null = null
 
 const agents = computed(() => multiAgentStore.agents)
-const allConnected = computed(() => multiAgentStore.allConnected)
-const anyConnected = computed(() => multiAgentStore.anyConnected)
 const isLight = computed(() => themeStore.isLight)
+const lastMessageTime = ref<Record<string, number>>({})
+
+const connectedAgentCount = computed(() =>
+  agentList.filter(agent => agents.value[agent.id]?.isConnected).length,
+)
+const busyAgentCount = computed(() =>
+  agentList.filter(agent => isAgentBusy(agent.id)).length,
+)
+const anyConnected = computed(() => connectedAgentCount.value > 0)
+const allConnected = computed(() => connectedAgentCount.value === agentList.length)
 const aiStatusText = computed(() => {
-  if (allConnected.value) return '所有 Agent 已连接'
-  if (anyConnected.value) return '部分 Agent 已连接'
-  return '未连接 Gateway'
+  if (aiStatus.value === 'connected') return '节点运行正常'
+  if (aiStatus.value === 'error') return '连接异常'
+  return '未连接'
 })
-const connectedAgentCount = computed(() => agentList.filter(agent => agents.value[agent.id]?.isConnected).length)
+const timestampText = computed(() =>
+  new Date(currentTimeMs.value).toLocaleString('zh-CN', { hour12: false }),
+)
+const currentUserLabel = computed(() => authStore.user?.username || 'Admin')
 const selectedAgentConnected = computed(() => {
   if (!selectedAgent.value || selectedAgent.value === 'claude') return false
-  return agents.value[selectedAgent.value]?.isConnected || false
+  return !!agents.value[selectedAgent.value]?.isConnected
 })
 const currentAgentMessages = computed(() => {
   if (!selectedAgent.value || selectedAgent.value === 'claude') return []
@@ -593,37 +562,35 @@ const currentAgentFiles = computed(() => {
   if (!selectedAgent.value || selectedAgent.value === 'claude') return []
   return getAgentFiles(selectedAgent.value)
 })
-const busyAgentCount = computed(() => agentList.filter(agent => getAgentStatus(agent.id) === 'busy').length)
-const currentTargetLabel = computed(() => {
-  if (selectedAgent.value === 'claude') return 'ClaudeCode'
-  return getAgentName(selectedAgent.value || 'xiaomu')
-})
-const currentTargetMeta = computed(() => {
-  if (selectedAgent.value === 'claude') return '代码执行通道'
-  return getAgentRole(selectedAgent.value || 'xiaomu')
-})
 const chatInputPlaceholder = computed(() => {
-  if (!selectedAgent.value) return '选择一个 Agent 后开始派发任务...'
-  const name = getAgentName(selectedAgent.value)
-  if (selectedAgent.value === 'xiaomu') return `输入任务内容，${name} 将负责拆解分配...`
-  return `向 ${name} 派发指令...`
+  if (!selectedAgent.value) return '请先选择一个 Agent'
+  if (!selectedAgentConnected.value) return `${getAgentName(selectedAgent.value)} 未连接`
+  return `向 ${getAgentName(selectedAgent.value)} 下发任务指令...`
+})
+const totalOutputCount = computed(() =>
+  outputReviewGroups.value.reduce((sum, group) => sum + group.files.length, 0),
+)
+const pendingReviewCount = computed(() => {
+  let count = 0
+  for (const agentId of Object.keys(AGENT_TO_ROLE_ID)) {
+    count += fileChangeCount.value[agentId] || 0
+  }
+  return count
 })
 const outputReviewGroups = computed(() => {
-  void forceRefresh.value
-  return agentList
-    .map(agent => ({
-      id: agent.id,
-      name: agent.name,
-      role: agent.role,
-      files: getAgentFiles(agent.id),
-    }))
-    .filter(group => group.files.length > 0)
+  const groups: { id: string; name: string; role: string; files: AgentFile[] }[] = []
+  for (const agent of agentList) {
+    const files = getAgentFiles(agent.id)
+    if (files.length > 0) {
+      groups.push({ id: agent.id, name: agent.name, role: agent.role, files })
+    }
+  }
+  return groups
 })
-const totalOutputCount = computed(() => outputReviewGroups.value.reduce((sum, group) => sum + group.files.length, 0))
-const pendingReviewCount = computed(() => Object.values(fileChangeCount.value).reduce((sum, count) => sum + count, 0))
-const selectedReviewAgentName = computed(() => {
-  if (!selectedReviewAgentId.value) return '未选择产出主体'
-  return getAgentName(selectedReviewAgentId.value)
+const currentTargetLabel = computed(() => {
+  if (!selectedAgent.value) return '未选择'
+  if (selectedAgent.value === 'claude') return 'ClaudeCode'
+  return getAgentName(selectedAgent.value)
 })
 const reviewSelectionKey = computed(() => reviewFileKey(previewFileItem.value))
 const taskElapsedText = computed(() => {
@@ -633,16 +600,70 @@ const taskElapsedText = computed(() => {
   if (duration < 60) return `${duration}s`
   return `${Math.floor(duration / 60)}m ${duration % 60}s`
 })
+const missionCards = computed(() => [
+  {
+    id: 'xiaomu',
+    agentId: 'xiaomu',
+    title: '任务创建 / 派发',
+    desc: `当前对象 ${getAgentName('xiaomu')}`,
+    icon: 'ri-send-plane-line',
+    status: selectedAgent.value === 'xiaomu' ? '进行中' : taskStartTime.value ? '已准备' : '待处理',
+    statusClass: selectedAgent.value === 'xiaomu' ? 'running' : taskStartTime.value ? 'standby' : 'queued',
+  },
+  {
+    id: 'execution',
+    agentId: selectedAgent.value || 'xiaomu',
+    title: '执行会话',
+    desc: `跟踪 ${busyAgentCount.value} 个忙碌 Agent`,
+    icon: 'ri-pulse-line',
+    status: busyAgentCount.value > 0 ? '执行中' : '待命',
+    statusClass: busyAgentCount.value > 0 ? 'running' : 'standby',
+  },
+  {
+    id: 'review',
+    agentId: selectedAgent.value || 'xiaomu',
+    title: '成果审阅',
+    desc: `${totalOutputCount.value} 份成果已回流`,
+    icon: 'ri-file-list-3-line',
+    status: pendingReviewCount.value > 0 ? '待审阅' : totalOutputCount.value > 0 ? '已同步' : '空',
+    statusClass: pendingReviewCount.value > 0 ? 'queued' : totalOutputCount.value > 0 ? 'standby' : 'muted',
+  },
+])
+const commandTimeline = computed(() => [
+  {
+    id: 'connect',
+    time: anyConnected.value ? '在线' : '离线',
+    title: '连接与握手',
+    desc: anyConnected.value ? `${connectedAgentCount.value} 个 Agent 已建立 Gateway 链路` : '等待建立 Gateway 连接',
+    state: allConnected.value ? 'completed' : anyConnected.value ? 'active' : 'pending',
+  },
+  {
+    id: 'dispatch',
+    time: taskStartTime.value ? new Date(taskStartTime.value).toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '--:--',
+    title: '任务派发',
+    desc: taskStartTime.value ? `当前派发对象：${currentTargetLabel.value}` : '选择 Agent 并下发任务指令',
+    state: taskStartTime.value ? 'completed' : 'pending',
+  },
+  {
+    id: 'execute',
+    time: busyAgentCount.value > 0 ? `${busyAgentCount.value} busy` : 'idle',
+    title: '执行跟踪',
+    desc: selectedAgent.value === 'claude'
+      ? `ClaudeCode 正在处理会话`
+      : `${currentTargetLabel.value} 当前${getAgentStatusText(selectedAgent.value || 'xiaomu')}`,
+    state: busyAgentCount.value > 0 || selectedAgent.value === 'claude' ? 'active' : 'pending',
+  },
+  {
+    id: 'review',
+    time: `${totalOutputCount.value} files`,
+    title: '成果回流',
+    desc: previewFileItem.value ? `正在审阅 ${previewFileItem.value.name}` : '等待选择成果文件进行审阅',
+    state: previewFileItem.value ? 'active' : totalOutputCount.value > 0 ? 'completed' : 'pending',
+  },
+])
 
 function toggleTheme() {
   themeStore.toggle()
-}
-
-function setStage(stage: WorkspaceStage) {
-  router.replace({
-    path: '/task-center-2',
-    query: stage === 'dispatch' ? {} : { stage },
-  })
 }
 
 function selectAgent(agentId: string) {
@@ -703,63 +724,60 @@ function hasNewFiles(agentId: string) {
 function getAgentFiles(agentId: string): AgentFile[] {
   const roleId = AGENT_TO_ROLE_ID[agentId]
   if (!roleId) return []
+  const now = new Date()
+  const dateStr = now.toISOString().split('T')[0]
+  const cacheKey = `files_${agentId}_${dateStr}`
+  return fileCache.value[cacheKey]?.files || []
+}
+
+async function refreshAgentFiles(agentId: string) {
+  const roleId = AGENT_TO_ROLE_ID[agentId]
+  if (!roleId) return
 
   const now = new Date()
   const dateStr = now.toISOString().split('T')[0]
   const cacheKey = `files_${agentId}_${dateStr}`
   const cached = fileCache.value[cacheKey]
-  if (cached && Date.now() - cached.timestamp < 5000) {
-    return cached.files
-  }
+  if (cached && Date.now() - cached.timestamp < 5000) return
 
-  const agent = agents.value[agentId]
-  if (!agent || !agent.messages) return []
+  try {
+    const res = await fetch(`/api/files/role?roleId=${roleId}&date=${dateStr}`)
+    const data = await res.json()
+    if (data.success && data.files) {
+      const newFiles: AgentFile[] = data.files.map((file: any) => ({
+        name: file.name,
+        content: '',
+        type: file.type,
+        path: file.path,
+        gitUrl: file.gitUrl,
+        mtimeStr: file.mtimeStr,
+      }))
 
-  fetch(`/api/files/role?roleId=${roleId}&date=${dateStr}`)
-    .then(res => res.json())
-    .then(data => {
-      if (data.success && data.files) {
-        const newFiles: AgentFile[] = data.files.map((file: any) => ({
-          name: file.name,
-          content: '',
-          type: file.type,
-          path: file.path,
-          gitUrl: file.gitUrl,
-          mtimeStr: file.mtimeStr,
-        }))
-
-        const oldCount = cached?.files.length || 0
-        if (oldCount > 0 && newFiles.length > oldCount) {
-          fileChangeCount.value[agentId] = (fileChangeCount.value[agentId] || 0) + (newFiles.length - oldCount)
-        }
-
-        if (agentId === 'xiaokai' && data.gitUrl && !newFiles.find(file => file.name === '代码仓库')) {
-          newFiles.push({
-            name: '代码仓库',
-            content: '代码已提交到仓库',
-            type: 'text',
-            gitUrl: data.gitUrl,
-          })
-        }
-
-        fileCache.value[cacheKey] = {
-          files: newFiles,
-          timestamp: Date.now(),
-        }
-        forceRefresh.value += 1
-      } else if (Array.isArray(data.files) && data.files.length === 0) {
-        fileCache.value[cacheKey] = {
-          files: [],
-          timestamp: Date.now(),
-        }
-        forceRefresh.value += 1
+      const oldCount = cached?.files.length || 0
+      if (oldCount > 0 && newFiles.length > oldCount) {
+        fileChangeCount.value[agentId] = (fileChangeCount.value[agentId] || 0) + (newFiles.length - oldCount)
       }
-    })
-    .catch(err => {
-      console.error('[TaskCenter2] Fetch files error:', err)
-    })
 
-  return fileCache.value[cacheKey]?.files || []
+      if (agentId === 'xiaokai' && data.gitUrl && !newFiles.find(file => file.name === '代码仓库')) {
+        newFiles.push({
+          name: '代码仓库',
+          content: '代码已提交到仓库',
+          type: 'text',
+          gitUrl: data.gitUrl,
+        })
+      }
+
+      fileCache.value[cacheKey] = { files: newFiles, timestamp: Date.now() }
+    } else if (Array.isArray(data.files) && data.files.length === 0) {
+      fileCache.value[cacheKey] = { files: [], timestamp: Date.now() }
+    }
+  } catch (err) {
+    console.error('[TaskCenter2] Fetch files error:', err)
+  }
+}
+
+async function refreshAllAgentFiles() {
+  await Promise.all(Object.keys(AGENT_TO_ROLE_ID).map(id => refreshAgentFiles(id)))
 }
 
 function reviewFileKey(file?: AgentFile | null) {
@@ -784,13 +802,13 @@ function escapeHtml(content: string) {
 }
 
 function getFileIcon(fileName: string) {
-  if (/\.(md|markdown)$/i.test(fileName)) return 'fas fa-file-code'
-  if (/\.txt$/i.test(fileName)) return 'fas fa-file-alt'
-  if (/\.html?$/i.test(fileName)) return 'fas fa-globe'
-  if (/\.docx?$/i.test(fileName)) return 'fas fa-file-word'
-  if (/\.pptx?$/i.test(fileName)) return 'fas fa-file-powerpoint'
-  if (/\.xlsx?$/i.test(fileName)) return 'fas fa-file-excel'
-  return 'fas fa-file'
+  if (/\.(md|markdown)$/i.test(fileName)) return 'ri-file-code-line'
+  if (/\.txt$/i.test(fileName)) return 'ri-file-text-line'
+  if (/\.html?$/i.test(fileName)) return 'ri-html5-fill'
+  if (/\.docx?$/i.test(fileName)) return 'ri-file-word-line'
+  if (/\.pptx?$/i.test(fileName)) return 'ri-file-ppt-line'
+  if (/\.xlsx?$/i.test(fileName)) return 'ri-file-excel-line'
+  return 'ri-file-line'
 }
 
 function loadPreviewFile(file: AgentFile, openDialog = true) {
@@ -828,17 +846,22 @@ function loadPreviewFile(file: AgentFile, openDialog = true) {
 }
 
 function previewFile(file: AgentFile) {
+  if (selectedAgent.value && selectedAgent.value !== 'claude') {
+    selectedReviewAgentId.value = selectedAgent.value
+    fileChangeCount.value[selectedAgent.value] = 0
+  }
   loadPreviewFile(file, true)
 }
 
 function inspectReviewFile(agentId: string, file: AgentFile) {
   selectedReviewAgentId.value = agentId
+  fileChangeCount.value[agentId] = 0
   loadPreviewFile(file, false)
 }
 
 function downloadFile() {
   if (!previewFileItem.value) return
-  const blob = new Blob([previewFileItem.value.content], { type: 'text/plain' })
+  const blob = new Blob([previewContent.value.content], { type: 'text/plain' })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
@@ -974,23 +997,22 @@ async function sendClaudeMessage() {
   }
 }
 
-watch(
-  () => agents.value,
-  () => {
-    Object.keys(AGENT_TO_ROLE_ID).forEach(agentId => {
+Object.keys(AGENT_TO_ROLE_ID).forEach(agentId => {
+  watch(
+    () => agents.value[agentId]?.messages?.length,
+    () => {
       const agent = agents.value[agentId]
       if (agent?.messages?.length) {
         lastMessageTime.value[agentId] = agent.messages[agent.messages.length - 1].timestamp
       }
-    })
-  },
-  { deep: true, immediate: true },
-)
+    },
+    { immediate: true },
+  )
+})
 
 watch(
-  [activeStage, outputReviewGroups],
-  ([stage, groups]) => {
-    if (stage !== 'review') return
+  outputReviewGroups,
+  (groups) => {
     if (groups.length === 0) {
       selectedReviewAgentId.value = null
       previewFileItem.value = null
@@ -1011,418 +1033,689 @@ watch(
 )
 
 onMounted(() => {
+  authStore.restoreSession()
   multiAgentStore.loadMessages()
   if (!selectedAgent.value) {
     selectedAgent.value = 'xiaomu'
   }
+  clockTimer = setInterval(() => {
+    currentTimeMs.value = Date.now()
+  }, 1000)
   fetchClaudeCodeSessions()
   claudeCodePollInterval = setInterval(fetchClaudeCodeSessions, 5000)
+  refreshAllAgentFiles()
+  fileRefreshTimer = setInterval(refreshAllAgentFiles, 10000)
 })
 
 onUnmounted(() => {
+  if (clockTimer) {
+    clearInterval(clockTimer)
+    clockTimer = null
+  }
   if (claudeCodePollInterval) {
     clearInterval(claudeCodePollInterval)
     claudeCodePollInterval = null
+  }
+  if (fileRefreshTimer) {
+    clearInterval(fileRefreshTimer)
+    fileRefreshTimer = null
   }
 })
 </script>
 
 <style scoped>
 .task-center-2 {
-  display: grid;
-  gap: 18px;
+  display: flex;
+  flex-direction: column;
   height: 100%;
   min-height: 0;
-  padding: 0 16px 16px;
-}
-
-.workspace-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(320px, 0.9fr);
-  gap: 16px;
-  padding: 22px 24px;
-  border-radius: 24px;
-  background:
-    radial-gradient(circle at top left, rgba(99, 102, 241, 0.16), transparent 30%),
-    linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(22, 27, 34, 0.96));
-  border: 1px solid var(--border-default);
-}
-
-.workspace-kicker {
-  margin: 0 0 8px;
-  font-size: 11px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
-}
-
-.workspace-hero h1 {
-  margin: 0;
-  font-size: 30px;
-  color: var(--text-primary);
-}
-
-.workspace-desc {
-  margin: 12px 0 0;
-  max-width: 48rem;
-  line-height: 1.7;
-  color: var(--text-secondary);
-}
-
-.workspace-hero__stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.workspace-stat-card {
-  display: grid;
-  gap: 8px;
-  padding: 16px;
-  border-radius: 18px;
-  background: rgba(15, 23, 42, 0.56);
-  border: 1px solid rgba(148, 163, 184, 0.16);
-}
-
-.workspace-stat-card__label {
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-
-.workspace-stat-card strong {
-  font-size: 28px;
-  color: var(--text-primary);
-}
-
-.workspace-stat-card small {
-  color: var(--text-secondary);
-}
-
-.workspace-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.workspace-tab {
-  display: grid;
-  gap: 4px;
-  padding: 16px 18px;
-  border: 1px solid var(--border-default);
-  border-radius: 18px;
-  background: var(--bg-panel);
-  color: var(--text-secondary);
-  text-align: left;
-  cursor: pointer;
-}
-
-.workspace-tab strong {
-  color: var(--text-primary);
-  font-size: 15px;
-}
-
-.workspace-tab span {
-  font-size: 12px;
-}
-
-.workspace-tab.is-active {
-  border-color: color-mix(in oklab, var(--color-primary) 50%, var(--border-default));
-  background: color-mix(in oklab, var(--color-primary) 10%, var(--bg-panel));
-}
-
-.workspace-layout,
-.review-layout {
-  display: grid;
-  gap: 16px;
-  min-height: 0;
-  flex: 1;
-}
-
-.workspace-layout {
-  grid-template-columns: 320px minmax(0, 1fr);
-}
-
-.review-layout {
-  grid-template-columns: 340px minmax(0, 1fr);
-}
-
-.dispatch-sidebar,
-.execution-rail,
-.review-sidebar,
-.detail-panel,
-.review-preview {
-  min-height: 0;
-  border-radius: 22px;
-  border: 1px solid var(--border-default);
-  background: var(--bg-panel);
   overflow: hidden;
 }
 
-.panel-header,
-.review-sidebar__header,
-.review-preview__header {
+/* 主体布局 */
+.main-container {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  padding: 24px;
+  gap: 24px;
+  background-image:
+    radial-gradient(circle at 50% 0%, rgba(var(--color-primary-rgb), 0.06) 0%, transparent 50%),
+    linear-gradient(rgba(var(--color-primary-rgb), 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--color-primary-rgb), 0.02) 1px, transparent 1px);
+  background-size: auto, 28px 28px, 28px 28px;
+}
+
+/* 左侧面板 */
+.left-panel {
+  width: 25%;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* 中间面板 */
+.middle-panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 右侧面板 */
+.right-panel {
+  width: 25%;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* 面板通用样式 */
+.panel {
+  background: rgba(18, 23, 33, 0.85);
+  border: 1px solid rgba(var(--color-primary-rgb), 0.2);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(10px);
+  position: relative;
+}
+
+.panel::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: linear-gradient(90deg, var(--color-cyan), var(--color-primary));
+  opacity: 0.8;
+  z-index: 1;
+}
+
+.panel-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(var(--color-primary-rgb), 0.12);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  padding: 18px 20px;
-  border-bottom: 1px solid var(--border-default);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .panel-title {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  letter-spacing: 0.12em;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
-.panel-title strong {
-  color: var(--text-primary);
+.panel-title i {
+  color: var(--color-primary);
   font-size: 18px;
-  letter-spacing: normal;
 }
 
-.agent-list,
-.review-sidebar {
-  overflow-y: auto;
-}
-
-.claude-card,
-.execution-agent,
-.review-file {
-  width: 100%;
-  border: 0;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-}
-
-.claude-card {
-  display: grid;
-  gap: 8px;
-  padding: 16px;
-  border-top: 1px solid var(--border-default);
-}
-
-.claude-card__header {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
+.panel-badge {
+  display: inline-flex;
   align-items: center;
-}
-
-.claude-card strong {
-  display: block;
-  color: var(--text-primary);
-}
-
-.claude-card span,
-.claude-card small {
-  color: var(--text-secondary);
-}
-
-.claude-card.is-active {
-  background: rgba(99, 102, 241, 0.12);
-}
-
-.execution-rail {
-  display: grid;
-  gap: 16px;
-  align-content: start;
-  padding: 16px;
-}
-
-.execution-card {
-  display: grid;
-  gap: 12px;
-  padding: 18px;
-  border-radius: 18px;
-  background: rgba(15, 23, 42, 0.52);
-  border: 1px solid rgba(148, 163, 184, 0.14);
-}
-
-.execution-card__header {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-}
-
-.execution-card__header h3,
-.review-sidebar__header h3,
-.review-preview__header h3 {
-  margin: 0;
-  color: var(--text-primary);
-}
-
-.execution-card__header span,
-.review-sidebar__header span,
-.review-preview__meta {
-  color: var(--text-secondary);
+  justify-content: center;
+  min-width: 34px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(var(--color-primary-rgb), 0.12);
+  color: var(--color-secondary);
   font-size: 12px;
+  font-family: var(--font-mono);
 }
 
-.execution-agent {
+.panel-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.task-list-panel,
+.agent-list-panel {
+  flex: 1;
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-  padding: 14px;
-  border-radius: 14px;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* 列表项 */
+.list-item {
+  padding: 12px 16px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-.execution-agent div {
-  display: grid;
-  gap: 2px;
+.list-item:last-child {
+  margin-bottom: 0;
 }
 
-.execution-agent strong {
+.list-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.list-item.active {
+  background: rgba(var(--color-primary-rgb), 0.1);
+  border-color: rgba(var(--color-primary-rgb), 0.2);
+  box-shadow: inset 4px 0 0 var(--color-primary);
+}
+
+.list-item__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(var(--color-primary-rgb), 0.1);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.list-item__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.list-item__name {
+  font-size: 14px;
+  font-weight: 500;
   color: var(--text-primary);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.execution-agent span,
-.execution-agent small {
+.list-item__desc {
+  font-size: 12px;
   color: var(--text-secondary);
 }
 
-.execution-agent.is-active {
-  background: rgba(99, 102, 241, 0.14);
+.list-item__status {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
+.list-item__status.running {
+  color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb), 0.1);
+  border: 1px solid rgba(var(--color-primary-rgb), 0.3);
+}
+
+.list-item__status.standby {
+  color: var(--color-success);
+  background: rgba(46, 160, 67, 0.1);
+  border: 1px solid rgba(46, 160, 67, 0.3);
+}
+
+.list-item__status.queued {
+  color: var(--color-warning);
+  background: rgba(210, 153, 34, 0.1);
+  border: 1px solid rgba(210, 153, 34, 0.3);
+}
+
+.list-item__status.muted {
+  color: var(--text-tertiary);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Agent 头像 */
+.agent-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(30, 41, 59, 0.8);
+  border: 2px solid rgba(var(--color-primary-rgb), 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.agent-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.agent-avatar--sm {
+  width: 32px;
+  height: 32px;
+}
+
+.agent-avatar.claude-avatar {
+  background: rgba(163, 113, 247, 0.15);
+  border-color: rgba(163, 113, 247, 0.3);
+  color: var(--agent-claude);
+  font-size: 18px;
+}
+
+.agent-status-dot {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-success);
+  border: 2px solid rgba(18, 23, 33, 0.9);
+  box-shadow: 0 0 5px var(--color-success);
+}
+
+.agent-status-dot.busy {
+  background: var(--color-warning);
+  box-shadow: 0 0 5px var(--color-warning);
+}
+
+.agent-status-dot.offline {
+  background: var(--color-error);
+  box-shadow: 0 0 5px var(--color-error);
+}
+
+.agent-item.offline {
+  opacity: 0.5;
+}
+
+.claude-item {
+  border-color: rgba(163, 113, 247, 0.2);
+  background: rgba(163, 113, 247, 0.06);
+}
+
+.claude-item.is-active,
+.claude-item.active {
+  background: rgba(163, 113, 247, 0.12);
+  border-color: rgba(163, 113, 247, 0.3);
+  box-shadow: inset 4px 0 0 var(--agent-claude);
+}
+
+/* 中间对话区域 */
+.chat-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid rgba(var(--color-primary-rgb), 0.12);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(var(--color-primary-rgb), 0.03);
+}
+
+.chat-header__agent {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.chat-header__name {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.chat-header__status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-success);
+}
+
+.status-dot-sm {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-success);
+  box-shadow: 0 0 8px var(--color-success);
+}
+
+.status-dot-sm.busy {
+  background: var(--color-warning);
+  box-shadow: 0 0 8px var(--color-warning);
+}
+
+.status-dot-sm.offline {
+  background: var(--color-error);
+  box-shadow: 0 0 8px var(--color-error);
+}
+
+.chat-header__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.header-action-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+  position: relative;
+}
+
+.header-action-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+.header-action-btn.has-new {
+  border-color: rgba(210, 153, 34, 0.4);
+}
+
+.red-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-warning);
+}
+
+.detail-content {
+  flex: 1;
+  min-height: 0;
+}
+
+/* 执行状态面板 */
 .execution-metrics {
   display: grid;
   gap: 10px;
+  margin-bottom: 16px;
 }
 
 .execution-metric {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
   color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .execution-metric strong {
   color: var(--text-primary);
+  font-family: var(--font-mono);
 }
 
-.workstage-main {
+/* 时间线 */
+.status-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  position: relative;
+  padding-left: 20px;
+}
+
+.status-timeline::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 5px;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.timeline-item {
+  position: relative;
+  padding: 0 0 18px 16px;
+}
+
+.timeline-dot {
+  position: absolute;
+  left: -19px;
+  top: 5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  z-index: 2;
+}
+
+.timeline-item.completed .timeline-dot {
+  border-color: var(--color-success);
+  background: var(--color-success);
+  box-shadow: 0 0 8px rgba(46, 160, 67, 0.4);
+}
+
+.timeline-item.active .timeline-dot {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  box-shadow: 0 0 10px rgba(88, 166, 255, 0.45);
+}
+
+.timeline-item.active::before {
+  content: '';
+  position: absolute;
+  left: -23px;
+  top: 1px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(88, 166, 255, 0.16);
+  animation: pulse 2s infinite;
+  z-index: 1;
+}
+
+@keyframes pulse {
+  0% { transform: scale(0.8); opacity: 0.8; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+.timeline-time {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  margin-bottom: 6px;
+}
+
+.timeline-content {
   display: grid;
-  gap: 16px;
-  min-height: 0;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.025);
 }
 
-.dispatch-brief {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+.timeline-content strong {
+  color: var(--text-primary);
+  font-size: 13px;
 }
 
-.dispatch-brief__card {
+.timeline-content p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.timeline-item.active .timeline-content {
+  border-color: rgba(var(--color-primary-rgb), 0.2);
+  background: rgba(var(--color-primary-rgb), 0.05);
+}
+
+/* 成果资产 */
+.review-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.review-group {
   display: grid;
   gap: 8px;
-  padding: 16px 18px;
-  border-radius: 18px;
-  border: 1px solid var(--border-default);
-  background: var(--bg-panel);
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.02);
+  margin-bottom: 12px;
 }
 
-.dispatch-brief__label {
+.review-group:last-child {
+  margin-bottom: 0;
+}
+
+.review-group__header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.review-group__header strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.review-group__header span {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.review-file {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 13px;
+}
+
+.review-file:hover {
+  background: rgba(var(--color-primary-rgb), 0.08);
+}
+
+.review-file.is-active {
+  background: rgba(var(--color-primary-rgb), 0.14);
+}
+
+.review-file small {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+/* 文件预览 */
+.preview-content-area {
+  overflow: auto;
+}
+
+.preview-loading,
+.preview-error,
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 180px;
+  color: var(--text-secondary);
+}
+
+.preview-error {
+  color: var(--color-error);
+}
+
+.preview-content pre {
+  margin: 0;
+  padding: 18px;
+  border-radius: 8px;
+  background: rgba(7, 12, 20, 0.82);
+  color: var(--text-primary);
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 13px;
+}
+
+.markdown-rendered {
+  color: var(--text-primary);
+  line-height: 1.8;
+}
+
+.markdown-rendered :deep(h1),
+.markdown-rendered :deep(h2),
+.markdown-rendered :deep(h3) {
+  margin-top: 0;
+  color: var(--text-primary);
+}
+
+.markdown-rendered :deep(code) {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.markdown-rendered :deep(pre) {
+  padding: 16px;
+  border-radius: 8px;
+  background: rgba(7, 12, 20, 0.82);
+  overflow: auto;
+}
+
+.preview-unsupported {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 48px 24px;
+  color: var(--text-secondary);
+}
+
+.preview-unsupported .hint {
   font-size: 12px;
   color: var(--text-tertiary);
 }
 
-.dispatch-brief__card strong {
-  color: var(--text-primary);
-  font-size: 18px;
-}
-
-.dispatch-brief__card small {
-  color: var(--text-secondary);
-}
-
-.detail-panel {
-  display: flex;
-  flex-direction: column;
-}
-
-.detail-topbar {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: center;
-  padding: 18px 20px;
-  border-bottom: 1px solid var(--border-default);
-}
-
-.detail-topbar__identity,
-.detail-topbar__actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.detail-topbar-avatar,
-.claude-avatar-topbar {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  background: rgba(99, 102, 241, 0.12);
-  color: var(--text-primary);
-}
-
-.detail-topbar-avatar {
-  object-fit: cover;
-}
-
-.detail-topbar-name {
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.detail-topbar-role,
-.detail-topbar-meta {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.detail-content,
-.review-preview__body,
 .preview-dialog-body {
-  flex: 1;
-  min-height: 0;
+  min-height: 300px;
+  max-height: 70vh;
+  overflow: auto;
 }
 
-.file-tip-btn {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: 0;
-  border-radius: 999px;
-  padding: 8px 12px;
-  background: rgba(99, 102, 241, 0.12);
-  color: var(--text-primary);
-  cursor: pointer;
-}
-
-.file-tip-btn.has-new {
-  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.35);
-}
-
-.file-red-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-warning);
-}
-
+/* 文件下拉 */
 .file-dropdown {
   display: grid;
   gap: 6px;
@@ -1434,16 +1727,18 @@ onUnmounted(() => {
   gap: 10px;
   align-items: center;
   padding: 10px;
-  border-radius: 10px;
+  border-radius: 6px;
   cursor: pointer;
+  transition: background 0.2s;
 }
 
 .file-dropdown-item:hover {
-  background: rgba(99, 102, 241, 0.08);
+  background: rgba(var(--color-primary-rgb), 0.08);
 }
 
 .file-dropdown-name {
   color: var(--text-primary);
+  font-size: 13px;
 }
 
 .file-dropdown-meta {
@@ -1451,9 +1746,10 @@ onUnmounted(() => {
   color: var(--text-tertiary);
 }
 
+/* Claude 会话 */
 .claude-shell {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: 240px minmax(0, 1fr);
   gap: 16px;
   height: 100%;
   padding: 16px;
@@ -1468,17 +1764,18 @@ onUnmounted(() => {
 .session-item {
   display: grid;
   gap: 6px;
-  padding: 14px;
-  border: 1px solid var(--border-default);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.03);
+  padding: 12px;
+  border: 1px solid rgba(163, 113, 247, 0.14);
+  border-radius: 8px;
+  background: rgba(163, 113, 247, 0.06);
   text-align: left;
   cursor: pointer;
+  transition: all 0.2s;
 }
 
 .session-item.active {
-  background: rgba(139, 92, 246, 0.12);
-  border-color: rgba(139, 92, 246, 0.34);
+  background: rgba(163, 113, 247, 0.14);
+  border-color: rgba(163, 113, 247, 0.34);
 }
 
 .session-model-badge {
@@ -1489,6 +1786,7 @@ onUnmounted(() => {
 .session-name {
   color: var(--text-primary);
   font-weight: 600;
+  font-size: 13px;
 }
 
 .session-stats {
@@ -1500,16 +1798,17 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border: 1px solid var(--border-default);
-  border-radius: 16px;
+  border: 1px solid rgba(163, 113, 247, 0.16);
+  border-radius: 8px;
   overflow: hidden;
+  background: rgba(10, 14, 21, 0.88);
 }
 
 .claude-messages-container {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px;
+  padding: 18px;
 }
 
 .claude-message-stream {
@@ -1529,11 +1828,11 @@ onUnmounted(() => {
 .msg-avatar {
   width: 34px;
   height: 34px;
-  border-radius: 10px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(99, 102, 241, 0.12);
+  background: rgba(163, 113, 247, 0.12);
   color: var(--text-primary);
   flex-shrink: 0;
 }
@@ -1541,41 +1840,58 @@ onUnmounted(() => {
 .msg-bubble {
   max-width: 720px;
   padding: 12px 14px;
-  border-radius: 14px;
-  background: rgba(148, 163, 184, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
   color: var(--text-primary);
   line-height: 1.6;
+  font-size: 13px;
+}
+
+.chat-msg.user .msg-bubble {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+  color: white;
 }
 
 .msg-thinking,
 .msg-tool {
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .claude-input-area {
   display: flex;
   gap: 12px;
   padding: 16px;
-  border-top: 1px solid var(--border-default);
+  border-top: 1px solid rgba(163, 113, 247, 0.14);
 }
 
 .claude-input {
   flex: 1;
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
+  border: 1px solid rgba(163, 113, 247, 0.18);
+  border-radius: 6px;
   background: rgba(255, 255, 255, 0.04);
   color: var(--text-primary);
-  padding: 12px 14px;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+.claude-input::placeholder {
+  color: var(--text-muted);
 }
 
 .send-btn {
-  min-width: 88px;
+  min-width: 80px;
   border: 0;
-  border-radius: 12px;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  border-radius: 6px;
+  background: linear-gradient(135deg, var(--agent-claude), #7c3aed);
   color: white;
+  font-size: 13px;
   cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.send-btn:hover {
+  opacity: 0.9;
 }
 
 .send-btn:disabled {
@@ -1589,59 +1905,105 @@ onUnmounted(() => {
   font-size: 12px;
 }
 
-.review-group {
+/* Agent 提示卡片 */
+.agent-tip-card {
   display: grid;
-  gap: 8px;
-  padding: 16px;
-  border-top: 1px solid var(--border-default);
+  gap: 12px;
 }
 
-.review-group__header {
-  display: flex;
-  justify-content: space-between;
+.agent-tip-header {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
 }
 
-.review-group__header strong {
-  color: var(--text-primary);
+.agent-tip-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  object-fit: cover;
 }
 
-.review-group__header span,
-.review-file small {
+.agent-tip-title {
+  min-width: 0;
+}
+
+.agent-tip-name {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.agent-tip-role {
   color: var(--text-secondary);
   font-size: 12px;
 }
 
-.review-file {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  color: var(--text-primary);
-}
-
-.review-file.is-active {
-  background: rgba(99, 102, 241, 0.14);
-}
-
-.review-preview {
+.agent-tip-tags {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
-.review-preview__body {
-  overflow: auto;
-  padding: 20px;
+.tag {
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--text-secondary);
+  font-size: 11px;
 }
 
-.preview-loading,
-.preview-error,
-.empty-state,
-.review-empty {
+.agent-tip-desc {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.agent-tip-stats {
+  display: flex;
+  gap: 16px;
+}
+
+.agent-tip-stat {
+  display: grid;
+  gap: 4px;
+}
+
+.stat-label {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.stat-value {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.status-badge-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  background: rgba(46, 160, 67, 0.1);
+  color: var(--color-success);
+  border: 1px solid rgba(46, 160, 67, 0.2);
+}
+
+.status-badge-mini.busy {
+  color: var(--color-warning);
+  background: rgba(210, 153, 34, 0.1);
+  border-color: rgba(210, 153, 34, 0.2);
+}
+
+.status-badge-mini.offline {
+  color: var(--color-error);
+  background: rgba(220, 38, 38, 0.1);
+  border-color: rgba(220, 38, 38, 0.2);
+}
+
+.chat-loading {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1650,103 +2012,39 @@ onUnmounted(() => {
   color: var(--text-secondary);
 }
 
-.preview-error {
-  color: var(--color-error);
+.output-panel,
+.execution-panel,
+.preview-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
-.preview-content pre {
-  margin: 0;
-  padding: 18px;
-  border-radius: 16px;
-  background: rgba(15, 23, 42, 0.72);
-  color: var(--text-primary);
-  overflow: auto;
-  white-space: pre-wrap;
+/* 滚动条 */
+.panel-content::-webkit-scrollbar,
+.claude-messages-container::-webkit-scrollbar,
+.preview-content-area::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-.markdown-rendered {
-  color: var(--text-primary);
-  line-height: 1.8;
+.panel-content::-webkit-scrollbar-track,
+.claude-messages-container::-webkit-scrollbar-track,
+.preview-content-area::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
 }
 
-.markdown-rendered :deep(h1),
-.markdown-rendered :deep(h2),
-.markdown-rendered :deep(h3) {
-  margin-top: 0;
-  color: var(--text-primary);
+.panel-content::-webkit-scrollbar-thumb,
+.claude-messages-container::-webkit-scrollbar-thumb,
+.preview-content-area::-webkit-scrollbar-thumb {
+  background: rgba(var(--color-primary-rgb), 0.2);
+  border-radius: 3px;
 }
 
-.markdown-rendered :deep(code) {
-  padding: 2px 6px;
-  border-radius: 6px;
-  background: rgba(148, 163, 184, 0.12);
-}
-
-.markdown-rendered :deep(pre) {
-  padding: 16px;
-  border-radius: 16px;
-  background: rgba(15, 23, 42, 0.72);
-  overflow: auto;
-}
-
-.preview-unsupported {
-  display: grid;
-  justify-items: center;
-  gap: 10px;
-  padding: 48px 24px;
-  color: var(--text-secondary);
-}
-
-.status-badge-mini {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  background: rgba(148, 163, 184, 0.12);
-  color: var(--text-tertiary);
-}
-
-.status-badge-mini.idle {
-  color: var(--color-success);
-  background: rgba(46, 160, 67, 0.12);
-}
-
-.status-badge-mini.busy {
-  color: var(--color-warning);
-  background: rgba(245, 158, 11, 0.12);
-}
-
-.status-badge-mini.offline {
-  color: var(--color-error);
-  background: rgba(220, 38, 38, 0.12);
-}
-
-@media (max-width: 1280px) {
-  .workspace-hero {
-    grid-template-columns: 1fr;
-  }
-
-  .workspace-hero__stats {
-    grid-template-columns: 1fr;
-  }
-
-  .workspace-layout,
-  .review-layout,
-  .claude-shell {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 960px) {
-  .workspace-tabs,
-  .dispatch-brief {
-    grid-template-columns: 1fr;
-  }
-
-  .task-center-2 {
-    padding: 0 12px 12px;
-  }
+.panel-content::-webkit-scrollbar-thumb:hover,
+.claude-messages-container::-webkit-scrollbar-thumb:hover,
+.preview-content-area::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--color-primary-rgb), 0.4);
 }
 </style>

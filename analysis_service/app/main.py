@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 from typing import Any
@@ -30,10 +31,11 @@ from .workspace import build_tree, clear_workspace, delete_path, download_file, 
 def create_app() -> FastAPI:
     ensure_roots()
     app = FastAPI(title="Analysis Service", version="1.0.0")
+    cors_origins = os.environ.get("CORS_ORIGIN", "http://localhost:5173").split(",")
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
+        allow_origins=[o.strip() for o in cors_origins],
+        allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )

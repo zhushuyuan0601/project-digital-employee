@@ -449,10 +449,15 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
     })
   }
 
+  const saveTimers: Record<string, ReturnType<typeof setTimeout>> = {}
+
   function saveMessages(agentId: string) {
-    const agent = agents.value[agentId]
-    if (!agent) return
-    localStorage.setItem(`chat_messages_${agentId}`, JSON.stringify(agent.messages))
+    clearTimeout(saveTimers[agentId])
+    saveTimers[agentId] = setTimeout(() => {
+      const agent = agents.value[agentId]
+      if (!agent) return
+      localStorage.setItem(`chat_messages_${agentId}`, JSON.stringify(agent.messages))
+    }, 2000)
   }
 
   function connect(agentId: string) {

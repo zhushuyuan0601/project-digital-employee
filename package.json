@@ -11,10 +11,11 @@
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
+    "@types/dompurify": "^3.0.5",
     "@types/markdown-it": "^14.1.2",
     "@vueuse/core": "^10.7.0",
-    "axios": "^1.6.0",
     "better-sqlite3": "^12.8.0",
+    "dompurify": "^3.4.1",
     "element-plus": "^2.13.4",
     "markdown-it": "^14.1.1",
     "node-fetch": "^3.3.2",

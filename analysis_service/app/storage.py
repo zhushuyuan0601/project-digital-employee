@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 import uuid
 from pathlib import Path
@@ -13,6 +14,8 @@ WORKSPACE_ROOT = Path(settings.workspace_root).resolve()
 FILES_ROOT = WORKSPACE_ROOT / "_files"
 REGISTRY_ROOT = WORKSPACE_ROOT / "_registry"
 FILES_REGISTRY = REGISTRY_ROOT / "files.json"
+
+_SESSION_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$")
 
 
 def ensure_roots() -> None:
@@ -87,7 +90,11 @@ def delete_file_record(file_id: str) -> bool:
 
 def workspace_dir(session_id: str) -> Path:
     safe = (session_id or "default").strip() or "default"
+    if not _SESSION_ID_RE.match(safe):
+        raise ValueError(f"Invalid session_id: must match [a-zA-Z0-9_-], got: {safe!r}")
     target = WORKSPACE_ROOT / safe
+    if not target.resolve().is_relative_to(WORKSPACE_ROOT):
+        raise ValueError(f"session_id resolves outside workspace root")
     target.mkdir(parents=True, exist_ok=True)
     (target / "generated").mkdir(parents=True, exist_ok=True)
     return target

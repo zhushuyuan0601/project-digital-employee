@@ -1,15 +1,12 @@
 <template>
   <div class="configs-page">
     <div class="page-header">
-      <div class="header-left">
-        <h1 class="page-title">
-          <span class="title-icon">⚡</span>
-          CONFIGURATION FILES
-        </h1>
+      <div>
+        <h1 class="page-title">系统配置</h1>
         <span class="page-subtitle">管理系统配置文件</span>
       </div>
-      <button class="btn btn-primary btn-sm" @click="refreshConfig">
-        <span class="btn-icon">⟳</span>
+      <button class="btn btn-primary" @click="refreshConfig">
+        <i class="ri-refresh-line"></i>
         刷新
       </button>
     </div>
@@ -21,10 +18,10 @@
         :class="['config-item', { expanded: config.expanded }]"
       >
         <div class="config-header" @click="toggleConfig(config)">
-          <span class="config-icon">{{ config.icon }}</span>
+          <i :class="config.icon"></i>
           <span class="config-name">{{ config.name }}</span>
           <span class="config-path">{{ config.path }}</span>
-          <span class="config-toggle">▼</span>
+          <i class="ri-arrow-down-s-line config-toggle"></i>
         </div>
         <div v-if="config.expanded" class="config-content">
           <pre class="config-code">{{ config.content }}</pre>
@@ -42,7 +39,7 @@ const configs = ref([
     id: 'openclaw',
     name: '主配置文件',
     path: '~/.openclaw/openclaw.json',
-    icon: '⚙',
+    icon: 'ri-settings-3-line',
     expanded: true,
     content: `{
   "agents": {
@@ -54,8 +51,7 @@ const configs = ref([
     },
     "list": [
       { "id": "main", "model": "alibaba/glm-5" },
-      { "id": "ceo", "model": "alibaba/glm-5" },
-      // ... more agents
+      { "id": "ceo", "model": "alibaba/glm-5" }
     ]
   },
   "gateway": {
@@ -68,7 +64,7 @@ const configs = ref([
     id: 'openclaw-json',
     name: '配置备份',
     path: '~/.openclaw/openclaw.json.bak',
-    icon: '📄',
+    icon: 'ri-file-copy-line',
     expanded: false,
     content: '// 配置备份文件...'
   }
@@ -86,139 +82,126 @@ const refreshConfig = () => {
 
 <style scoped>
 .configs-page {
-  max-width: 1200px;
-  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
-/* ========== 页面头部 ========== */
+/* 页面头部 */
 .page-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: var(--space-6);
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--grid-line);
-}
-
-.header-left {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  align-items: center;
+  padding: 24px 32px 0;
+  flex-shrink: 0;
 }
 
 .page-title {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  font-family: var(--font-display);
-  font-size: var(--text-2xl);
-  font-weight: var(--font-bold);
+  font-size: 22px;
+  font-weight: 700;
   color: var(--text-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
   margin: 0;
 }
 
-.title-icon {
-  color: var(--color-primary);
-  font-size: var(--text-3xl);
-  text-shadow: var(--glow-primary);
-}
-
 .page-subtitle {
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  color: var(--text-tertiary);
-  letter-spacing: 0.05em;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 6px 0 0;
+  display: block;
 }
 
-/* ========== 配置树 ========== */
+/* 配置树 */
 .config-tree {
+  padding: 16px 32px 32px;
+  overflow: auto;
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: 8px;
 }
 
+/* 按钮 */
+.btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  background: var(--color-primary);
+  color: var(--text-inverse);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn:hover {
+  background: var(--color-primary-dark);
+}
+
+.btn i {
+  font-size: 14px;
+}
+
+/* 配置项 */
 .config-item {
   background: var(--bg-panel);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
+  border-radius: 8px;
   overflow: hidden;
-  transition: all var(--transition-base);
-}
-
-.config-item::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--color-primary-dim),
-    transparent
-  );
-  opacity: 0.5;
+  transition: all 0.15s ease;
 }
 
 .config-item:hover {
   border-color: var(--color-primary-dim);
-  box-shadow: var(--shadow-md);
 }
 
 .config-item.expanded {
   border-color: var(--color-primary-dim);
 }
 
-.config-item.expanded::before {
-  opacity: 1;
-}
-
-/* ========== 配置头部 ========== */
+/* 配置头部 */
 .config-header {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
+  gap: 12px;
+  padding: 14px 16px;
   cursor: pointer;
   user-select: none;
-  transition: background var(--transition-fast);
+  transition: background 0.15s ease;
 }
 
 .config-header:hover {
   background: var(--bg-panel-hover);
 }
 
-.config-icon {
-  font-size: var(--text-xl);
-  min-width: 32px;
+.config-header i {
+  color: var(--text-tertiary);
+  font-size: 16px;
+  width: 18px;
   text-align: center;
-  color: var(--color-primary);
 }
 
 .config-name {
   flex: 1;
-  font-family: var(--font-display);
-  font-size: var(--text-sm);
-  font-weight: var(--font-bold);
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
 }
 
 .config-path {
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font-size: 11px;
   color: var(--text-tertiary);
-  letter-spacing: 0.05em;
 }
 
 .config-toggle {
-  font-size: var(--text-xs);
+  font-size: 16px;
   color: var(--text-tertiary);
-  transition: transform var(--transition-base);
+  transition: transform 0.15s ease;
 }
 
 .config-item.expanded .config-toggle {
@@ -226,26 +209,25 @@ const refreshConfig = () => {
   color: var(--color-primary);
 }
 
-/* ========== 配置内容 ========== */
+/* 配置内容 */
 .config-content {
   border-top: 1px solid var(--border-subtle);
   background: var(--bg-base);
 }
 
 .config-code {
-  padding: var(--space-4);
+  padding: 16px;
   margin: 0;
   overflow-x: auto;
   font-family: var(--font-mono);
-  font-size: var(--text-sm);
+  font-size: 12px;
   line-height: 1.6;
   color: var(--text-secondary);
   white-space: pre;
 }
 
-/* 语法高亮模拟 */
 .config-code::-webkit-scrollbar {
-  height: 8px;
+  height: 6px;
 }
 
 .config-code::-webkit-scrollbar-track {
@@ -253,105 +235,17 @@ const refreshConfig = () => {
 }
 
 .config-code::-webkit-scrollbar-thumb {
-  background: var(--terminal-cyan);
-  border-radius: var(--radius-none);
+  background: var(--border-default);
+  border-radius: 3px;
 }
 
-/* ========== 通用按钮样式 ========== */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-5);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  font-weight: var(--font-bold);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  border: 1px solid transparent;
-  white-space: nowrap;
-}
+@media (max-width: 768px) {
+  .page-header {
+    padding: 16px 20px 0;
+  }
 
-.btn-icon {
-  font-size: 1.2em;
-}
-
-.btn-sm {
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-xs);
-}
-
-.btn-primary {
-  background: var(--color-primary-bg);
-  border-color: var(--color-primary-dim);
-  color: var(--color-primary);
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--color-primary);
-  color: var(--text-inverse);
-  box-shadow: var(--glow-primary);
-}
-
-/* ========== 亮色主题样式 ========== */
-:root.light-theme .config-group {
-  background: #ffffff;
-  border-color: #e5e7eb;
-}
-
-:root.light-theme .config-header {
-  border-bottom-color: #f3f4f6;
-}
-
-:root.light-theme .config-title {
-  color: #1e293b;
-}
-
-:root.light-theme .config-description {
-  color: #64748b;
-}
-
-:root.light-theme .config-item {
-  border-color: #f3f4f6;
-}
-
-:root.light-theme .config-label {
-  color: #475569;
-}
-
-:root.light-theme .config-value {
-  color: #1e293b;
-}
-
-:root.light-theme .config-item-description {
-  color: #94a3b8;
-}
-
-:root.light-theme .btn-primary {
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  border: none;
-  color: #ffffff;
-}
-
-:root.light-theme .btn-primary:hover:not(:disabled) {
-  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
-}
-
-:root.light-theme .config-code {
-  background: #1f2937;
-  border-color: #374151;
-  color: #e5e7eb;
-}
-
-:root.light-theme .config-code::-webkit-scrollbar-track {
-  background: #1f2937;
-}
-
-:root.light-theme .config-code::-webkit-scrollbar-thumb {
-  background: #4b5563;
+  .config-tree {
+    padding: 12px 20px;
+  }
 }
 </style>

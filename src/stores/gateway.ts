@@ -5,10 +5,18 @@
 
 import { ref, computed, reactive } from 'vue'
 import { defineStore } from 'pinia'
+import { createLogger } from '@/utils/logger'
 import {
   cacheDeviceToken,
   clearDeviceIdentity,
 } from '@/lib/device-identity'
+import type {
+  TickPayload,
+  LogPayload,
+  ChatMessagePayload,
+  ExecApprovalPayload,
+  TokenUsagePayload,
+} from '@/types/gateway'
 import {
   clearGatewayToken as clearStoredGatewayToken,
   getGatewayBaseWsUrl,
@@ -20,6 +28,7 @@ import {
 const PROTOCOL_VERSION = 3
 const PING_INTERVAL_MS = 30000
 const MAX_MISSED_PONGS = 3
+const log = createLogger('Gateway')
 
 /**
  * 获取存储的 Gateway Token
@@ -125,7 +134,7 @@ export const useGatewayStore = defineStore('gateway', () => {
 
     // 检查是否有 token
     if (!token) {
-      console.error('[Gateway] No token available. Please configure Gateway Token.')
+      log.error('No token available. Please configure Gateway Token.')
       connectionError.value = '需要配置 Gateway Token'
       ws.close(4001, 'Token required')
       return
@@ -166,7 +175,7 @@ export const useGatewayStore = defineStore('gateway', () => {
       if (!ws || ws.readyState !== WebSocket.OPEN || !handshakeComplete) return
 
       if (missedPongs >= MAX_MISSED_PONGS) {
-        console.warn('[Gateway] Missed too many pongs, reconnecting...')
+        log.warn('Missed too many pongs, reconnecting...')
         ws.close(4000, 'Heartbeat timeout')
         return
       }
@@ -181,7 +190,7 @@ export const useGatewayStore = defineStore('gateway', () => {
       try {
         ws.send(JSON.stringify(pingFrame))
       } catch (err) {
-        console.error('[Gateway] Ping failed:', err)
+        log.error('Ping failed:', err)
       }
     }, PING_INTERVAL_MS)
   }
@@ -219,12 +228,12 @@ export const useGatewayStore = defineStore('gateway', () => {
 
       // 打印服务端实际授予的 scopes（hello-ok 响应）
       const result = frame.result || frame.payload || {}
-      console.log('[Gateway] 连接握手成功 (hello-ok):', JSON.stringify(result, null, 2))
+      log.info('连接握手成功 (hello-ok):', JSON.stringify(result, null, 2))
       const grantedScopes = result.scopes || result.grantedScopes || result.granted_scopes
       if (grantedScopes) {
-        console.log('[Gateway] 服务端授予的 scopes:', JSON.stringify(grantedScopes))
+        log.info('服务端授予的 scopes:', JSON.stringify(grantedScopes))
         if (!grantedScopes.includes('operator.write')) {
-          console.error('[Gateway] ⚠️ 缺少 operator.write scope！写入操作将被拒绝。请检查 Gateway token 权限。')
+          log.error('⚠️ 缺少 operator.write scope！写入操作将被拒绝。请检查 Gateway token 权限。')
         }
       }
 
@@ -238,7 +247,7 @@ export const useGatewayStore = defineStore('gateway', () => {
     }
 
     // 处理 pong
-    if (frame.type === 'res' && frame.id?.startsWith('ping-')) {
+    if (frame.type === 'res' && frame.id?.startsWith('mc-')) {
       missedPongs = 0
       return
     }
@@ -263,12 +272,12 @@ export const useGatewayStore = defineStore('gateway', () => {
       const errorMsg = frame.error?.message || JSON.stringify(frame.error)
 
       // 忽略 ping 方法的错误（Gateway 可能不支持）
-      if (frame.id?.startsWith('ping-') || errorMsg.includes('unknown method: ping')) {
+      if (frame.id?.startsWith('mc-') || errorMsg.includes('unknown method: ping')) {
         missedPongs = 0 // 重置 missedPongs，避免触发重连
         return
       }
 
-      console.error('[Gateway] Error:', errorMsg)
+      log.error('Error:', errorMsg)
       connectionError.value = errorMsg
 
       // 检查是否需要回退到仅令牌模式
@@ -301,15 +310,16 @@ export const useGatewayStore = defineStore('gateway', () => {
       case 'tick':
         // 会话快照更新
         if (payload?.snapshot?.sessions) {
-          sessions.value = payload.snapshot.sessions.map((session: any, index: number) => ({
+          const tick = payload as TickPayload
+          sessions.value = tick.snapshot.sessions.map((session, index) => ({
             id: session.key || `session-${index}`,
             key: session.key || '',
             kind: session.kind || 'unknown',
-            age: formatAge(session.updatedAt),
+            age: formatAge(session.updatedAt || 0),
             model: session.model || '',
             tokens: `${session.totalTokens || 0}/${session.contextTokens || 0}`,
             flags: session.flags || [],
-            active: isActive(session.updatedAt),
+            active: isActive(session.updatedAt || 0),
             startTime: session.startTime,
             lastActivity: session.updatedAt,
             messageCount: session.messageCount,
@@ -337,14 +347,15 @@ export const useGatewayStore = defineStore('gateway', () => {
       case 'log':
         // 日志消息
         if (payload) {
+          const log = payload as LogPayload
           logs.value.unshift({
-            id: payload.id || `log-${Date.now()}-${Math.random()}`,
-            timestamp: payload.timestamp || Date.now(),
-            level: payload.level || 'info',
-            source: payload.source || 'gateway',
-            session: payload.session,
-            message: payload.message || '',
-            data: payload.extra || payload.data
+            id: log.id || `log-${Date.now()}-${Math.random()}`,
+            timestamp: log.timestamp || Date.now(),
+            level: log.level || 'info',
+            source: log.source || 'gateway',
+            session: log.session,
+            message: log.message || '',
+            data: log.extra || log.data
           })
           // 限制日志数量
           if (logs.value.length > 500) {
@@ -356,16 +367,20 @@ export const useGatewayStore = defineStore('gateway', () => {
       case 'chat.message':
         // 实时聊天消息
         if (payload) {
+          const msg = payload as ChatMessagePayload
           chatMessages.value.push({
-            id: payload.id || `msg-${Date.now()}`,
-            conversation_id: payload.conversation_id,
-            from_agent: payload.from_agent,
-            to_agent: payload.to_agent,
-            content: payload.content,
-            message_type: payload.message_type || 'text',
-            metadata: payload.metadata,
-            created_at: payload.created_at || Math.floor(Date.now() / 1000),
+            id: msg.id || `msg-${Date.now()}`,
+            conversation_id: msg.conversation_id,
+            from_agent: msg.from_agent,
+            to_agent: msg.to_agent,
+            content: msg.content,
+            message_type: msg.message_type || 'text',
+            metadata: msg.metadata,
+            created_at: msg.created_at || Math.floor(Date.now() / 1000),
           })
+          if (chatMessages.value.length > 1000) {
+            chatMessages.value = chatMessages.value.slice(-1000)
+          }
         }
         break
 
@@ -379,32 +394,40 @@ export const useGatewayStore = defineStore('gateway', () => {
       case 'exec.approval':
         // 执行批准请求
         if (payload?.id) {
+          const approval = payload as ExecApprovalPayload
           execApprovals.value.push({
-            id: payload.id,
-            sessionId: payload.sessionKey || payload.sessionId || '',
-            agentName: payload.agentName || payload.agentId,
-            toolName: payload.toolName || payload.name || 'unknown',
-            toolArgs: payload.args || payload.toolArgs || {},
-            command: payload.command,
-            risk: payload.risk || 'medium',
-            createdAt: payload.createdAtMs || payload.createdAt || Date.now(),
+            id: approval.id,
+            sessionId: approval.sessionKey || approval.sessionId || '',
+            agentName: approval.agentName || approval.agentId,
+            toolName: approval.toolName || approval.name || 'unknown',
+            toolArgs: approval.args || approval.toolArgs || {},
+            command: approval.command,
+            risk: approval.risk || 'medium',
+            createdAt: approval.createdAtMs || approval.createdAt || Date.now(),
             status: 'pending'
           })
+          if (execApprovals.value.length > 500) {
+            execApprovals.value = execApprovals.value.slice(-500)
+          }
         }
         break
 
       case 'token_usage':
         // Token 使用统计
         if (payload) {
+          const usage = payload as TokenUsagePayload
           tokenUsage.value.push({
-            model: payload.model,
-            sessionId: payload.sessionId,
+            model: usage.model,
+            sessionId: usage.sessionId,
             date: new Date().toISOString(),
-            inputTokens: payload.inputTokens || 0,
-            outputTokens: payload.outputTokens || 0,
-            totalTokens: payload.totalTokens || 0,
-            cost: payload.cost || 0
+            inputTokens: usage.inputTokens || 0,
+            outputTokens: usage.outputTokens || 0,
+            totalTokens: usage.totalTokens || 0,
+            cost: usage.cost || 0
           })
+          if (tokenUsage.value.length > 1000) {
+            tokenUsage.value = tokenUsage.value.slice(-1000)
+          }
         }
         break
 
@@ -418,6 +441,9 @@ export const useGatewayStore = defineStore('gateway', () => {
           message: payload?.message || `Session context compacted (${payload?.percentage || '?'}% reduced)`,
           created_at: Math.floor(Date.now() / 1000)
         })
+        if (notifications.value.length > 500) {
+          notifications.value = notifications.value.slice(0, 500)
+        }
         break
 
       case 'model.fallback':
@@ -430,6 +456,9 @@ export const useGatewayStore = defineStore('gateway', () => {
           message: payload?.message || `Fell back from ${payload?.from || '?'} to ${payload?.to || '?'}`,
           created_at: Math.floor(Date.now() / 1000)
         })
+        if (notifications.value.length > 500) {
+          notifications.value = notifications.value.slice(0, 500)
+        }
         break
 
       default:
@@ -669,7 +698,7 @@ export const useGatewayStore = defineStore('gateway', () => {
 
     const token = getStoredToken()
     if (!token) {
-      console.error('[Gateway] No token configured')
+      log.error('No token configured')
       connectionError.value = '请先配置 Gateway Token'
       showTokenDialogNeeded()
       return
@@ -692,7 +721,7 @@ export const useGatewayStore = defineStore('gateway', () => {
           const frame = JSON.parse(event.data)
           handleGatewayFrame(frame)
         } catch (err) {
-          console.error('[Gateway] Failed to parse message:', err)
+          log.error('Failed to parse message:', err)
         }
       }
 
@@ -716,12 +745,12 @@ export const useGatewayStore = defineStore('gateway', () => {
       }
 
       ws.onerror = (error) => {
-        console.error('[Gateway] WebSocket error:', error)
+        log.error('WebSocket error:', error)
         connectionError.value = 'WebSocket error'
       }
 
     } catch (err) {
-      console.error('[Gateway] Failed to connect:', err)
+      log.error('Failed to connect:', err)
       isConnecting.value = false
       connectionError.value = 'Failed to initialize connection'
     }

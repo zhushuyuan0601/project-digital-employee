@@ -159,7 +159,13 @@ export async function streamAnalysisChat(
         onChunk({ done: true })
         continue
       }
-      const payload = JSON.parse(data)
+      let payload
+      try {
+        payload = JSON.parse(data)
+      } catch {
+        console.warn('[Analysis] Failed to parse SSE chunk:', data)
+        continue
+      }
       const choice = payload?.choices?.[0]
       const delta = choice?.delta || {}
       onChunk({

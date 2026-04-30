@@ -133,16 +133,24 @@ watch(chatContainer, (element, oldElement) => {
   flex-direction: column;
   min-height: 0;
   height: 100%;
+  background:
+    linear-gradient(180deg, rgba(11, 18, 29, 0.74), rgba(11, 18, 29, 0.9));
 }
 
 .chat-container {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 20px;
+  padding: 22px 24px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
+  background-image:
+    radial-gradient(circle at top left, rgba(var(--color-primary-rgb), 0.08), transparent 24%),
+    linear-gradient(rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0.015)),
+    linear-gradient(90deg, rgba(121, 192, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(rgba(121, 192, 255, 0.03) 1px, transparent 1px);
+  background-size: auto, auto, 28px 28px, 28px 28px;
 }
 
 .chat-empty-hint {
@@ -156,7 +164,8 @@ watch(chatContainer, (element, oldElement) => {
 
 .chat-msg {
   display: flex;
-  gap: 12px;
+  gap: 14px;
+  align-items: flex-start;
 }
 
 .chat-msg.user {
@@ -166,9 +175,10 @@ watch(chatContainer, (element, oldElement) => {
 .msg-avatar {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: 50%;
   overflow: hidden;
-  background: rgba(99, 102, 241, 0.1);
+  background: rgba(var(--color-primary-rgb), 0.12);
+  border: 1px solid rgba(var(--color-primary-rgb), 0.18);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -184,15 +194,19 @@ watch(chatContainer, (element, oldElement) => {
 
 .msg-bubble {
   max-width: 760px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: rgba(148, 163, 184, 0.08);
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(88, 166, 255, 0.08);
+  border: 1px solid rgba(88, 166, 255, 0.12);
   color: var(--text-primary);
   line-height: 1.6;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
 }
 
 .chat-msg.user .msg-bubble {
-  background: rgba(99, 102, 241, 0.14);
+  background: linear-gradient(135deg, rgba(121, 192, 255, 0.92), rgba(49, 130, 206, 0.96));
+  border-color: transparent;
+  color: white;
 }
 
 .msg-time {
@@ -202,34 +216,53 @@ watch(chatContainer, (element, oldElement) => {
 }
 
 .chat-input-bar {
-  border-top: 1px solid var(--border-default);
-  padding: 16px 20px;
+  border-top: 1px solid rgba(var(--color-primary-rgb), 0.14);
+  padding: 18px 20px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  background: rgba(10, 15, 23, 0.95);
 }
 
 .chat-input-row {
   display: flex;
   gap: 12px;
   align-items: flex-end;
+  padding: 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.16);
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .chat-input {
   flex: 1;
 }
 
+.chat-input :deep(.el-textarea__inner) {
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 10px 12px;
+}
+
+.chat-input :deep(.el-textarea__inner::placeholder) {
+  color: var(--text-tertiary);
+}
+
 .dispatch-send-btn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 42px;
-  padding: 0 16px;
+  height: 40px;
+  padding: 0 18px;
   border: 0;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  background: linear-gradient(135deg, var(--color-cyan), var(--color-primary));
   color: white;
   cursor: pointer;
+  box-shadow: 0 8px 22px rgba(88, 166, 255, 0.24);
 }
 
 .dispatch-send-btn:disabled {

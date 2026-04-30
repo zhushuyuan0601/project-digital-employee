@@ -92,7 +92,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           'vendor': ['vue', 'vue-router'],
-          'utils': ['@vueuse/core', 'axios', 'pinia'],
+          'utils': ['@vueuse/core', 'pinia'],
           'element-plus': ['element-plus']
         }
       }

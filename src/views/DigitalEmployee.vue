@@ -304,7 +304,7 @@
           <div v-else class="preview-content">
             <div v-if="previewContent.type === 'markdown' || previewContent.type === 'report' || previewContent.type === 'doc'" class="markdown-rendered" v-html="renderPreviewContent()"></div>
             <pre v-else-if="previewContent.type === 'text'" v-html="escapeHtml(previewContent.content)"></pre>
-            <div v-else-if="previewContent.type === 'html'" v-html="previewContent.content"></div>
+            <div v-else-if="previewContent.type === 'html'" v-html="sanitizeHtml(previewContent.content)"></div>
             <div v-else-if="previewContent.type === 'pdf'" class="pdf-preview">
               <iframe :src="previewContent.content" frameborder="0" width="100%" height="600px"></iframe>
             </div>
@@ -325,11 +325,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import axios from 'axios'
+import { request } from '@/api/base'
 import { useAgentsStore } from '@/stores/agents'
 import { ElMessage } from 'element-plus'
 import { Loading, Warning, Document } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
+import { sanitizeHtml } from '@/utils/sanitize'
 import DigitalEmployeeAgentCard from '@/components/digital-employee/DigitalEmployeeAgentCard.vue'
 import ProjectCard from '@/components/digital-employee/ProjectCard.vue'
 
@@ -698,12 +699,10 @@ const refreshData = async () => {
   refreshing.value = true
   try {
     // 并行获取 dashboard 数据和 activities 数据
-    const [dashboardRes, activitiesRes] = await Promise.all([
-      axios.get('/api/dashboard'),
-      axios.get('/api/activities?hours=24&limit=100')
+    const [data, activitiesData] = await Promise.all([
+      request<any>('/api/dashboard'),
+      request<any>('/api/activities?hours=24&limit=100')
     ])
-
-    const data = dashboardRes.data
 
     // 统计
     stats.value = {
@@ -717,7 +716,6 @@ const refreshData = async () => {
     projects.value = (data.projects || []) as ProjectRecord[]
 
     // 工作记录 - 从 activities API 获取
-    const activitiesData = activitiesRes.data
     if (activitiesData.success && activitiesData.activities) {
       allWorkRecords.value = activitiesData.activities as WorkRecord[]
     } else {

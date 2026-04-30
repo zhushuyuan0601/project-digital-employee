@@ -2,6 +2,7 @@
 // 真实连接模式：实际建立 WebSocket 连接到 Gateway
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { createLogger } from '@/utils/logger'
 import { getAgentDefinition, DEFAULT_GROUP_CHAT_AGENT_IDS } from '@/config/agents'
 import { useGatewayConnection } from '@/composables/useGatewayConnection'
 import {
@@ -33,6 +34,7 @@ export interface TaskMessage {
 
 // 模拟模式开关 - 设置为 false 启用真实连接
 const SIMULATION_MODE = false
+const log = createLogger('TaskGateway')
 
 export const useTaskGatewayStore = defineStore('taskGateway', () => {
   const { settings, resolveSocketUrl, createChallengeResponse } = useGatewayConnection()
@@ -61,6 +63,20 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
 
   // 追踪 pending requests，用于匹配响应
   const pendingRequests = ref<Record<string, { method: string; agentId: string }>>({})
+
+  // 自动重连状态
+  const reconnectTimers: Record<string, ReturnType<typeof setTimeout>> = {}
+  const reconnectBackoff: Record<string, number> = {}
+
+  function scheduleReconnect(agentId: string) {
+    const conn = connections.value[agentId]
+    if (!conn || conn.isConnected || conn.isConnecting) return
+    if (!reconnectBackoff[agentId]) reconnectBackoff[agentId] = 800
+    const delay = reconnectBackoff[agentId]
+    reconnectBackoff[agentId] = Math.min(delay * 1.7, 30000)
+    log.info(`${agentId}: ${delay}ms 后自动重连...`)
+    reconnectTimers[agentId] = setTimeout(() => connectAgent(agentId), delay)
+  }
 
   // Gateway 协议版本（与服务端保持一致）
   const PROTOCOL_VERSION = 3
@@ -110,7 +126,7 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
       try {
         listener(newMessage)
       } catch (e) {
-        console.error('[TaskGateway] Message listener error:', e)
+        log.error('Message listener error:', e)
       }
     })
     return newMessage
@@ -132,19 +148,19 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
     })
     pendingRequests.value[msg.id] = { method: 'connect', agentId }
     conn.ws?.send(JSON.stringify(msg))
-    console.log(`[TaskGateway:${agentId}] 发送连接请求 (protocol v${PROTOCOL_VERSION})`)
+    log.info(agentId, `发送连接请求 (protocol v${PROTOCOL_VERSION})`)
   }
 
   // 发送消息到指定 Agent（模拟模式下直接返回成功）
   function sendMessageToAgent(agentId: string, content: string) {
     if (SIMULATION_MODE) {
-      console.log(`[TaskGateway:${agentId}] 模拟发送消息：${content.substring(0, 50)}...`)
+      log.info(agentId, `模拟发送消息：${content.substring(0, 50)}...`)
       return true
     }
 
     const conn = connections.value[agentId]
     if (!conn.ws || !conn.isConnected) {
-      console.error(`[TaskGateway:${agentId}] 未连接，无法发送消息`)
+      log.error(agentId, '未连接，无法发送消息')
       return false
     }
 
@@ -161,7 +177,7 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
       },
     }
     conn.ws.send(JSON.stringify(msg))
-    console.log(`[TaskGateway:${agentId}] 发送 agent 请求: ${conn.gatewayAgentId}`)
+    log.info(agentId, `发送 agent 请求: ${conn.gatewayAgentId}`)
     return true
   }
 
@@ -177,7 +193,7 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
 
   // 处理接收到的消息
   function handleMessage(agentId: string, msg: any) {
-    console.log(`[TaskGateway:${agentId}] 收到消息:`, msg)
+    log.info(agentId, '收到消息:', msg)
 
     if (msg.type === 'res') {
       // 响应消息 - 检查是否是 connect 响应
@@ -193,16 +209,16 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
           }
           // 打印服务端授予的 scopes
           const result = msg.result || msg.payload || {}
-          console.log(`[TaskGateway:${agentId}] 连接握手成功 (hello-ok):`, JSON.stringify(result, null, 2))
+          log.info(agentId, '连接握手成功 (hello-ok):', JSON.stringify(result, null, 2))
           const grantedScopes = result.scopes || result.grantedScopes || result.granted_scopes
           if (grantedScopes) {
-            console.log(`[TaskGateway:${agentId}] 服务端授予的 scopes:`, JSON.stringify(grantedScopes))
+            log.info(agentId, '服务端授予的 scopes:', JSON.stringify(grantedScopes))
             if (!grantedScopes.includes('operator.write')) {
-              console.error(`[TaskGateway:${agentId}] ⚠️ 缺少 operator.write scope！写入操作将被拒绝。`)
+              log.error(agentId, '⚠️ 缺少 operator.write scope！写入操作将被拒绝。')
             }
           }
         } else {
-          console.error(`[TaskGateway:${agentId}] connect 握手失败:`, msg.error)
+          log.error(agentId, 'connect 握手失败:', msg.error)
           addMessage({
             agentId,
             type: 'task_error',
@@ -255,18 +271,18 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
   async function handleConnectChallenge(agentId: string, payload: { nonce: string; ts: number }) {
     const conn = connections.value[agentId]
     if (!conn?.ws || !settings.value.token) {
-      console.error(`[TaskGateway:${agentId}] No token to respond to challenge`)
+      log.error(agentId, 'No token to respond to challenge')
       return
     }
 
     const responseMsg = await createChallengeResponse(payload)
     if (!responseMsg) {
-      console.warn(`[TaskGateway:${agentId}] crypto.subtle 不可用（非安全上下文），跳过挑战响应`)
+      log.warn(agentId, 'crypto.subtle 不可用（非安全上下文），跳过挑战响应')
       return
     }
 
     conn.ws.send(JSON.stringify(responseMsg))
-    console.log(`[TaskGateway:${agentId}] Challenge response sent`)
+    log.info(agentId, 'Challenge response sent')
   }
 
   // 处理 agent 事件
@@ -367,7 +383,7 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
   // 连接到单个 Agent（模拟模式下直接返回已连接）
   function connectAgent(agentId: string) {
     if (SIMULATION_MODE) {
-      console.log(`[TaskGateway:${agentId}] 模拟模式：Agent 已连接`)
+      log.info(agentId, '模拟模式：Agent 已连接')
       const conn = connections.value[agentId]
       if (conn) {
         conn.isConnected = true
@@ -385,14 +401,19 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
 
     try {
       const wsUrl = resolveSocketUrl()
-      console.log(`[TaskGateway:${agentId}] 连接 Gateway: ${wsUrl}`)
+      log.info(agentId, `连接 Gateway: ${wsUrl}`)
 
       const ws = new WebSocket(wsUrl)
 
       ws.onopen = () => {
-        console.log(`[TaskGateway:${agentId}] WebSocket 已打开，等待 connect 握手响应`)
+        log.info(agentId, 'WebSocket 已打开，等待 connect 握手响应')
         // 注意：isConnected 在收到 connect 响应 (hello-ok) 后才设置为 true
         conn.isConnecting = false
+        delete reconnectBackoff[agentId]
+        if (reconnectTimers[agentId]) {
+          clearTimeout(reconnectTimers[agentId])
+          delete reconnectTimers[agentId]
+        }
         sendConnectRequest(agentId)
       }
 
@@ -401,26 +422,29 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
           const msg = JSON.parse(event.data)
           handleMessage(agentId, msg)
         } catch (e) {
-          console.error(`[TaskGateway:${agentId}] 消息解析错误:`, e)
+          log.error(agentId, '消息解析错误:', e)
         }
       }
 
       ws.onclose = (event) => {
-        console.log(`[TaskGateway:${agentId}] 连接关闭:`, event.code, event.reason)
+        log.info(agentId, '连接关闭:', event.code, event.reason)
         conn.isConnected = false
         conn.isConnecting = false
         conn.ws = null
+        if (event.code !== 1000) {
+          scheduleReconnect(agentId)
+        }
       }
 
       ws.onerror = (error) => {
-        console.error(`[TaskGateway:${agentId}] 连接错误:`, error)
+        log.error(agentId, '连接错误:', error)
         conn.isConnecting = false
         conn.isConnected = false
       }
 
       conn.ws = ws
     } catch (e) {
-      console.error(`[TaskGateway:${agentId}] 连接失败:`, e)
+      log.error(agentId, '连接失败:', e)
       conn.isConnecting = false
       conn.isConnected = false
     }
@@ -428,6 +452,11 @@ export const useTaskGatewayStore = defineStore('taskGateway', () => {
 
   // 断开单个 Agent
   function disconnectAgent(agentId: string) {
+    if (reconnectTimers[agentId]) {
+      clearTimeout(reconnectTimers[agentId])
+      delete reconnectTimers[agentId]
+    }
+    delete reconnectBackoff[agentId]
     const conn = connections.value[agentId]
     if (!conn || !conn.ws) return
 

@@ -1,9 +1,11 @@
 <template>
   <div class="agent-card" :class="{ active }" @click="$emit('click')">
+    <div class="agent-card__glow"></div>
     <div class="agent-card__header">
       <div class="agent-card__main">
         <div class="agent-card__avatar">
           <img :src="iconSrc" :alt="name" />
+          <span class="agent-card__status-dot" :class="statusClass"></span>
         </div>
         <div>
           <div class="agent-card__name">{{ name }}</div>
@@ -46,19 +48,42 @@ defineEmits<{
 
 <style scoped>
 .agent-card {
-  padding: 14px;
-  border-bottom: 1px solid var(--border-default);
+  position: relative;
+  margin: 10px 12px;
+  padding: 16px;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
   cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease;
+  overflow: hidden;
+  transition: transform var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.agent-card__glow {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at top right, rgba(var(--color-primary-rgb), 0.18), transparent 35%);
+  opacity: 0;
+  transition: opacity var(--transition-base);
+  pointer-events: none;
 }
 
 .agent-card:hover {
-  background: rgba(99, 102, 241, 0.08);
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.agent-card:hover .agent-card__glow,
+.agent-card.active .agent-card__glow {
+  opacity: 1;
 }
 
 .agent-card.active {
-  background: rgba(99, 102, 241, 0.12);
-  border-left: 3px solid var(--color-primary);
+  background: rgba(var(--color-primary-rgb), 0.11);
+  border-color: rgba(var(--color-primary-rgb), 0.26);
+  box-shadow: inset 3px 0 0 var(--color-primary), 0 12px 24px rgba(0, 0, 0, 0.18);
 }
 
 .agent-card__header {
@@ -75,11 +100,13 @@ defineEmits<{
 }
 
 .agent-card__avatar {
+  position: relative;
   width: 40px;
   height: 40px;
-  border-radius: 10px;
+  border-radius: 999px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.04);
+  border: 2px solid rgba(var(--color-primary-rgb), 0.12);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -89,6 +116,32 @@ defineEmits<{
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.agent-card__status-dot {
+  position: absolute;
+  right: 0;
+  bottom: 1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-panel);
+  background: var(--text-tertiary);
+}
+
+.agent-card__status-dot.idle {
+  background: var(--color-success);
+  box-shadow: 0 0 10px rgba(46, 160, 67, 0.35);
+}
+
+.agent-card__status-dot.busy {
+  background: var(--color-warning);
+  box-shadow: 0 0 10px rgba(210, 153, 34, 0.35);
+}
+
+.agent-card__status-dot.offline {
+  background: var(--color-error);
+  box-shadow: 0 0 10px rgba(248, 81, 73, 0.35);
 }
 
 .agent-card__name {
@@ -137,6 +190,7 @@ defineEmits<{
   font-size: 11px;
   background: rgba(148, 163, 184, 0.12);
   color: var(--text-tertiary);
+  border: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .status-badge-mini.idle {
