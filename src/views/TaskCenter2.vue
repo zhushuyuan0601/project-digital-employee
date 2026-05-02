@@ -158,7 +158,7 @@
               <p class="eyebrow">执行板</p>
               <h2>子任务和负责人</h2>
             </div>
-            <button class="ghost-btn" type="button" :disabled="scanningOutputs" @click="scanOutputs">
+            <button class="scan-btn" type="button" :disabled="scanningOutputs" @click="scanOutputs">
               <i class="ri-folder-search-line"></i>
               {{ scanningOutputs ? '扫描中' : '扫描成果' }}
             </button>
@@ -211,7 +211,7 @@
             </div>
           </div>
           <div v-if="!selectedTask?.events?.length" class="quiet-state">暂无事件。</div>
-          <div v-else class="event-list">
+          <div v-else ref="eventListRef" class="event-list">
             <div v-for="event in selectedTask.events" :key="event.id" class="event-item">
               <span class="event-dot"></span>
               <div>
@@ -326,7 +326,7 @@
           <strong>负责内容</strong>
           <p>{{ activeMemberSubtask.description }}</p>
         </div>
-        <div class="member-chat-list">
+        <div ref="memberChatListRef" class="member-chat-list">
           <div v-if="activeMemberMessages.length === 0" class="quiet-state">暂无对话。派发任务后，这里会显示平台与 OpenClaw 的问答。</div>
           <div
             v-for="message in activeMemberMessages"
@@ -354,7 +354,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import MarkdownIt from 'markdown-it'
@@ -395,6 +395,8 @@ const memberDialog = ref(false)
 const activeMemberSubtaskId = ref('')
 const memberFollowupDraft = ref('')
 const sendingMemberFollowup = ref(false)
+const eventListRef = ref<HTMLElement | null>(null)
+const memberChatListRef = ref<HTMLElement | null>(null)
 let clockTimer: ReturnType<typeof setInterval> | null = null
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 type PendingTaskDispatch = { taskId: string; subtaskId: string; agentId: string; sessionKey: string; sentAt: number }
@@ -645,6 +647,7 @@ function openMemberConversation(subtask: Subtask) {
   memberFollowupDraft.value = ''
   memberDialog.value = true
   multiAgentStore.selectAgent(subtask.assigned_agent_id)
+  scrollMemberChatToBottom()
 }
 
 async function sendMemberFollowup() {
@@ -923,6 +926,20 @@ function formatMsTime(value?: number | null) {
   return new Date(value).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
+async function scrollToBottom(target: { value: HTMLElement | null }) {
+  await nextTick()
+  if (!target.value) return
+  target.value.scrollTop = target.value.scrollHeight
+}
+
+function scrollEventListToBottom() {
+  scrollToBottom(eventListRef)
+}
+
+function scrollMemberChatToBottom() {
+  scrollToBottom(memberChatListRef)
+}
+
 function fileIcon(name: string) {
   if (/\.(md|markdown)$/i.test(name)) return 'ri-markdown-line'
   if (/\.(js|ts|vue|py|json|sh)$/i.test(name)) return 'ri-code-s-slash-line'
@@ -953,6 +970,7 @@ onMounted(async () => {
   if (typeof route.query.task === 'string') {
     await selectTask(route.query.task)
   }
+  scrollEventListToBottom()
   clockTimer = setInterval(() => {
     currentTimeMs.value = Date.now()
   }, 1000)
@@ -966,6 +984,29 @@ onUnmounted(() => {
   if (clockTimer) clearInterval(clockTimer)
   if (refreshTimer) clearInterval(refreshTimer)
 })
+
+watch(
+  () => [
+    selectedTask.value?.id,
+    selectedTask.value?.events?.length,
+    selectedTask.value?.events?.at(-1)?.message,
+  ],
+  () => scrollEventListToBottom(),
+  { flush: 'post' }
+)
+
+watch(
+  () => [
+    memberDialog.value,
+    activeMemberSubtaskId.value,
+    activeMemberMessages.value.length,
+    activeMemberMessages.value.at(-1)?.content,
+  ],
+  () => {
+    if (memberDialog.value) scrollMemberChatToBottom()
+  },
+  { flush: 'post' }
+)
 </script>
 
 <style scoped>
@@ -1127,6 +1168,7 @@ onUnmounted(() => {
 
 .primary-btn,
 .ghost-btn,
+.scan-btn,
 .icon-btn {
   border: 1px solid var(--border-default);
   border-radius: 6px;
@@ -1149,6 +1191,28 @@ onUnmounted(() => {
   font-weight: 700;
 }
 
+.scan-btn {
+  min-height: 38px;
+  padding: 0 15px;
+  border-color: rgba(var(--color-primary-rgb), 0.76);
+  background:
+    linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.28), rgba(var(--color-primary-rgb), 0.12)),
+    var(--bg-card);
+  color: var(--color-primary);
+  font-weight: 800;
+  box-shadow: 0 0 0 1px rgba(var(--color-primary-rgb), 0.18), 0 10px 24px rgba(var(--color-primary-rgb), 0.16);
+}
+
+.scan-btn:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #08111f;
+}
+
+.scan-btn i {
+  font-size: 17px;
+}
+
 .ghost-btn:hover,
 .icon-btn:hover {
   border-color: var(--color-primary);
@@ -1156,7 +1220,8 @@ onUnmounted(() => {
 }
 
 .primary-btn:disabled,
-.ghost-btn:disabled {
+.ghost-btn:disabled,
+.scan-btn:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
@@ -1495,6 +1560,13 @@ onUnmounted(() => {
   gap: 10px;
 }
 
+.event-list {
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 4px;
+  scroll-behavior: smooth;
+}
+
 .event-item {
   display: grid;
   grid-template-columns: 12px 1fr;
@@ -1578,10 +1650,132 @@ onUnmounted(() => {
 .preview-content {
   max-height: 70vh;
   overflow: auto;
+  color: var(--text-primary);
 }
 
 .preview-content pre {
   white-space: pre-wrap;
+  color: var(--text-primary);
+}
+
+.markdown-rendered {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.markdown-rendered :deep(h1),
+.markdown-rendered :deep(h2),
+.markdown-rendered :deep(h3),
+.markdown-rendered :deep(h4) {
+  color: var(--text-primary);
+  letter-spacing: 0;
+  line-height: 1.3;
+  margin: 22px 0 10px;
+}
+
+.markdown-rendered :deep(h1) {
+  font-size: 24px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.markdown-rendered :deep(h2) {
+  font-size: 20px;
+}
+
+.markdown-rendered :deep(h3) {
+  font-size: 17px;
+}
+
+.markdown-rendered :deep(p) {
+  margin: 10px 0;
+}
+
+.markdown-rendered :deep(ul),
+.markdown-rendered :deep(ol) {
+  margin: 10px 0;
+  padding-left: 24px;
+}
+
+.markdown-rendered :deep(li + li) {
+  margin-top: 5px;
+}
+
+.markdown-rendered :deep(strong) {
+  color: var(--text-primary);
+}
+
+.markdown-rendered :deep(a) {
+  color: var(--color-primary);
+}
+
+.markdown-rendered :deep(blockquote) {
+  margin: 14px 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--color-primary);
+  background: rgba(var(--color-primary-rgb), 0.08);
+  color: var(--text-secondary);
+}
+
+.markdown-rendered :deep(code) {
+  border: 1px solid var(--border-default);
+  border-radius: 5px;
+  padding: 2px 5px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.markdown-rendered :deep(pre) {
+  overflow: auto;
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-card);
+}
+
+.markdown-rendered :deep(pre code) {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  white-space: pre;
+}
+
+.markdown-rendered :deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+}
+
+.markdown-rendered :deep(th),
+.markdown-rendered :deep(td) {
+  border: 1px solid var(--border-default);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-rendered :deep(th) {
+  color: var(--text-primary);
+  background: rgba(var(--color-primary-rgb), 0.09);
+}
+
+.markdown-rendered :deep(hr) {
+  border: 0;
+  border-top: 1px solid var(--border-default);
+  margin: 20px 0;
+}
+
+:deep(.el-dialog) {
+  background: var(--bg-panel);
+}
+
+:deep(.el-dialog__title) {
   color: var(--text-primary);
 }
 
