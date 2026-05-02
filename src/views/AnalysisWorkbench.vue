@@ -122,7 +122,7 @@
         </div>
 
         <div class="analysis-center__body" ref="messageStreamRef">
-          <div v-if="messages.length === 0" class="welcome-state">
+          <div v-if="messages.length === 0 && !sending" class="welcome-state">
             <div class="welcome-state__glyph">
               <TrendCharts />
             </div>
@@ -1059,8 +1059,10 @@ const selectedSheetName = ref('')
 const selectedTableName = ref('')
 const messages = ref<UIMessage[]>([])
 const draft = ref('')
-const sending = ref(false)
-const activeChatController = ref<AbortController | null>(null)
+const sessionMessageCache = ref<Record<string, UIMessage[]>>({})
+const runningSessionIds = ref<Record<string, boolean>>({})
+const activeChatControllers = ref<Record<string, AbortController>>({})
+const sending = computed(() => Boolean(currentSessionId.value && runningSessionIds.value[currentSessionId.value]))
 const exporting = ref<'md' | 'pdf' | null>(null)
 const messageStreamRef = ref<HTMLElement | null>(null)
 const showSessionModal = ref(false)
@@ -1683,18 +1685,38 @@ async function refreshWorkspace() {
 }
 
 async function refreshState() {
-  if (!currentSessionId.value) return
+  const sessionId = currentSessionId.value
+  if (!sessionId) return
+  if (runningSessionIds.value[sessionId] && sessionMessageCache.value[sessionId]) {
+    messages.value = sessionMessageCache.value[sessionId]
+    return
+  }
   try {
-    const state = await getAnalysisState(currentSessionId.value)
-    messages.value = (state.messages || []).map((message, index) => ({
-      id: `${currentSessionId.value}-${index}`,
+    const state = await getAnalysisState(sessionId)
+    const nextMessages = (state.messages || []).map((message, index) => ({
+      id: `${sessionId}-${index}`,
       role: message.role,
       content: message.content,
       createdAt: Date.now() + index,
       context: message.context || null,
     }))
+    sessionMessageCache.value = {
+      ...sessionMessageCache.value,
+      [sessionId]: nextMessages,
+    }
+    if (currentSessionId.value === sessionId) {
+      messages.value = nextMessages
+    }
   } catch {
-    messages.value = []
+    if (!runningSessionIds.value[sessionId]) {
+      sessionMessageCache.value = {
+        ...sessionMessageCache.value,
+        [sessionId]: [],
+      }
+      if (currentSessionId.value === sessionId) {
+        messages.value = []
+      }
+    }
   }
 }
 
@@ -1926,19 +1948,23 @@ async function handleExport(
 
 async function handleSend() {
   if (!draft.value.trim() || !currentSessionId.value || sending.value) return
+  const sessionId = currentSessionId.value
   const controller = new AbortController()
-  activeChatController.value = controller
+  activeChatControllers.value = {
+    ...activeChatControllers.value,
+    [sessionId]: controller,
+  }
   const prompt = draft.value.trim()
   const context = buildMessageContextSnapshot()
   const userMessage: UIMessage = {
-    id: `${currentSessionId.value}-user-${Date.now()}`,
+    id: `${sessionId}-user-${Date.now()}`,
     role: 'user',
     content: prompt,
     createdAt: Date.now(),
     context,
   }
   const assistantMessage: UIMessage = {
-    id: `${currentSessionId.value}-assistant-${Date.now()}`,
+    id: `${sessionId}-assistant-${Date.now()}`,
     role: 'assistant',
     content: '',
     createdAt: Date.now(),
@@ -1949,8 +1975,15 @@ async function handleSend() {
     context: item.context || undefined,
   }))
   messages.value.push(userMessage, assistantMessage)
+  sessionMessageCache.value = {
+    ...sessionMessageCache.value,
+    [sessionId]: messages.value,
+  }
   draft.value = ''
-  sending.value = true
+  runningSessionIds.value = {
+    ...runningSessionIds.value,
+    [sessionId]: true,
+  }
 
   if (currentSession.value && currentSession.value.title === '未命名分析会话') {
     const derivedTitle = prompt.slice(0, 32)
@@ -1961,7 +1994,7 @@ async function handleSend() {
   try {
     await streamAnalysisChat(
       {
-        session_id: currentSessionId.value,
+        session_id: sessionId,
         stream: true,
         model: activeConfig.value?.model || '',
         api_base: activeConfig.value?.apiBase || '',
@@ -1973,14 +2006,23 @@ async function handleSend() {
       async (chunk) => {
         if (chunk.content) {
           assistantMessage.content += chunk.content
+          sessionMessageCache.value = {
+            ...sessionMessageCache.value,
+            [sessionId]: sessionMessageCache.value[sessionId] || [userMessage, assistantMessage],
+          }
         }
         if (chunk.done) {
-          sending.value = false
+          const { [sessionId]: _finished, ...restRunning } = runningSessionIds.value
+          runningSessionIds.value = restRunning
           await refreshSessions()
-          await refreshWorkspace()
+          if (currentSessionId.value === sessionId) {
+            await refreshWorkspace()
+          }
         }
         await nextTick()
-        messageStreamRef.value?.scrollTo({ top: messageStreamRef.value.scrollHeight, behavior: 'smooth' })
+        if (currentSessionId.value === sessionId) {
+          messageStreamRef.value?.scrollTo({ top: messageStreamRef.value.scrollHeight, behavior: 'smooth' })
+        }
       },
       { signal: controller.signal },
     )
@@ -1993,15 +2035,18 @@ async function handleSend() {
       notification.error((error as Error).message)
     }
   } finally {
-    sending.value = false
-    if (activeChatController.value === controller) {
-      activeChatController.value = null
+    const { [sessionId]: _finished, ...restRunning } = runningSessionIds.value
+    runningSessionIds.value = restRunning
+    if (activeChatControllers.value[sessionId] === controller) {
+      const { [sessionId]: _controller, ...restControllers } = activeChatControllers.value
+      activeChatControllers.value = restControllers
     }
   }
 }
 
 function cancelAnalysis() {
-  activeChatController.value?.abort()
+  if (!currentSessionId.value) return
+  activeChatControllers.value[currentSessionId.value]?.abort()
 }
 
 function handleComposerAction() {
