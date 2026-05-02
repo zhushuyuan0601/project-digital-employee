@@ -95,22 +95,26 @@
       <main class="analysis-center">
         <div class="analysis-center__header">
           <div class="analysis-title">
-            <p class="panel-label">Analysis Flow</p>
+            <div class="analysis-title__meta">
+              <span>Analysis Flow</span>
+              <em>{{ currentPhaseLabel }}</em>
+            </div>
             <h2>{{ currentSession?.title || '未选择会话' }}</h2>
-            <section class="analysis-pipeline" aria-label="分析流程">
-              <div
-                v-for="phase in analysisPhases"
-                :key="phase.key"
-                class="pipeline-node"
-                :class="{ 'is-active': phase.key === currentPhaseKey, 'is-done': phase.done }"
-              >
-                <span class="pipeline-node__icon">
-                  <component :is="phase.icon" />
-                </span>
-                <strong>{{ phase.label }}</strong>
-              </div>
-            </section>
           </div>
+          <section class="analysis-pipeline" aria-label="分析流程">
+            <div
+              v-for="phase in analysisPhases"
+              :key="phase.key"
+              class="pipeline-node"
+              :class="{ 'is-active': phase.key === currentPhaseKey, 'is-done': phase.done }"
+              :title="`${phase.label}：${phase.hint}`"
+            >
+              <span class="pipeline-node__icon">
+                <component :is="phase.icon" />
+              </span>
+              <strong>{{ phase.label }}</strong>
+            </div>
+          </section>
           <button v-if="currentSession" class="header-meta" type="button">
             <span class="header-meta__label">会话 ID</span>
             <span class="header-meta__value">{{ currentSession.id }}</span>
@@ -195,17 +199,37 @@
                       <pre class="analysis-step__code">{{ getStepDisplayContent(step) }}</pre>
                     </template>
                     <template v-else-if="step.type === 'file'">
-                      <div v-if="parseFileArtifacts(step.content).length" class="artifact-grid">
+                      <div v-if="getChartArtifacts(step.content).length" class="embedded-chart-stack">
+                        <figure
+                          v-for="artifact in getChartArtifacts(step.content)"
+                          :key="artifact.url"
+                          class="embedded-chart"
+                        >
+                          <div class="embedded-chart__stage">
+                            <img :src="artifact.url" :alt="artifact.label" />
+                          </div>
+                          <figcaption>
+                            <div>
+                              <strong>{{ artifact.label }}</strong>
+                              <span>图表已内嵌到当前分析</span>
+                            </div>
+                            <a :href="artifact.url" target="_blank" rel="noreferrer" title="打开图表">
+                              <FullScreen />
+                            </a>
+                          </figcaption>
+                        </figure>
+                      </div>
+
+                      <div v-if="getAttachmentArtifacts(step.content).length" class="artifact-grid">
                         <a
-                          v-for="artifact in parseFileArtifacts(step.content)"
+                          v-for="artifact in getAttachmentArtifacts(step.content)"
                           :key="artifact.url"
                           class="artifact-card"
                           :href="artifact.url"
                           target="_blank"
                           rel="noreferrer"
                         >
-                          <img v-if="artifact.isImage" :src="artifact.url" :alt="artifact.label" />
-                          <span v-else class="artifact-card__icon"><component :is="artifact.kind === 'table' ? Histogram : DocumentChecked" /></span>
+                          <span class="artifact-card__icon"><component :is="artifact.kind === 'table' ? Histogram : DocumentChecked" /></span>
                           <div>
                             <strong>{{ artifact.label }}</strong>
                             <p>{{ artifact.kind === 'chart' ? '图表' : artifact.kind === 'table' ? '数据表' : artifact.kind === 'report' ? '报告' : '文件' }}</p>
@@ -213,7 +237,7 @@
                           <Download />
                         </a>
                       </div>
-                      <div v-else class="analysis-step__markdown" v-html="renderMarkdown(step.content)"></div>
+                      <div v-if="!parseFileArtifacts(step.content).length" class="analysis-step__markdown" v-html="renderMarkdown(step.content)"></div>
                     </template>
                     <template v-else-if="step.type === 'answer'">
                       <div class="analysis-step__markdown analysis-step__markdown--answer" v-html="renderMarkdown(step.content)"></div>
@@ -228,7 +252,12 @@
                 </section>
               </div>
 
-              <div v-else class="stream-card__body" v-html="renderMarkdown(message.content)"></div>
+              <div
+                v-else
+                class="stream-card__body"
+                :class="{ 'analysis-step__markdown analysis-step__markdown--answer': message.role === 'assistant' }"
+                v-html="renderMarkdown(message.content)"
+              ></div>
             </article>
           </div>
 
@@ -477,66 +506,131 @@
       <div v-if="showConfigModal" class="cfg-modal-overlay" @click.self="closeConfigModal">
         <div class="cfg-modal">
           <header class="cfg-modal__header">
-            <h2>模型配置管理</h2>
-            <button class="cfg-modal__close" type="button" @click="closeConfigModal">&times;</button>
+            <div>
+              <p class="cfg-modal__eyebrow">Model Gateway</p>
+              <h2>模型配置管理</h2>
+              <span>为数据分析引擎选择 OpenAI 兼容的模型连接。</span>
+            </div>
+            <button class="cfg-modal__close" type="button" @click="closeConfigModal" title="关闭">
+              <Close />
+            </button>
           </header>
 
           <div class="cfg-modal__body">
             <!-- Config List -->
             <div class="cfg-list">
               <div class="cfg-list__head">
-                <span>已保存的配置</span>
-                <button class="cfg-list__add" type="button" @click="startNewConfig">+ 新增</button>
+                <div>
+                  <span>已保存</span>
+                  <strong>{{ modelConfigs.length }} 个配置</strong>
+                </div>
+                <button class="cfg-list__add" type="button" @click="startNewConfig">
+                  <Plus />
+                  <span>新增</span>
+                </button>
               </div>
-              <div v-if="modelConfigs.length === 0" class="cfg-list__empty">暂无配置，请新增一个。</div>
+              <div v-if="modelConfigs.length === 0" class="cfg-list__empty">
+                <div class="cfg-list__empty-icon"><Setting /></div>
+                <strong>还没有模型配置</strong>
+                <p>新增一个 API Base、Key 和模型名，分析引擎就能开始工作。</p>
+              </div>
               <div
                 v-for="cfg in modelConfigs"
                 :key="cfg.id"
                 class="cfg-list__item"
-                :class="{ 'is-editing': editingConfig?.id === cfg.id }"
+                :class="{ 'is-editing': editingConfig?.id === cfg.id, 'is-active': activeConfigId === cfg.id }"
+                @click="editConfig(cfg)"
               >
+                <div class="cfg-list__mark">
+                  <component :is="activeConfigId === cfg.id ? Finished : Cpu" />
+                </div>
                 <div class="cfg-list__info">
-                  <strong>{{ cfg.name }}</strong>
-                  <span>{{ cfg.model }} · {{ cfg.apiBase || '默认' }}</span>
+                  <div>
+                    <strong>{{ cfg.name }}</strong>
+                    <em v-if="activeConfigId === cfg.id">当前启用</em>
+                  </div>
+                  <span>{{ cfg.model || '未设置模型' }}</span>
+                  <small>{{ cfg.apiBase || '使用默认服务地址' }}</small>
                 </div>
                 <div class="cfg-list__actions">
-                  <button type="button" @click="editConfig(cfg)">编辑</button>
-                  <button type="button" class="cfg-list__del" @click="deleteConfig(cfg.id)">删除</button>
+                  <button
+                    v-if="activeConfigId !== cfg.id"
+                    type="button"
+                    title="设为当前配置"
+                    @click.stop="activateConfig(cfg.id)"
+                  >
+                    启用
+                  </button>
+                  <button type="button" class="cfg-list__del" title="删除配置" @click.stop="deleteConfig(cfg.id)">
+                    <Delete />
+                  </button>
                 </div>
               </div>
             </div>
 
             <!-- Config Form -->
             <div v-if="editingConfig" class="cfg-form">
-              <h3>{{ editingConfig._isNew ? '新增配置' : '编辑配置' }}</h3>
-              <label class="cfg-form__field">
-                <span>配置名称</span>
-                <input v-model="editingConfig.name" type="text" placeholder="如：GPT-4o、DeepSeek" />
-              </label>
-              <label class="cfg-form__field">
-                <span>API Base URL</span>
-                <input v-model="editingConfig.apiBase" type="text" placeholder="http://127.0.0.1:8000/v1" />
-              </label>
-              <label class="cfg-form__field">
-                <span>API Key</span>
-                <input v-model="editingConfig.apiKey" type="password" placeholder="可选，留空表示无需鉴权" />
-              </label>
-              <label class="cfg-form__field">
-                <span>Model</span>
-                <input v-model="editingConfig.model" type="text" placeholder="gpt-4o-mini" />
-              </label>
+              <div class="cfg-form__top">
+                <div>
+                  <p class="cfg-form__mode">{{ editingConfig._isNew ? 'New Connection' : 'Edit Connection' }}</p>
+                  <h3>{{ editingConfig._isNew ? '新增模型配置' : editingConfig.name || '编辑模型配置' }}</h3>
+                </div>
+                <span class="cfg-form__provider">{{ inferProviderName(editingConfig.apiBase || editingConfig.name || '') }}</span>
+              </div>
+
+              <div class="cfg-form__section">
+                <div class="cfg-form__section-head">
+                  <strong>基础信息</strong>
+                  <span>用于在输入区下拉框中识别和切换模型。</span>
+                </div>
+                <label class="cfg-form__field">
+                  <span>配置名称</span>
+                  <input v-model="editingConfig.name" type="text" placeholder="如：DashScope、DeepSeek、Local LLM" />
+                </label>
+                <label class="cfg-form__field">
+                  <span>Model</span>
+                  <input v-model="editingConfig.model" type="text" placeholder="如：qwen3.6-plus、gpt-4o-mini" />
+                </label>
+              </div>
+
+              <div class="cfg-form__section">
+                <div class="cfg-form__section-head">
+                  <strong>连接信息</strong>
+                  <span>兼容 OpenAI Chat Completions 的服务地址。</span>
+                </div>
+                <label class="cfg-form__field">
+                  <span>API Base URL</span>
+                  <input v-model="editingConfig.apiBase" type="text" placeholder="https://api.example.com/v1" />
+                </label>
+                <label class="cfg-form__field">
+                  <span>API Key</span>
+                  <input v-model="editingConfig.apiKey" type="password" placeholder="可选，留空表示无需鉴权" />
+                </label>
+                <div class="cfg-secret-note">
+                  <Setting />
+                  <span>配置保存在当前浏览器本地；测试连接只会验证服务可达性。</span>
+                </div>
+              </div>
 
               <div class="cfg-form__footer">
                 <button class="cfg-form__btn cfg-form__btn--test" type="button" :disabled="testing" @click="testConfig">
                   {{ testing ? '测试中…' : '连接测试' }}
                 </button>
-                <span v-if="testResult" :class="['cfg-form__test-result', testResult.ok ? 'is-ok' : 'is-fail']">
-                  {{ testResult.ok ? `连接成功 ${testResult.ms}ms${testResult.statusNote || ''}` : `失败: ${testResult.error}` }}
-                </span>
+                <div v-if="testResult" :class="['cfg-form__test-result', testResult.ok ? 'is-ok' : 'is-fail']">
+                  <strong>{{ testResult.ok ? '连接可用' : '连接失败' }}</strong>
+                  <span>{{ testResult.ok ? `${testResult.ms}ms${testResult.statusNote || ''}` : testResult.error }}</span>
+                </div>
                 <div class="cfg-form__spacer"></div>
                 <button class="cfg-form__btn" type="button" @click="cancelEdit">取消</button>
                 <button class="cfg-form__btn cfg-form__btn--primary" type="button" @click="saveConfig">保存</button>
               </div>
+            </div>
+
+            <div v-else class="cfg-form cfg-form--empty">
+              <div class="cfg-form-empty__icon"><Setting /></div>
+              <h3>选择一个配置进行编辑</h3>
+              <p>也可以新增模型连接。保存后会自动设为当前分析引擎配置。</p>
+              <button class="cfg-form__btn cfg-form__btn--primary" type="button" @click="startNewConfig">新增配置</button>
             </div>
           </div>
         </div>
@@ -869,7 +963,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import MarkdownIt from 'markdown-it'
 import {
   ArrowDown,
@@ -920,6 +1014,7 @@ import {
   type WorkspaceOverview,
 } from '@/api/analysis'
 import { useNotification } from '@/composables/useNotification'
+import { useAnalysisModelConfigs } from '@/composables/analysis/useAnalysisModelConfigs'
 
 type MessageRole = 'user' | 'assistant'
 
@@ -983,7 +1078,7 @@ interface AssetGroup {
 const md = new MarkdownIt({
   html: false,
   linkify: true,
-  breaks: true,
+  breaks: false,
 })
 
 const notification = useNotification()
@@ -1041,167 +1136,30 @@ function scrollHelpTo(id: string) {
 }
 
 // ─── Model Config Management ────────────────────────────
-interface ModelConfig {
-  id: string
-  name: string
-  apiBase: string
-  apiKey: string
-  model: string
-}
-
-const STORAGE_KEY = 'analysis.modelConfigs'
-const ACTIVE_KEY = 'analysis.activeConfigId'
-
-const modelConfigs = ref<ModelConfig[]>([])
-const activeConfigId = ref('')
-const showConfigModal = ref(false)
-const editingConfig = ref<(Partial<ModelConfig> & { _isNew?: boolean }) | null>(null)
-const testing = ref(false)
-const testResult = ref<{ ok: boolean; ms?: number; error?: string; statusNote?: string } | null>(null)
-
-const activeConfig = computed(() => modelConfigs.value.find((c) => c.id === activeConfigId.value) || null)
-
-function loadConfigs() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    modelConfigs.value = raw ? JSON.parse(raw) : []
-  } catch {
-    modelConfigs.value = []
-  }
-  activeConfigId.value = localStorage.getItem(ACTIVE_KEY) || ''
-  if (activeConfigId.value && !modelConfigs.value.find((c) => c.id === activeConfigId.value)) {
-    activeConfigId.value = ''
-  }
-}
-
-function persistConfigs() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(modelConfigs.value))
-  localStorage.setItem(ACTIVE_KEY, activeConfigId.value)
-}
-
-watch(modelConfigs, persistConfigs, { deep: true })
-watch(activeConfigId, persistConfigs)
-
-function applyActiveConfig() {
-  persistConfigs()
-}
-
-function openConfigModal() {
-  showConfigModal.value = true
-  editingConfig.value = null
-  testResult.value = null
-}
-
-function closeConfigModal() {
-  showConfigModal.value = false
-  editingConfig.value = null
-  testResult.value = null
-}
-
-function startNewConfig() {
-  editingConfig.value = {
-    id: '',
-    name: '',
-    apiBase: '',
-    apiKey: '',
-    model: 'gpt-4o-mini',
-    _isNew: true,
-  }
-  testResult.value = null
-}
-
-function editConfig(cfg: ModelConfig) {
-  editingConfig.value = { ...cfg, _isNew: false }
-  testResult.value = null
-}
-
-function cancelEdit() {
-  editingConfig.value = null
-  testResult.value = null
-}
-
-function saveConfig() {
-  if (!editingConfig.value) return
-  const cfg = editingConfig.value
-  if (!cfg.name?.trim()) {
-    notification.error('请填写配置名称')
-    return
-  }
-
-  if (cfg._isNew) {
-    const newCfg: ModelConfig = {
-      id: `mc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      name: cfg.name.trim(),
-      apiBase: cfg.apiBase?.trim() || '',
-      apiKey: cfg.apiKey?.trim() || '',
-      model: cfg.model?.trim() || 'gpt-4o-mini',
-    }
-    modelConfigs.value.push(newCfg)
-    activeConfigId.value = newCfg.id
-  } else {
-    const idx = modelConfigs.value.findIndex((c) => c.id === cfg.id)
-    if (idx !== -1) {
-      modelConfigs.value[idx] = {
-        id: cfg.id!,
-        name: cfg.name.trim(),
-        apiBase: cfg.apiBase?.trim() || '',
-        apiKey: cfg.apiKey?.trim() || '',
-        model: cfg.model?.trim() || 'gpt-4o-mini',
-      }
-    }
-  }
-  editingConfig.value = null
-  testResult.value = null
-  notification.success('配置已保存')
-}
-
-function deleteConfig(id: string) {
-  modelConfigs.value = modelConfigs.value.filter((c) => c.id !== id)
-  if (activeConfigId.value === id) {
-    activeConfigId.value = modelConfigs.value[0]?.id || ''
-  }
-  if (editingConfig.value?.id === id) {
-    editingConfig.value = null
-    testResult.value = null
-  }
-}
-
-async function testConfig() {
-  if (!editingConfig.value) return
-  const { apiBase, apiKey } = editingConfig.value
-  if (!apiBase?.trim()) {
-    testResult.value = { ok: false, error: '请填写 API Base URL' }
-    return
-  }
-
-  testing.value = true
-  testResult.value = null
-  try {
-    const res = await fetch('/api/analysis/test-connection', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ api_base: apiBase.trim(), api_key: apiKey?.trim() || '' }),
-    })
-    const text = await res.text()
-    let data: any
-    try {
-      data = text ? JSON.parse(text) : {}
-    } catch {
-      testResult.value = { ok: false, error: text.slice(0, 120) || `HTTP ${res.status}` }
-      return
-    }
-    if (data.ok) {
-      const statusNote = data.status && data.status !== 200 ? ` (HTTP ${data.status})` : ''
-      testResult.value = { ok: true, ms: data.ms, statusNote }
-    } else {
-      testResult.value = { ok: false, error: data.error || `HTTP ${res.status}` }
-    }
-  } catch (err) {
-    testResult.value = { ok: false, error: (err as Error).message || '连接失败' }
-  } finally {
-    testing.value = false
-  }
-}
+const {
+  modelConfigs,
+  activeConfigId,
+  showConfigModal,
+  editingConfig,
+  testing,
+  testResult,
+  activeConfig,
+  loadConfigs,
+  applyActiveConfig,
+  activateConfig,
+  inferProviderName,
+  openConfigModal,
+  closeConfigModal,
+  startNewConfig,
+  editConfig,
+  cancelEdit,
+  saveConfig,
+  deleteConfig,
+  testConfig,
+} = useAnalysisModelConfigs({
+  onSuccess: notification.success,
+  onError: notification.error,
+})
 
 const currentSession = computed(() => sessions.value.find((item) => item.id === currentSessionId.value) || null)
 const awaitingClarification = computed(() => {
@@ -1526,8 +1484,22 @@ function getStatusLabel(status: string) {
   return labels[status] || status
 }
 
+function normalizeMarkdownContent(content: string) {
+  return (content || '')
+    .split('\n')
+    .map((line) => {
+      const trimmed = line.trim()
+      if (/^#{1,6}\s/.test(trimmed)) return line
+      if (/^[一二三四五六七八九十]+、\s*[^。；;]{2,28}$/.test(trimmed)) {
+        return `${line.match(/^\s*/)?.[0] || ''}### ${trimmed}`
+      }
+      return line
+    })
+    .join('\n')
+}
+
 function renderMarkdown(content: string) {
-  return md.render(content || '')
+  return md.render(normalizeMarkdownContent(content || ''))
 }
 
 function parseSections(content: string): ParsedSection[] {
@@ -1688,6 +1660,14 @@ function parseFileArtifacts(content: string): FileArtifact[] {
   }
 
   return artifacts
+}
+
+function getChartArtifacts(content: string) {
+  return parseFileArtifacts(content).filter((artifact) => artifact.isImage)
+}
+
+function getAttachmentArtifacts(content: string) {
+  return parseFileArtifacts(content).filter((artifact) => !artifact.isImage)
 }
 
 async function copyStepContent(content: string) {
@@ -2738,17 +2718,23 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 20px 22px;
+  gap: 12px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--analysis-border);
+}
+
+.analysis-center__header {
+  min-height: 72px;
 }
 
 .header-meta {
   display: grid;
   gap: 2px;
-  min-width: 180px;
-  padding: 10px 12px;
-  border-radius: 12px;
+  flex: 0 0 auto;
+  max-width: 170px;
+  min-width: 132px;
+  padding: 7px 10px;
+  border-radius: 10px;
   text-align: left;
 }
 
@@ -2760,23 +2746,62 @@ onMounted(async () => {
 }
 
 .header-meta__value {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   font-size: 12px;
   color: var(--analysis-main);
 }
 
 .analysis-title {
   display: grid;
+  gap: 4px;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.analysis-title__meta {
+  display: flex;
+  align-items: center;
   gap: 8px;
   min-width: 0;
+}
+
+.analysis-title__meta span {
+  color: var(--analysis-soft);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.analysis-title__meta em {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(34, 211, 238, 0.1);
+  color: #a5f3fc;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.analysis-title h2 {
+  margin: 0;
+  overflow: hidden;
+  color: var(--analysis-main);
+  font-size: 17px;
+  line-height: 1.25;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .analysis-pipeline {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 4px;
+  flex: 1 1 auto;
   min-width: 0;
+  max-width: 720px;
   overflow-x: auto;
-  padding-bottom: 2px;
   scrollbar-width: none;
 }
 
@@ -2784,9 +2809,9 @@ onMounted(async () => {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   flex: 0 0 auto;
-  padding: 5px 8px;
+  padding: 4px 7px;
   border: 1px solid rgba(148, 163, 184, 0.1);
   border-radius: 999px;
   color: var(--analysis-soft);
@@ -2811,8 +2836,8 @@ onMounted(async () => {
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
+  width: 19px;
+  height: 19px;
   border-radius: 999px;
   color: #93c5fd;
   background: rgba(59, 130, 246, 0.1);
@@ -2833,7 +2858,8 @@ onMounted(async () => {
 
 .pipeline-node strong {
   color: currentColor;
-  font-size: 11px;
+  font-size: 10px;
+  line-height: 1;
 }
 
 .analysis-center__body {
@@ -3183,11 +3209,272 @@ onMounted(async () => {
 
 .analysis-step__markdown {
   color: var(--analysis-main);
-  line-height: 1.7;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.82;
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
 .analysis-step__markdown--answer {
-  font-size: 14px;
+  font-size: 15px;
+}
+
+.analysis-step__markdown :deep(*) {
+  box-sizing: border-box;
+}
+
+.analysis-step__markdown :deep(h1),
+.analysis-step__markdown :deep(h2),
+.analysis-step__markdown :deep(h3),
+.analysis-step__markdown :deep(h4) {
+  margin: 18px 0 10px;
+  color: #f8fafc;
+  font-weight: 800;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
+.analysis-step__markdown :deep(h1:first-child),
+.analysis-step__markdown :deep(h2:first-child),
+.analysis-step__markdown :deep(h3:first-child),
+.analysis-step__markdown :deep(h4:first-child) {
+  margin-top: 0;
+}
+
+.analysis-step__markdown :deep(h1) {
+  font-size: 22px;
+}
+
+.analysis-step__markdown :deep(h2) {
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  font-size: 19px;
+}
+
+.analysis-step__markdown :deep(h3) {
+  font-size: 17px;
+}
+
+.analysis-step__markdown :deep(h4) {
+  font-size: 15px;
+}
+
+.analysis-step__markdown :deep(p) {
+  margin: 0 0 12px;
+}
+
+.analysis-step__markdown :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.analysis-step__markdown :deep(strong) {
+  color: #f8fafc;
+  font-weight: 800;
+}
+
+.analysis-step__markdown :deep(ul),
+.analysis-step__markdown :deep(ol) {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 14px;
+  padding-left: 1.35em;
+}
+
+.analysis-step__markdown :deep(li) {
+  padding-left: 2px;
+}
+
+.analysis-step__markdown :deep(li::marker) {
+  color: #67e8f9;
+  font-weight: 800;
+}
+
+.analysis-step__markdown :deep(blockquote) {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-left: 3px solid rgba(34, 211, 238, 0.5);
+  border-radius: 0 12px 12px 0;
+  background: rgba(34, 211, 238, 0.07);
+  color: #cbd5e1;
+}
+
+.analysis-step__markdown :deep(code) {
+  display: inline-block;
+  max-width: 100%;
+  padding: 1px 7px;
+  border: 1px solid rgba(96, 165, 250, 0.14);
+  border-radius: 8px;
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+  font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+  font-size: 0.92em;
+  line-height: 1.45;
+  vertical-align: baseline;
+  overflow-wrap: anywhere;
+}
+
+.analysis-step__markdown :deep(pre) {
+  overflow: auto;
+  margin: 12px 0;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.66);
+}
+
+.analysis-step__markdown :deep(pre code) {
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #dbeafe;
+  line-height: 1.65;
+}
+
+.analysis-step__markdown :deep(table) {
+  width: max-content;
+  min-width: 100%;
+  margin: 14px 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.52);
+}
+
+.analysis-step__markdown :deep(th),
+.analysis-step__markdown :deep(td) {
+  min-width: 96px;
+  padding: 10px 12px;
+  border-right: 1px solid rgba(148, 163, 184, 0.1);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  text-align: left;
+  vertical-align: top;
+  line-height: 1.65;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.analysis-step__markdown :deep(th:first-child),
+.analysis-step__markdown :deep(td:first-child) {
+  min-width: 82px;
+  white-space: nowrap;
+}
+
+.analysis-step__markdown :deep(th) {
+  background: rgba(59, 130, 246, 0.12);
+  color: #bfdbfe;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.analysis-step__markdown :deep(td) {
+  color: #e2e8f0;
+}
+
+.analysis-step__markdown :deep(tr:last-child td) {
+  border-bottom: 0;
+}
+
+.analysis-step__markdown :deep(th:last-child),
+.analysis-step__markdown :deep(td:last-child) {
+  border-right: 0;
+}
+
+.analysis-step__markdown :deep(a) {
+  color: #93c5fd;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(147, 197, 253, 0.28);
+}
+
+.analysis-step__markdown :deep(hr) {
+  margin: 18px 0;
+  border: 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.embedded-chart-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.embedded-chart {
+  overflow: hidden;
+  margin: 0;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 14px;
+  background: rgba(2, 6, 23, 0.32);
+}
+
+.embedded-chart__stage {
+  display: grid;
+  place-items: center;
+  min-height: 260px;
+  padding: 14px;
+  background:
+    linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    rgba(15, 23, 42, 0.36);
+  background-size: 24px 24px;
+}
+
+.embedded-chart__stage img {
+  display: block;
+  width: 100%;
+  max-height: 520px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 18px 42px rgba(2, 6, 23, 0.28);
+}
+
+.embedded-chart figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.embedded-chart figcaption > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.embedded-chart figcaption strong,
+.embedded-chart figcaption span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.embedded-chart figcaption strong {
+  color: var(--analysis-main);
+  font-size: 13px;
+}
+
+.embedded-chart figcaption span {
+  color: var(--analysis-soft);
+  font-size: 12px;
+}
+
+.embedded-chart figcaption a {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 34px;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 10px;
+  color: #cbd5e1;
+  text-decoration: none;
 }
 
 .artifact-grid {
@@ -4449,12 +4736,14 @@ onMounted(async () => {
 }
 
 .cfg-modal {
-  width: 720px;
+  width: min(1040px, calc(100vw - 48px));
   max-width: calc(100vw - 48px);
-  max-height: calc(100vh - 80px);
-  background: #151b2b;
+  max-height: calc(100vh - 64px);
+  background:
+    linear-gradient(180deg, rgba(20, 28, 45, 0.98), rgba(14, 21, 34, 0.98)),
+    #151b2b;
   border: 1px solid var(--analysis-border);
-  border-radius: 20px;
+  border-radius: 24px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -4465,28 +4754,47 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 24px;
+  gap: 18px;
+  padding: 22px 26px;
   border-bottom: 1px solid var(--analysis-border);
+}
+
+.cfg-modal__header > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.cfg-modal__eyebrow {
+  margin: 0;
+  color: #67e8f9;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
 .cfg-modal__header h2 {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: 1.28rem;
   color: var(--analysis-main);
 }
 
-.cfg-modal__close {
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
+.cfg-modal__header span {
   color: var(--analysis-soft);
-  font-size: 20px;
+  font-size: 13px;
+}
+
+.cfg-modal__close {
+  display: grid;
+  place-items: center;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .cfg-modal__close:hover {
@@ -4496,7 +4804,7 @@ onMounted(async () => {
 
 .cfg-modal__body {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
   gap: 0;
   flex: 1;
   overflow: hidden;
@@ -4508,80 +4816,179 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  background: rgba(15, 23, 42, 0.34);
 }
 
 .cfg-list__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
+  gap: 12px;
+  padding: 18px 20px;
   border-bottom: 1px solid var(--analysis-border);
+}
+
+.cfg-list__head > div {
+  display: grid;
+  gap: 3px;
+}
+
+.cfg-list__head span {
   color: var(--analysis-soft);
   font-size: 12px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
+.cfg-list__head strong {
+  color: var(--analysis-main);
+  font-size: 16px;
+}
+
 .cfg-list__add {
-  padding: 5px 12px;
-  border: 1px solid var(--analysis-border);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--analysis-blue);
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 12px;
+  border: 1px solid rgba(34, 211, 238, 0.26);
+  border-radius: 12px;
+  background: rgba(34, 211, 238, 0.1);
+  color: #a5f3fc;
+  font-size: 13px;
   cursor: pointer;
 }
 
+.cfg-list__add svg {
+  width: 15px;
+  height: 15px;
+}
+
 .cfg-list__add:hover {
-  background: rgba(59, 130, 246, 0.1);
+  background: rgba(34, 211, 238, 0.16);
 }
 
 .cfg-list__empty {
-  padding: 32px 20px;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 34px 24px;
   text-align: center;
   color: var(--analysis-soft);
   font-size: 13px;
 }
 
+.cfg-list__empty-icon,
+.cfg-form-empty__icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 14px;
+  background: rgba(59, 130, 246, 0.1);
+  color: #93c5fd;
+}
+
+.cfg-list__empty strong {
+  color: var(--analysis-main);
+}
+
+.cfg-list__empty p {
+  max-width: 240px;
+  margin: 0;
+  line-height: 1.6;
+}
+
 .cfg-list__item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
   gap: 12px;
-  padding: 14px 20px;
+  align-items: center;
+  margin: 10px 12px 0;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-  transition: background 0.1s;
+  background: rgba(255, 255, 255, 0.035);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
 }
 
 .cfg-list__item:hover {
-  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(59, 130, 246, 0.24);
+  background: rgba(255, 255, 255, 0.055);
+  transform: translateY(-1px);
 }
 
 .cfg-list__item.is-editing {
-  background: rgba(59, 130, 246, 0.08);
-  border-left: 2px solid var(--analysis-blue);
+  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.cfg-list__item.is-active {
+  border-color: rgba(16, 185, 129, 0.36);
+}
+
+.cfg-list__mark {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 13px;
+  background: rgba(59, 130, 246, 0.12);
+  color: #93c5fd;
+}
+
+.cfg-list__item.is-active .cfg-list__mark {
+  background: rgba(16, 185, 129, 0.14);
+  color: #6ee7b7;
 }
 
 .cfg-list__info {
   display: grid;
-  gap: 4px;
+  gap: 5px;
   min-width: 0;
+}
+
+.cfg-list__info > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cfg-list__info strong,
+.cfg-list__info span,
+.cfg-list__info small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cfg-list__info strong {
   color: var(--analysis-main);
-  font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 14px;
+}
+
+.cfg-list__info em {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(16, 185, 129, 0.14);
+  color: #6ee7b7;
+  font-size: 10px;
+  font-style: normal;
 }
 
 .cfg-list__info span {
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.cfg-list__info small {
   color: var(--analysis-soft);
   font-size: 11px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .cfg-list__actions {
@@ -4591,18 +4998,27 @@ onMounted(async () => {
 }
 
 .cfg-list__actions button {
-  padding: 4px 10px;
-  border: 1px solid var(--analysis-border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--analysis-soft);
-  font-size: 11px;
+  display: grid;
+  place-items: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #cbd5e1;
+  font-size: 12px;
   cursor: pointer;
 }
 
 .cfg-list__actions button:hover {
-  border-color: var(--analysis-blue);
+  border-color: rgba(59, 130, 246, 0.45);
   color: var(--analysis-main);
+}
+
+.cfg-list__actions svg {
+  width: 16px;
+  height: 16px;
 }
 
 .cfg-list__del:hover {
@@ -4612,17 +5028,72 @@ onMounted(async () => {
 
 /* ── Config Form (right panel) ────────────────────────── */
 .cfg-form {
-  padding: 20px 24px;
+  padding: 22px 26px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 18px;
   overflow-y: auto;
+}
+
+.cfg-form__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.cfg-form__top > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.cfg-form__mode {
+  margin: 0;
+  color: #67e8f9;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .cfg-form h3 {
   margin: 0;
-  font-size: 0.95rem;
   color: var(--analysis-main);
+  font-size: 1.08rem;
+}
+
+.cfg-form__provider {
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border: 1px solid rgba(147, 197, 253, 0.22);
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.1);
+  color: #bfdbfe;
+  font-size: 12px;
+}
+
+.cfg-form__section {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.cfg-form__section-head {
+  display: grid;
+  gap: 4px;
+}
+
+.cfg-form__section-head strong {
+  color: var(--analysis-main);
+  font-size: 14px;
+}
+
+.cfg-form__section-head span {
+  color: var(--analysis-soft);
+  font-size: 12px;
 }
 
 .cfg-form__field {
@@ -4638,10 +5109,10 @@ onMounted(async () => {
 }
 
 .cfg-form__field input {
-  padding: 10px 12px;
-  border: 1px solid var(--analysis-border);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
+  padding: 12px 13px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.54);
   color: var(--analysis-main);
   font: inherit;
   font-size: 13px;
@@ -4651,10 +5122,31 @@ onMounted(async () => {
 
 .cfg-form__field input:focus {
   border-color: var(--analysis-blue);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
 }
 
 .cfg-form__field input::placeholder {
   color: color-mix(in srgb, var(--analysis-soft) 60%, transparent);
+}
+
+.cfg-secret-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(245, 158, 11, 0.16);
+  border-radius: 12px;
+  background: rgba(245, 158, 11, 0.07);
+  color: #fde68a;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.cfg-secret-note svg {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
 }
 
 .cfg-form__footer {
@@ -4672,11 +5164,11 @@ onMounted(async () => {
 }
 
 .cfg-form__btn {
-  padding: 8px 16px;
-  border: 1px solid var(--analysis-border);
-  border-radius: 10px;
-  background: transparent;
-  color: var(--analysis-soft);
+  padding: 9px 16px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #cbd5e1;
   font-size: 13px;
   cursor: pointer;
   transition: all 0.15s;
@@ -4688,7 +5180,7 @@ onMounted(async () => {
 }
 
 .cfg-form__btn--primary {
-  background: linear-gradient(135deg, var(--analysis-blue), #60a5fa);
+  background: linear-gradient(135deg, #2563eb, #22d3ee);
   border-color: transparent;
   color: #fff;
 }
@@ -4698,8 +5190,8 @@ onMounted(async () => {
 }
 
 .cfg-form__btn--test {
-  border-color: var(--analysis-green);
-  color: var(--analysis-green);
+  border-color: rgba(16, 185, 129, 0.34);
+  color: #86efac;
 }
 
 .cfg-form__btn--test:hover {
@@ -4712,16 +5204,40 @@ onMounted(async () => {
 }
 
 .cfg-form__test-result {
+  display: grid;
+  gap: 2px;
+  min-width: 140px;
+  padding: 7px 10px;
+  border-radius: 12px;
   font-size: 12px;
-  font-weight: 600;
 }
 
 .cfg-form__test-result.is-ok {
+  background: rgba(16, 185, 129, 0.1);
   color: var(--analysis-green);
 }
 
 .cfg-form__test-result.is-fail {
+  background: rgba(251, 113, 133, 0.1);
   color: var(--analysis-danger);
+}
+
+.cfg-form__test-result span {
+  color: var(--analysis-soft);
+  font-weight: 500;
+}
+
+.cfg-form--empty {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--analysis-soft);
+}
+
+.cfg-form--empty p {
+  max-width: 320px;
+  margin: 0;
+  line-height: 1.7;
 }
 
 @media (max-width: 1440px) {
@@ -4761,6 +5277,18 @@ onMounted(async () => {
     padding-right: 16px;
   }
 
+  .analysis-center__header {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .analysis-pipeline {
+    order: 3;
+    flex-basis: 100%;
+    justify-content: flex-start;
+    max-width: none;
+  }
+
   .composer-topbar {
     align-items: stretch;
     flex-direction: column;
@@ -4796,6 +5324,22 @@ onMounted(async () => {
 
   .stream-row--user .stream-presence {
     grid-column: 2 / 3;
+  }
+
+  .cfg-modal {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+  }
+
+  .cfg-modal__body {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+
+  .cfg-list {
+    max-height: 320px;
+    border-right: none;
+    border-bottom: 1px solid var(--analysis-border);
   }
 }
 
@@ -4836,6 +5380,15 @@ onMounted(async () => {
     padding: 14px;
   }
 
+  .analysis-title h2 {
+    font-size: 15px;
+  }
+
+  .header-meta {
+    max-width: 132px;
+    min-width: 112px;
+  }
+
   .stream-card--assistant {
     border-radius: 18px 18px 18px 6px;
   }
@@ -4867,6 +5420,31 @@ onMounted(async () => {
   .workbench-modal__header {
     align-items: flex-start;
     padding: 14px;
+  }
+
+  .cfg-modal-overlay {
+    align-items: stretch;
+    padding: 12px;
+  }
+
+  .cfg-modal {
+    width: 100%;
+    max-width: none;
+    max-height: none;
+  }
+
+  .cfg-modal__header,
+  .cfg-form {
+    padding: 16px;
+  }
+
+  .cfg-list__item {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .cfg-list__actions {
+    grid-column: 2 / 3;
+    justify-content: flex-start;
   }
 
   .prompt-modal-grid,

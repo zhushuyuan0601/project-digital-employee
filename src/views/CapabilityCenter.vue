@@ -116,8 +116,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import Tools from '@/views/Tools.vue'
-import SkillsHub from '@/views/SkillsHub.vue'
+import Tools from '@/components/capability/ToolsPanel.vue'
+import SkillsHub from '@/components/capability/SkillsHubPanel.vue'
 
 type CapabilityTab = 'tools' | 'skills'
 type StatusFilter = 'all' | 'active' | 'inactive' | 'pending'

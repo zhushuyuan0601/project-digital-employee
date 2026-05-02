@@ -535,27 +535,10 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useNotification } from '@/composables/useNotification'
-
-interface Skill {
-  id: string
-  name: string
-  author?: string
-  version?: string
-  description?: string
-  icon?: string
-  category?: string
-  downloads?: number
-  rating?: number
-  installed?: boolean
-  updateAvailable?: boolean
-  securityScan?: { status: string }
-  source?: string
-  path?: string
-  content_hash?: string
-  registry_slug?: string
-  security_status?: string
-}
+import { useSkillsStore } from '@/stores/skills'
+import type { Skill } from '@/api'
 
 interface RegistrySkill {
   slug: string
@@ -571,9 +554,9 @@ interface RegistrySkill {
 }
 
 const notification = useNotification()
+const skillsStore = useSkillsStore()
+const { skills, loading } = storeToRefs(skillsStore)
 
-const skills = ref<Skill[]>([])
-const loading = ref(false)
 const activeTab = ref<'installed' | 'registry'>('installed')
 const searchQuery = ref('')
 const categoryFilter = ref('')
@@ -624,18 +607,7 @@ const filteredSkills = computed(() => {
 
 // 获取技能列表
 async function fetchSkills() {
-  loading.value = true
-  try {
-    const response = await fetch('/api/skills')
-    const data = await response.json()
-    if (data.success) {
-      skills.value = data.skills || []
-    }
-  } catch (e) {
-    console.error('Failed to fetch skills:', e)
-  } finally {
-    loading.value = false
-  }
+  await skillsStore.fetchSkills()
 }
 
 // 刷新技能
@@ -746,17 +718,11 @@ function viewRegistrySkillDetail(skill: RegistrySkill) {
 // 安装技能
 async function installSkill(skill: Skill) {
   try {
-    const response = await fetch('/api/skills/install', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: skill.id })
-    })
-    const data = await response.json()
+    const data = await skillsStore.installSkill(skill.id)
     if (data.success) {
-      fetchSkills()
       showDetailModal.value = false
     } else {
-      notification.error('安装失败: ' + data.error)
+      notification.error('安装失败')
     }
   } catch (e: any) {
     notification.error('安装失败: ' + e.message)
@@ -766,14 +732,11 @@ async function installSkill(skill: Skill) {
 // 更新技能
 async function updateSkill(skill: Skill) {
   try {
-    const response = await fetch(`/api/skills/${encodeURIComponent(skill.id)}/update`, {
-      method: 'POST'
-    })
-    const data = await response.json()
+    const data = await skillsStore.updateSkill(skill.id)
     if (data.success) {
-      fetchSkills()
+      notification.success('更新完成')
     } else {
-      notification.error('更新失败: ' + data.error)
+      notification.error('更新失败')
     }
   } catch (e: any) {
     notification.error('更新失败: ' + e.message)
@@ -786,15 +749,11 @@ async function uninstallSkill(skill: Skill) {
   if (!confirmed) return
 
   try {
-    const response = await fetch(`/api/skills?source=${skill.source}&name=${skill.name}`, {
-      method: 'DELETE'
-    })
-    const data = await response.json()
+    const data = await skillsStore.uninstallSkill(skill.id)
     if (data.success) {
-      fetchSkills()
       showDetailModal.value = false
     } else {
-      notification.error('卸载失败: ' + data.error)
+      notification.error('卸载失败')
     }
   } catch (e: any) {
     notification.error('卸载失败: ' + e.message)
@@ -822,18 +781,12 @@ async function createSkill() {
   if (!newSkill.value.name) return
 
   try {
-    const response = await fetch('/api/skills', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newSkill.value)
-    })
-    const data = await response.json()
+    const data = await skillsStore.createSkill(newSkill.value)
     if (data.success) {
       showCreateModal.value = false
       newSkill.value = { name: '', source: 'workspace', content: '' }
-      fetchSkills()
     } else {
-      notification.error('创建失败: ' + data.error)
+      notification.error('创建失败')
     }
   } catch (e: any) {
     notification.error('创建失败: ' + e.message)

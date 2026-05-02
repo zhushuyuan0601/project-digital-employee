@@ -17,6 +17,8 @@ export interface Skill {
   path?: string
   source?: string
   security_status?: string
+  content_hash?: string
+  registry_slug?: string
 }
 
 export interface SkillsResponse {
@@ -45,6 +47,13 @@ export const skillsApi = {
   async uninstallSkill(skillId: string): Promise<{ success: boolean }> {
     return request(`/api/skills/${skillId}`, {
       method: 'DELETE',
+    })
+  },
+
+  async createSkill(skill: { name: string; source: string; content: string }): Promise<{ success: boolean }> {
+    return request('/api/skills', {
+      method: 'POST',
+      body: JSON.stringify(skill),
     })
   },
 }

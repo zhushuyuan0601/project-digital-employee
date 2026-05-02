@@ -13,6 +13,7 @@ import http from 'http'
 import skillsRouter from './routes/skills.js'
 import agentChatRouter, { initAgentChatRoutes } from './routes/agent-chat.js'
 import analysisRouter from './routes/analysis.js'
+import { createAutomationRouter } from './routes/automation.js'
 import { initializeSchema } from './db/index.js'
 import { initializeAgentChatSchema } from './db/agent-chat.js'
 import { initializeAnalysisSchema } from './db/analysis.js'
@@ -1114,437 +1115,6 @@ app.get('/api/security/audit', async (req, res) => {
   }
 })
 
-// ============ Cron API ============
-
-const CRON_TASKS = [
-  {
-    id: 'cron1',
-    name: '每日数据备份',
-    cron: '0 2 * * *',
-    agentId: 'xiaokai',
-    agentName: '小开',
-    enabled: true,
-    lastRun: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString(),
-    nextRun: new Date(Date.now() + 1000 * 60 * 60 * 16).toISOString(),
-    successCount: 128,
-    failureCount: 3,
-    lastStatus: 'success'
-  },
-  {
-    id: 'cron2',
-    name: '周报生成',
-    cron: '0 9 * * 1',
-    agentId: 'xiaochan',
-    agentName: '小产',
-    enabled: true,
-    lastRun: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(),
-    nextRun: new Date(Date.now() + 1000 * 60 * 60 * 24 * 4).toISOString(),
-    successCount: 45,
-    failureCount: 1,
-    lastStatus: 'success'
-  },
-  {
-    id: 'cron3',
-    name: '日志清理',
-    cron: '0 0 * * 0',
-    agentId: 'xiaokai',
-    agentName: '小开',
-    enabled: false,
-    lastRun: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7).toISOString(),
-    successCount: 24,
-    failureCount: 0,
-    lastStatus: 'success'
-  }
-]
-
-/**
- * Cron API - 获取定时任务列表
- * GET /api/cron/tasks
- */
-app.get('/api/cron/tasks', async (req, res) => {
-  try {
-    console.log('[API] Cron tasks request')
-
-    // 尝试从 Gateway 获取数据
-    try {
-      const gatewayData = await proxyToGateway('/api/cron/tasks')
-      if (gatewayData && gatewayData.success) {
-        console.log('[API] Cron data from Gateway')
-        return res.json(gatewayData)
-      }
-    } catch (e) {
-      // Gateway 不可用，使用模拟数据
-      console.log('[API] Cron using mock data')
-    }
-
-    const stats = {
-      totalTasks: CRON_TASKS.length,
-      enabledTasks: CRON_TASKS.filter(t => t.enabled).length,
-      disabledTasks: CRON_TASKS.filter(t => !t.enabled).length,
-      todayExecutions: 5
-    }
-
-    res.json({
-      success: true,
-      stats,
-      tasks: CRON_TASKS,
-      executions: []
-    })
-  } catch (err) {
-    console.error('[API] Cron tasks error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 创建定时任务
- * POST /api/cron/tasks
- */
-app.post('/api/cron/tasks', async (req, res) => {
-  try {
-    const { name, cron, agentId, enabled = true } = req.body
-    const newTask = {
-      id: `cron-${Date.now()}`,
-      name,
-      cron,
-      agentId,
-      agentName: '小开',
-      enabled,
-      successCount: 0,
-      failureCount: 0,
-      lastStatus: null
-    }
-    CRON_TASKS.push(newTask)
-    console.log('[API] Create cron task:', newTask)
-    res.json({ success: true, task: newTask })
-  } catch (err) {
-    console.error('[API] Create cron task error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 更新定时任务
- * PUT /api/cron/tasks/:id
- */
-app.put('/api/cron/tasks/:id', async (req, res) => {
-  try {
-    const { id } = req.params
-    const updates = req.body
-    const task = CRON_TASKS.find(t => t.id === id)
-    if (task) {
-      Object.assign(task, updates)
-    }
-    console.log('[API] Update cron task:', id, updates)
-    res.json({ success: true })
-  } catch (err) {
-    console.error('[API] Update cron task error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 删除定时任务
- * DELETE /api/cron/tasks/:id
- */
-app.delete('/api/cron/tasks/:id', async (req, res) => {
-  try {
-    const { id } = req.params
-    const index = CRON_TASKS.findIndex(t => t.id === id)
-    if (index > -1) {
-      CRON_TASKS.splice(index, 1)
-    }
-    console.log('[API] Delete cron task:', id)
-    res.json({ success: true })
-  } catch (err) {
-    console.error('[API] Delete cron task error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 切换任务状态
- * POST /api/cron/tasks/:id/toggle
- */
-app.post('/api/cron/tasks/:id/toggle', async (req, res) => {
-  try {
-    const { id } = req.params
-    const task = CRON_TASKS.find(t => t.id === id)
-    if (task) {
-      task.enabled = !task.enabled
-    }
-    console.log('[API] Toggle cron task:', id, task?.enabled)
-    res.json({ success: true, enabled: task?.enabled })
-  } catch (err) {
-    console.error('[API] Toggle cron task error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 立即执行任务
- * POST /api/cron/tasks/:id/execute
- */
-app.post('/api/cron/tasks/:id/execute', async (req, res) => {
-  try {
-    const { id } = req.params
-    console.log('[API] Execute cron task:', id)
-    // 模拟执行
-    res.json({ success: true, executionId: `exec-${Date.now()}` })
-  } catch (err) {
-    console.error('[API] Execute cron task error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-// ============ Webhooks API ============
-
-const WEBHOOKS_DB = [
-  {
-    id: 'wh1',
-    name: '生产环境告警',
-    url: 'https://api.example.com/webhooks/alerts',
-    description: '发送所有错误和告警事件到监控系统',
-    events: ['agent.error', 'log.error', 'security.alert'],
-    secret: 'whsec_xxxxxxxxxxxxxxxx',
-    algorithm: 'HMAC-SHA256',
-    retryPolicy: 'exponential',
-    maxRetries: 3,
-    timeout: 30,
-    enabled: true,
-    successCount: 1247,
-    failureCount: 12,
-    avgResponseTime: 156,
-    lastDelivery: new Date(Date.now() - 1000 * 60 * 5).toISOString()
-  },
-  {
-    id: 'wh2',
-    name: '任务状态同步',
-    url: 'https://hooks.slack.com/services/xxx/yyy/zzz',
-    description: '任务状态变更通知到 Slack 频道',
-    events: ['task.created', 'task.completed', 'task.failed'],
-    secret: '',
-    algorithm: 'HMAC-SHA256',
-    retryPolicy: 'fixed',
-    maxRetries: 2,
-    timeout: 15,
-    enabled: true,
-    successCount: 856,
-    failureCount: 3,
-    avgResponseTime: 234,
-    lastDelivery: new Date(Date.now() - 1000 * 60 * 30).toISOString()
-  }
-]
-
-/**
- * Webhooks API - 获取 Webhook 列表
- * GET /api/webhooks
- */
-app.get('/api/webhooks', async (req, res) => {
-  try {
-    console.log('[API] Webhooks request')
-
-    // 尝试从 Gateway 获取数据
-    try {
-      const gatewayData = await proxyToGateway('/api/webhooks')
-      if (gatewayData && gatewayData.success) {
-        console.log('[API] Webhooks data from Gateway')
-        return res.json(gatewayData)
-      }
-    } catch (e) {
-      // Gateway 不可用，使用模拟数据
-      console.log('[API] Webhooks using mock data')
-    }
-
-    const stats = {
-      totalWebhooks: WEBHOOKS_DB.length,
-      enabledWebhooks: WEBHOOKS_DB.filter(w => w.enabled).length,
-      disabledWebhooks: WEBHOOKS_DB.filter(w => !w.enabled).length,
-      todayDeliveries: WEBHOOKS_DB.reduce((sum, w) => sum + w.successCount + w.failureCount, 0)
-    }
-
-    res.json({
-      success: true,
-      stats,
-      webhooks: WEBHOOKS_DB,
-      deliveries: []
-    })
-  } catch (err) {
-    console.error('[API] Webhooks error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 创建 Webhook
- * POST /api/webhooks
- */
-app.post('/api/webhooks', async (req, res) => {
-  try {
-    const webhook = req.body
-    const newWebhook = {
-      id: `wh-${Date.now()}`,
-      ...webhook,
-      successCount: 0,
-      failureCount: 0,
-      avgResponseTime: 0,
-      lastDelivery: null
-    }
-    WEBHOOKS_DB.push(newWebhook)
-    console.log('[API] Create webhook:', newWebhook)
-    res.json({ success: true, webhook: newWebhook })
-  } catch (err) {
-    console.error('[API] Create webhook error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 更新 Webhook
- * PUT /api/webhooks/:id
- */
-app.put('/api/webhooks/:id', async (req, res) => {
-  try {
-    const { id } = req.params
-    const updates = req.body
-    const webhook = WEBHOOKS_DB.find(w => w.id === id)
-    if (webhook) {
-      Object.assign(webhook, updates)
-    }
-    console.log('[API] Update webhook:', id, updates)
-    res.json({ success: true })
-  } catch (err) {
-    console.error('[API] Update webhook error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 删除 Webhook
- * DELETE /api/webhooks/:id
- */
-app.delete('/api/webhooks/:id', async (req, res) => {
-  try {
-    const { id } = req.params
-    const index = WEBHOOKS_DB.findIndex(w => w.id === id)
-    if (index > -1) {
-      WEBHOOKS_DB.splice(index, 1)
-    }
-    console.log('[API] Delete webhook:', id)
-    res.json({ success: true })
-  } catch (err) {
-    console.error('[API] Delete webhook error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 切换 Webhook 状态
- * POST /api/webhooks/:id/toggle
- */
-app.post('/api/webhooks/:id/toggle', async (req, res) => {
-  try {
-    const { id } = req.params
-    const webhook = WEBHOOKS_DB.find(w => w.id === id)
-    if (webhook) {
-      webhook.enabled = !webhook.enabled
-    }
-    console.log('[API] Toggle webhook:', id, webhook?.enabled)
-    res.json({ success: true, enabled: webhook?.enabled })
-  } catch (err) {
-    console.error('[API] Toggle webhook error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 发送测试通知
- * POST /api/webhooks/:id/test
- */
-app.post('/api/webhooks/:id/test', async (req, res) => {
-  try {
-    const { id } = req.params
-    const { event } = req.body
-    console.log('[API] Test webhook:', id, event)
-    // 模拟发送测试
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    res.json({ success: true })
-  } catch (err) {
-    console.error('[API] Test webhook error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 获取投递日志
- * GET /api/webhooks/:id/deliveries?limit=xxx
- */
-app.get('/api/webhooks/:id/deliveries', async (req, res) => {
-  try {
-    const { id } = req.params
-    const { limit = 50 } = req.query
-    console.log('[API] Get webhook deliveries:', id)
-
-    const deliveries = []
-    for (let i = 0; i < Math.min(parseInt(limit), 50); i++) {
-      deliveries.push({
-        id: `del-${i}`,
-        webhookId: id,
-        event: ['task.created', 'task.completed', 'agent.error'][Math.floor(Math.random() * 3)],
-        timestamp: new Date(Date.now() - i * 1000 * 60 * 30).toISOString(),
-        status: Math.random() > 0.1 ? 'success' : 'failure',
-        httpMethod: 'POST',
-        httpStatus: Math.random() > 0.1 ? 200 : 500,
-        duration: Math.floor(Math.random() * 500) + 100
-      })
-    }
-
-    res.json({ success: true, deliveries })
-  } catch (err) {
-    console.error('[API] Get webhook deliveries error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
 // ============ ClaudeCode Sessions API ============
 
 const LOCAL_SESSION_ACTIVE_WINDOW_MS = 90 * 60 * 1000 // 90 分钟
@@ -2005,6 +1575,7 @@ app.get('/api/dashboard', async (req, res) => {
 
     res.json({
       success: true,
+      dataSource: 'workspace',
       stats,
       projects,
       todayWork: [],
@@ -2014,6 +1585,7 @@ app.get('/api/dashboard', async (req, res) => {
     console.error('[API] Dashboard error:', err)
     res.json({
       success: true,
+      dataSource: 'mock',
       stats: { totalProjects: 0, inProgress: 0, notStarted: 0, todayCommits: 0 },
       projects: [],
       todayWork: [],
@@ -2077,10 +1649,13 @@ app.get('/api/activities', async (req, res) => {
       }))
     }
 
+    let dataSource = claudeDb && activities.length > 0 ? 'database' : 'mock'
+
     // 如果数据库数据不足，生成模拟数据补充
     if (activities.length < requestedLimit) {
       const mockActivities = generateMockActivities(requestedLimit - activities.length, sinceTimestamp)
       activities = [...activities, ...mockActivities]
+      dataSource = claudeDb && activities.length > mockActivities.length ? 'mixed' : 'mock'
     }
 
     // 按时间排序
@@ -2105,6 +1680,7 @@ app.get('/api/activities', async (req, res) => {
 
     res.json({
       success: true,
+      dataSource,
       activities: activities.slice(0, requestedLimit),
       total
     })
@@ -2114,6 +1690,7 @@ app.get('/api/activities', async (req, res) => {
     const mockActivities = generateMockActivities(parseInt(req.query.limit) || 50)
     res.json({
       success: true,
+      dataSource: 'mock',
       activities: mockActivities,
       total: mockActivities.length
     })
@@ -2206,6 +1783,7 @@ initializeAnalysisSchema()
 // 初始化默认 Agents
 initAgentChatRoutes()
 
+app.use('/api', createAutomationRouter({ proxyToGateway }))
 app.use('/api', agentChatRouter)
 app.use('/api/analysis', analysisRouter)
 

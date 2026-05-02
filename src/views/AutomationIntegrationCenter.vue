@@ -32,8 +32,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import Cron from '@/views/Cron.vue'
-import Webhooks from '@/views/Webhooks.vue'
+import Cron from '@/components/automation/CronPanel.vue'
+import Webhooks from '@/components/automation/WebhooksPanel.vue'
 
 type AutomationTab = 'cron' | 'webhooks'
 

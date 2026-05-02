@@ -33,8 +33,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import Agents from '@/views/Agents.vue'
-import DigitalEmployee from '@/views/DigitalEmployee.vue'
+import Agents from '@/components/team/AgentsPanel.vue'
+import DigitalEmployee from '@/components/team/DigitalEmployeePanel.vue'
 
 type TeamTab = 'team' | 'projects' | 'outputs'
 

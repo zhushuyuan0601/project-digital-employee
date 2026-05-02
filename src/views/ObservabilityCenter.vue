@@ -7,6 +7,9 @@
         <span class="obs-header__subtitle">System Operations Dashboard</span>
       </div>
       <div class="obs-header__right">
+        <div v-if="dataSourceLabel" class="obs-header__source">
+          {{ dataSourceLabel }}
+        </div>
         <div class="obs-header__status" :class="gatewayStatus">
           <span class="obs-header__dot"></span>
           {{ gatewayStatusText }}
@@ -228,6 +231,7 @@ import {
 } from '@element-plus/icons-vue'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
 import { storeToRefs } from 'pinia'
+import { getActivities, getDashboard, type ActivityItem } from '@/api/dashboard'
 
 const multiAgentStore = useMultiAgentChatStore()
 const { anyConnected } = storeToRefs(multiAgentStore)
@@ -251,6 +255,7 @@ let timerId = 0
 onMounted(() => {
   updateClock()
   timerId = window.setInterval(updateClock, 1000)
+  loadDashboardData()
 })
 onUnmounted(() => {
   window.clearInterval(timerId)
@@ -273,6 +278,53 @@ const stats = ref({
   alerts: 3,
   systemLoad: '65%',
 })
+const dataSource = ref<'workspace' | 'database' | 'mock' | 'mixed' | ''>('')
+const dataSourceLabel = computed(() => {
+  if (!dataSource.value) return ''
+  const labels = {
+    workspace: 'Workspace 数据',
+    database: 'Database 数据',
+    mixed: '混合数据',
+    mock: '演示数据',
+  }
+  return labels[dataSource.value]
+})
+
+async function loadDashboardData() {
+  const [dashboardResult, activitiesResult] = await Promise.allSettled([
+    getDashboard(),
+    getActivities(5),
+  ])
+
+  if (dashboardResult.status === 'fulfilled' && dashboardResult.value.success) {
+    const dashboard = dashboardResult.value
+    stats.value = {
+      ...stats.value,
+      activeTasks: dashboard.stats.inProgress ?? stats.value.activeTasks,
+      activeAgents: roleList.value.filter(role => role.active).length,
+      successRate: dashboard.projects.length > 0 ? '100%' : stats.value.successRate,
+      alerts: dashboard.stats.notStarted ?? stats.value.alerts,
+    }
+    dataSource.value = dashboard.dataSource || 'workspace'
+  } else {
+    dataSource.value = 'mock'
+  }
+
+  if (activitiesResult.status === 'fulfilled' && activitiesResult.value.success) {
+    recentLogs.value = activitiesResult.value.activities.slice(0, 5).map(formatActivityLog)
+    if (activitiesResult.value.dataSource === 'mixed' || dataSource.value === 'mock') {
+      dataSource.value = activitiesResult.value.dataSource || dataSource.value
+    }
+  }
+}
+
+function formatActivityLog(activity: ActivityItem) {
+  return {
+    time: activity.time || new Date((activity.createdAt || Date.now() / 1000) * 1000).toLocaleTimeString('zh-CN', { hour12: false }),
+    message: activity.description || activity.task || activity.type,
+    dotColor: activity.status === 'failed' ? '#da3633' : activity.status === 'completed' ? '#238636' : '#2f81f7',
+  }
+}
 
 // ─── KPI Metrics ────────────────────────────────────────
 const metrics = computed(() => [
@@ -493,6 +545,14 @@ const recentLogs = ref([
   display: flex;
   align-items: center;
   gap: 24px;
+}
+
+.obs-header__source {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
 }
 
 .obs-header__status {

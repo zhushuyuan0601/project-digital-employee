@@ -105,6 +105,6 @@ export function getMultiAgentStoreConfigs(agentIds: AgentId[] = DEFAULT_AGENT_ID
       displayName: agent.name,
       role: agent.roleLabel,
       avatar: agent.chatAvatar,
-      gatewayAgentId: agent.sessionKey,
+      gatewayAgentId: agent.gatewayAgentId,
     }))
 }

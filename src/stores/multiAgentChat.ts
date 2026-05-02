@@ -238,7 +238,7 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
       const sessionAgentName = extractAgentNameFromKey(payloadSessionKey || '')
       const currentAgent = agents.value[agentId]
       const myAgentName = extractAgentNameFromKey(currentAgent?.config.sessionKey || '')
-      const myGatewayAgentId = currentAgent?.config.gatewayAgentId?.split(':')[1] || ''
+      const myGatewayAgentId = normalizeGatewayAgentId(currentAgent?.config.gatewayAgentId || '')
 
       // 检查是否匹配：通过 agent 名称或 gatewayAgentId
       // 消息应该只传递给对应的 Agent
@@ -655,7 +655,7 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
 
     // 使用 'agent' 方法创建新 session 并发送消息（与 Mission-control 一致）
     // 从 gatewayAgentId 提取简短的 agent ID（如 'agent:ceo:main' -> 'ceo'）
-    const agentIdShort = agent.config.gatewayAgentId?.split(':')[1] || agentId
+    const agentIdShort = normalizeGatewayAgentId(agent.config.gatewayAgentId || '') || agentId
 
     const msg = {
       type: 'req',
@@ -671,6 +671,11 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
     console.log(`[MultiAgentChat] [${agentId}] 发送消息:`, JSON.stringify(msg.params, null, 2))
     pendingRequests.value[msg.id] = { method: 'agent', agentId }
     agent.ws.send(JSON.stringify(msg))
+  }
+
+  function normalizeGatewayAgentId(value: string): string {
+    if (!value) return ''
+    return value.includes(':') ? extractAgentNameFromKey(value) : value.toLowerCase()
   }
 
   function clearMessages(agentId: string) {
