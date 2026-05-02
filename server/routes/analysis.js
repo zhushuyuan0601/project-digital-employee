@@ -182,7 +182,7 @@ router.get('/models', async (req, res) => {
 })
 
 router.post('/test-connection', async (req, res) => {
-  console.log('[Analysis API] test-connection called, body:', JSON.stringify(req.body))
+  console.log('[Analysis API] test-connection called')
   res.setHeader('Content-Type', 'application/json')
   try {
     const { api_base, api_key } = req.body || {}
@@ -258,6 +258,26 @@ router.get('/workspace/preview', async (req, res) => {
     res.json(payload)
   } catch (err) {
     console.error('[Analysis API] Workspace preview error:', err)
+    res.status(err.status || 500).json(err.payload || { error: err.message })
+  }
+})
+
+router.get('/workspace/profile', async (req, res) => {
+  try {
+    const payload = await proxyJson('/workspace/profile', {}, req.query)
+    res.json(payload)
+  } catch (err) {
+    console.error('[Analysis API] Workspace profile error:', err)
+    res.status(err.status || 500).json(err.payload || { error: err.message })
+  }
+})
+
+router.get('/workspace/overview', async (req, res) => {
+  try {
+    const payload = await proxyJson('/workspace/overview', {}, req.query)
+    res.json(payload)
+  } catch (err) {
+    console.error('[Analysis API] Workspace overview error:', err)
     res.status(err.status || 500).json(err.payload || { error: err.message })
   }
 })
@@ -367,13 +387,22 @@ router.post('/chat/completions', async (req, res) => {
     })
 
     let response
+    const controller = new AbortController()
+    res.on('close', () => {
+      if (!res.writableEnded) controller.abort()
+    })
     try {
       response = await fetch(buildAnalysisUrl('/v1/chat/completions'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        signal: controller.signal,
       })
     } catch (error) {
+      if (error.name === 'AbortError') {
+        patchAnalysisSession(sessionId, { status: 'idle' })
+        return
+      }
       patchAnalysisSession(sessionId, { status: 'error' })
       return res.status(502).json({ error: `Analysis service unavailable: ${error.message}` })
     }

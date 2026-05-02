@@ -16,9 +16,70 @@ export interface WorkspaceFile {
   path: string
   size: number
   category: 'table' | 'image' | 'other'
+  artifact_type?: 'source' | 'chart' | 'table' | 'report' | 'other'
   is_generated: boolean
   download_url: string
   preview_url: string
+}
+
+export interface SelectedAnalysisFileContext {
+  name: string
+  path: string
+  category: WorkspaceFile['category']
+  sheet_name?: string
+  table_name?: string
+  size?: number
+  is_generated?: boolean
+}
+
+export interface FileProfileField {
+  name: string
+  type: string
+  missing_count?: number
+  missing_rate?: number
+  unique_count?: number
+  samples?: unknown[]
+  stats?: { min?: number; max?: number; mean?: number }
+}
+
+export interface FileProfile {
+  kind: string
+  source_path?: string
+  row_count?: number
+  column_count?: number
+  missing_count?: number
+  missing_rate?: number
+  sampled_rows?: number
+  sampling?: { mode?: string; sample_size?: number; is_sampled?: boolean }
+  fields?: FileProfileField[]
+  sheet_name?: string
+  sheet_names?: string[]
+  table_name?: string
+  tables?: string[]
+  profile_generated_at?: number
+  [key: string]: unknown
+}
+
+export interface PreviewPayload {
+  kind: string
+  content?: string
+  columns?: string[]
+  rows?: unknown[][]
+  row_count?: number
+  truncated?: boolean
+  sheet_name?: string
+  sheet_names?: string[]
+  table_name?: string
+  tables?: string[]
+  url?: string
+  [key: string]: unknown
+}
+
+export interface WorkspaceOverview {
+  session_id: string
+  datasets: Array<Record<string, unknown>>
+  relations: Array<{ left: string; right: string; common_fields: string[] }>
+  generated_at: number
 }
 
 export interface AnalysisMessage {
@@ -63,6 +124,10 @@ export async function listAnalysisFiles(sessionId: string) {
   return request<{ files: WorkspaceFile[] }>(`/api/analysis/workspace/files?session_id=${encodeURIComponent(sessionId)}`)
 }
 
+export async function getAnalysisOverview(sessionId: string) {
+  return request<WorkspaceOverview>(`/api/analysis/workspace/overview?session_id=${encodeURIComponent(sessionId)}`)
+}
+
 export async function previewAnalysisFile(
   sessionId: string,
   path: string,
@@ -76,7 +141,21 @@ export async function previewAnalysisFile(
   if (extra?.pageSize) query.set('page_size', String(extra.pageSize))
   if (extra?.tableName) query.set('table_name', extra.tableName)
   if (extra?.sheetName) query.set('sheet_name', extra.sheetName)
-  return request<any>(`/api/analysis/workspace/preview?${query.toString()}`)
+  return request<PreviewPayload>(`/api/analysis/workspace/preview?${query.toString()}`)
+}
+
+export async function profileAnalysisFile(
+  sessionId: string,
+  path: string,
+  extra?: { tableName?: string; sheetName?: string },
+) {
+  const query = new URLSearchParams({
+    session_id: sessionId,
+    path,
+  })
+  if (extra?.tableName) query.set('table_name', extra.tableName)
+  if (extra?.sheetName) query.set('sheet_name', extra.sheetName)
+  return request<FileProfile>(`/api/analysis/workspace/profile?${query.toString()}`)
 }
 
 export async function uploadAnalysisFiles(sessionId: string, files: File[]) {
@@ -108,7 +187,16 @@ export async function listAnalysisModels() {
   return request<{ object: string; data: Array<{ id: string }> }>('/api/analysis/models')
 }
 
-export async function exportAnalysisReport(payload: { session_id: string; format: 'md' | 'pdf' }) {
+export interface ExportAnalysisReportPayload {
+  session_id: string
+  format: 'md' | 'pdf'
+  report_type?: string
+  include_code?: boolean
+  include_charts?: boolean
+  include_samples?: boolean
+}
+
+export async function exportAnalysisReport(payload: ExportAnalysisReportPayload) {
   const response = await fetch('/api/analysis/export/report', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -120,11 +208,13 @@ export async function exportAnalysisReport(payload: { session_id: string; format
 export async function streamAnalysisChat(
   payload: Record<string, unknown>,
   onChunk: (chunk: { content?: string; session_id?: string; files?: Array<{ name: string; url: string }>; done?: boolean }) => void,
+  options?: { signal?: AbortSignal },
 ) {
   const response = await fetch('/api/analysis/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+    signal: options?.signal,
   })
 
   if (!response.ok) {

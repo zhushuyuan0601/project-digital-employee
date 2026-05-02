@@ -1,29 +1,34 @@
 <template>
   <div class="analysis-shell">
     <div class="analysis-shell__overlay"></div>
+    <div class="analysis-shell__grid" aria-hidden="true"></div>
 
     <header class="analysis-navbar">
       <div class="analysis-navbar__brand">
-        <div class="brand-mark">▦</div>
+        <div class="brand-mark">
+          <DataAnalysis />
+        </div>
         <div>
-          <p class="brand-eyebrow">Data Analysis Console</p>
+          <p class="brand-eyebrow">Neural Data Analysis Console</p>
           <h1>数据分析工作台</h1>
         </div>
       </div>
 
       <div class="analysis-navbar__status">
-        <div class="status-chip">
+        <div class="status-chip" :class="{ 'is-running': sending }">
           <span class="status-chip__dot"></span>
           <span>{{ currentSession ? getStatusLabel(currentSession.status) : '未接入会话' }}</span>
         </div>
         <div class="status-chip status-chip--muted">
+          <Files />
           <span>{{ workspaceFiles.length }} 个文件</span>
         </div>
         <div class="status-chip status-chip--muted">
+          <ChatDotRound />
           <span>{{ messages.length }} 条消息</span>
         </div>
         <button class="help-trigger" type="button" @click="showHelpModal = true">
-          <span>?</span>
+          <QuestionFilled />
           <span>使用帮助</span>
         </button>
       </div>
@@ -32,19 +37,32 @@
     <section class="analysis-stage">
       <aside class="workrail">
         <button class="new-session-btn" @click="handleCreateSession">
-          <span>＋</span>
+          <Plus />
           <span>新建会话</span>
         </button>
+
+        <div class="mission-card">
+          <div class="mission-card__head">
+            <div>
+              <p>当前分析强度</p>
+              <span>{{ currentPhaseLabel }}</span>
+            </div>
+            <strong>{{ analysisScore }}</strong>
+          </div>
+          <div class="mission-card__bar">
+            <i :style="{ width: `${analysisScore}%` }"></i>
+          </div>
+        </div>
 
         <div class="workrail-section">
           <p class="workrail-section__label">当前工作</p>
           <div class="workrail-menu">
             <button class="workrail-menu__item is-active" type="button">
-              <span>◉</span>
+              <ChatDotRound />
               <span>分析会话</span>
             </button>
             <button class="workrail-menu__item" type="button" @click="selectedFile && handlePreview(selectedFile)">
-              <span>◎</span>
+              <View />
               <span>文件预览</span>
             </button>
           </div>
@@ -52,37 +70,46 @@
 
         <div class="workrail-section">
           <div class="workrail-section__head">
-            <p class="workrail-section__label">历史记录</p>
+            <p class="workrail-section__label">会话管理</p>
             <span>{{ sessions.length }}</span>
           </div>
-          <div class="history-list">
-            <button
-              v-for="session in sessions"
-              :key="session.id"
-              class="history-item"
-              :class="{ 'is-active': session.id === currentSessionId }"
-              @click="selectSession(session.id)"
-            >
-              <div class="history-item__top">
-                <strong>{{ session.title }}</strong>
-                <span>{{ getStatusLabel(session.status) }}</span>
-              </div>
-              <p>{{ session.last_user_message || '从这里继续你的分析任务' }}</p>
-            </button>
-          </div>
+          <button class="session-manager-card" type="button" @click="showSessionModal = true">
+            <div>
+              <strong>{{ currentSession?.title || '未选择会话' }}</strong>
+              <span>{{ currentSession?.last_user_message || '查看、切换和删除历史会话' }}</span>
+            </div>
+            <small>打开</small>
+          </button>
         </div>
 
         <div v-if="currentSession" class="workrail-footer">
+          <span>当前会话操作</span>
           <button class="side-action" @click="handleClearWorkspace">清空 Workspace</button>
-          <button class="side-action side-action--danger" @click="handleDeleteSession">删除会话</button>
+          <button class="side-action side-action--danger" @click="handleDeleteSession">
+            <Delete />
+            <span>删除会话</span>
+          </button>
         </div>
       </aside>
 
       <main class="analysis-center">
         <div class="analysis-center__header">
-          <div>
+          <div class="analysis-title">
             <p class="panel-label">Analysis Flow</p>
             <h2>{{ currentSession?.title || '未选择会话' }}</h2>
+            <section class="analysis-pipeline" aria-label="分析流程">
+              <div
+                v-for="phase in analysisPhases"
+                :key="phase.key"
+                class="pipeline-node"
+                :class="{ 'is-active': phase.key === currentPhaseKey, 'is-done': phase.done }"
+              >
+                <span class="pipeline-node__icon">
+                  <component :is="phase.icon" />
+                </span>
+                <strong>{{ phase.label }}</strong>
+              </div>
+            </section>
           </div>
           <button v-if="currentSession" class="header-meta" type="button">
             <span class="header-meta__label">会话 ID</span>
@@ -92,25 +119,23 @@
 
         <div class="analysis-center__body" ref="messageStreamRef">
           <div v-if="messages.length === 0" class="welcome-state">
-            <div class="welcome-state__glyph">◈</div>
+            <div class="welcome-state__glyph">
+              <TrendCharts />
+            </div>
             <h3>让分析从一条任务开始</h3>
             <p>上传数据文件后，系统会按结构化链路完成推理、写代码、执行、回看与报告导出。</p>
 
             <div class="welcome-actions">
-              <button class="welcome-card" type="button" @click="applyStarterPrompt('分析这个文件里的关键指标，并用图表展示趋势变化。')">
-                <span class="welcome-card__icon">📈</span>
-                <strong>趋势洞察</strong>
-                <p>适合销售、流量、运营等时间序列数据的快速拆解。</p>
-              </button>
-              <button class="welcome-card" type="button" @click="applyStarterPrompt('请先理解字段含义，再做异常值检查和数据质量诊断。')">
-                <span class="welcome-card__icon">🧪</span>
-                <strong>质量诊断</strong>
-                <p>先识别脏数据、缺失、异常点，再决定下一步分析方向。</p>
-              </button>
-              <button class="welcome-card" type="button" @click="applyStarterPrompt('基于当前数据给我一份结论明确、含建议项的分析报告。')">
-                <span class="welcome-card__icon">📝</span>
-                <strong>报告生成</strong>
-                <p>面向业务汇报，直接产出结论、发现和行动建议。</p>
+              <button
+                v-for="prompt in suggestedPrompts.slice(0, 3)"
+                :key="prompt.title"
+                class="welcome-card"
+                type="button"
+                @click="applyStarterPrompt(prompt.prompt)"
+              >
+                <span class="welcome-card__icon"><component :is="prompt.icon" /></span>
+                <strong>{{ prompt.title }}</strong>
+                <p>{{ prompt.description }}</p>
               </button>
             </div>
           </div>
@@ -140,7 +165,10 @@
                   class="flow-section"
                   :class="`flow-section--${section.type.toLowerCase()}`"
                 >
-                  <div class="flow-section__tag">{{ section.type }}</div>
+                  <div class="flow-section__tag">
+                    <component :is="getSectionMeta(section.type).icon" />
+                    <span>{{ getSectionMeta(section.type).label }}</span>
+                  </div>
                   <div v-if="section.type === 'Code' || section.type === 'Execute'" class="flow-section__code">
                     <pre>{{ section.content }}</pre>
                   </div>
@@ -152,24 +180,36 @@
               <div v-else class="stream-card__body" v-html="renderMarkdown(message.content)"></div>
             </article>
           </div>
+
+          <div v-if="sending" class="engine-indicator">
+            <div class="engine-indicator__pulse">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <p class="engine-indicator__label">{{ engineStatusLabel }}</p>
+          </div>
         </div>
 
         <div class="analysis-composer">
-          <div class="analysis-composer__toolbar">
-            <label class="tool-pill tool-pill--file">
-              <input type="file" multiple hidden @change="handleUpload" />
-              <span>上传文件</span>
-            </label>
-            <button class="tool-pill" type="button" :disabled="!currentSessionId || exporting === 'md'" @click="handleExport('md')">
-              <span>{{ exporting === 'md' ? '导出中' : '导出 MD' }}</span>
-            </button>
-            <button class="tool-pill" type="button" :disabled="!currentSessionId || exporting === 'pdf'" @click="handleExport('pdf')">
-              <span>{{ exporting === 'pdf' ? '导出中' : '导出 PDF' }}</span>
-            </button>
-          </div>
-
           <div class="composer-box">
-            <div class="runtime-bar">
+            <div class="composer-topbar">
+              <div class="analysis-composer__toolbar">
+                <label class="tool-pill tool-pill--file">
+                  <input type="file" multiple hidden @change="handleUpload" />
+                  <Upload />
+                  <span>上传</span>
+                </label>
+                <button class="tool-pill" type="button" :disabled="!currentSessionId || exporting === 'md'" @click="openExportModal('md')">
+                  <Download />
+                  <span>{{ exporting === 'md' ? '导出中' : 'MD' }}</span>
+                </button>
+                <button class="tool-pill" type="button" :disabled="!currentSessionId || exporting === 'pdf'" @click="openExportModal('pdf')">
+                  <Printer />
+                  <span>{{ exporting === 'pdf' ? '导出中' : 'PDF' }}</span>
+                </button>
+              </div>
+
               <div class="config-selector">
                 <select v-model="activeConfigId" class="config-selector__select" @change="applyActiveConfig">
                   <option value="" disabled>选择模型配置</option>
@@ -178,12 +218,28 @@
                   </option>
                 </select>
                 <button class="config-selector__manage" type="button" @click="openConfigModal">
+                  <Setting />
                   <span>配置</span>
                 </button>
               </div>
-              <div v-if="activeConfig" class="config-summary">
-                <span class="config-summary__tag">{{ activeConfig.apiBase || '未设置 Base' }}</span>
-                <span class="config-summary__tag">{{ activeConfig.model }}</span>
+            </div>
+
+            <div v-if="suggestedPrompts.length" class="prompt-dock prompt-dock--composer">
+              <div class="prompt-dock__head">
+                <span>推荐分析</span>
+                <button class="text-action" type="button" @click="showPromptModal = true">查看全部</button>
+              </div>
+              <div class="prompt-dock__list">
+                <button
+                  v-for="prompt in suggestedPrompts.slice(0, 4)"
+                  :key="prompt.title"
+                  class="prompt-chip"
+                  type="button"
+                  @click="useSuggestedPrompt(prompt)"
+                >
+                  <component :is="prompt.icon" />
+                  <span>{{ prompt.title }}</span>
+                </button>
               </div>
             </div>
 
@@ -195,14 +251,12 @@
                 rows="4"
                 @keydown.enter.exact.prevent="handleSend"
               />
-              <button class="send-trigger" :disabled="sending || !draft.trim() || !currentSessionId" @click="handleSend">
-                <span>{{ sending ? '…' : '↗' }}</span>
+              <button class="send-trigger" :disabled="!sending && (!draft.trim() || !currentSessionId)" @click="handleComposerAction">
+                <Close v-if="sending" />
+                <Promotion v-else />
               </button>
             </div>
 
-            <div class="composer-footnote">
-              <span>{{ awaitingClarification ? '上一轮输出了 <Ask>，继续回复即可接着分析。' : '支持结构化分析、代码执行、生成物回挂与报告导出。' }}</span>
-            </div>
           </div>
         </div>
       </main>
@@ -215,7 +269,7 @@
           </div>
           <div class="assetrail__stats">
             <span>{{ sourceFiles.length }} 源文件</span>
-            <span>{{ generatedFiles.length }} 生成物</span>
+            <span>{{ reportFiles.length }} 报告</span>
           </div>
         </div>
 
@@ -234,64 +288,134 @@
           </div>
         </div>
 
-        <div class="assetrail__list">
-          <button
-            v-for="file in workspaceFiles"
-            :key="file.path"
-            class="asset-item"
-            :class="{ 'is-active': selectedFile?.path === file.path }"
-            @click="handlePreview(file)"
+        <div class="assetrail__list asset-groups">
+          <section
+            v-for="group in assetGroups"
+            :key="group.key"
+            class="asset-group"
           >
-            <div class="asset-item__copy">
-              <strong>{{ file.name }}</strong>
-              <span>{{ formatFileMeta(file) }}</span>
-            </div>
-            <span class="asset-item__badge" :class="{ 'is-generated': file.is_generated }">
-              {{ file.is_generated ? '生成物' : '源文件' }}
-            </span>
-          </button>
+            <button
+              class="asset-group__head"
+              :class="{ 'is-collapsed': !isAssetGroupExpanded(group.key) }"
+              type="button"
+              @click="toggleAssetGroup(group.key)"
+            >
+              <span>
+                <ArrowDown />
+                {{ group.label }}
+              </span>
+              <small>{{ group.files.length }}</small>
+            </button>
+            <button
+              v-for="file in group.files"
+              :key="file.path"
+              v-show="isAssetGroupExpanded(group.key)"
+              class="asset-item"
+              :class="{ 'is-active': selectedFile?.path === file.path }"
+              @click="handlePreview(file)"
+            >
+              <span class="asset-item__icon">
+                <component :is="getFileIcon(file)" />
+              </span>
+              <div class="asset-item__copy">
+                <strong>{{ file.name }}</strong>
+                <span>{{ formatFileMeta(file) }}</span>
+              </div>
+              <span class="asset-item__badge" :class="{ 'is-generated': file.is_generated }">
+                {{ file.is_generated ? '生成物' : '源文件' }}
+              </span>
+            </button>
+          </section>
         </div>
 
-        <div class="assetrail__preview">
+        <div v-if="shouldShowAssetPreview" class="assetrail__preview">
           <div v-if="selectedFile" class="preview-sheet">
             <div class="preview-sheet__head">
               <div>
                 <strong>{{ selectedFile.name }}</strong>
-                <span>{{ selectedFile.path }}</span>
+                <span>{{ formatFileMeta(selectedFile) }}</span>
+                <div v-if="dataObjectOptions.length" class="data-object-switch">
+                  <select v-if="sheetOptions.length" v-model="selectedSheetName" @change="handleDataObjectChange">
+                    <option v-for="sheet in sheetOptions" :key="sheet" :value="sheet">{{ sheet }}</option>
+                  </select>
+                  <select v-if="tableOptions.length" v-model="selectedTableName" @change="handleDataObjectChange">
+                    <option v-for="table in tableOptions" :key="table" :value="table">{{ table }}</option>
+                  </select>
+                </div>
               </div>
               <div class="preview-sheet__actions">
-                <a class="mini-action" :href="analysisDownloadUrl(selectedFile.path)" target="_blank" rel="noreferrer">下载</a>
-                <button class="mini-action mini-action--danger" @click="handleDeleteFile(selectedFile.path)">删除</button>
+                <button class="icon-action" type="button" title="完整预览" @click="showPreviewModal = true">
+                  <FullScreen />
+                </button>
+                <a class="icon-action" :href="analysisDownloadUrl(selectedFile.path)" target="_blank" rel="noreferrer" title="下载">
+                  <Download />
+                </a>
+                <button class="icon-action icon-action--danger" title="删除" @click="handleDeleteFile(selectedFile.path)">
+                  <Delete />
+                </button>
               </div>
             </div>
 
             <div v-if="previewLoading" class="preview-state">加载预览中…</div>
             <div v-else-if="previewError" class="preview-state preview-state--error">{{ previewError }}</div>
-            <div v-else-if="preview.kind === 'table' || preview.kind === 'database'" class="preview-grid">
-              <table>
-                <thead>
-                  <tr>
-                    <th v-for="column in preview.columns || []" :key="column">{{ column }}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(row, rowIndex) in preview.rows || []" :key="rowIndex">
-                    <td v-for="(cell, cellIndex) in row" :key="cellIndex">{{ cell }}</td>
-                  </tr>
-                </tbody>
-              </table>
+            <div v-else-if="preview.kind === 'table' || preview.kind === 'database'" class="preview-summary">
+              <div v-if="profileLoading" class="profile-loading">正在计算全量数据画像…</div>
+              <div v-if="dataProfile" class="data-profile">
+                <div class="data-profile__metrics">
+                  <div>
+                    <strong>{{ dataProfile.rowCount }}</strong>
+                    <span>行</span>
+                  </div>
+                  <div>
+                    <strong>{{ dataProfile.columnCount }}</strong>
+                    <span>列</span>
+                  </div>
+                  <div>
+                    <strong>{{ dataProfile.missingRate }}</strong>
+                    <span>样例缺失率</span>
+                  </div>
+                </div>
+                <div class="data-profile__fields">
+                  <div class="data-profile__fields-head">
+                    <span>字段概览</span>
+                    <small>{{ dataProfile.fields.length }} 个字段</small>
+                  </div>
+                  <span
+                    v-for="field in dataProfile.fields.slice(0, 6)"
+                    :key="field.name"
+                    class="field-token"
+                  >
+                    <strong>{{ field.name }}</strong>
+                    <em>{{ field.type }}<template v-if="field.missingRate"> · 缺失 {{ field.missingRate }}</template></em>
+                  </span>
+                </div>
+              </div>
+              <button class="preview-open" type="button" @click="showPreviewModal = true">
+                <FullScreen />
+                <span>打开完整表格预览</span>
+              </button>
             </div>
             <div v-else-if="preview.kind === 'image'" class="preview-figure">
               <img :src="analysisDownloadUrl(selectedFile.path)" :alt="selectedFile.name" />
+              <button class="preview-open" type="button" @click="showPreviewModal = true">
+                <FullScreen />
+                <span>查看大图</span>
+              </button>
             </div>
-            <div v-else-if="preview.kind === 'text'" class="preview-rich" v-html="renderMarkdown(preview.content || '')"></div>
+            <div v-else-if="preview.kind === 'text'" class="preview-summary">
+              <div class="preview-rich preview-rich--compact" v-html="renderMarkdown(preview.content || '')"></div>
+              <button class="preview-open" type="button" @click="showPreviewModal = true">
+                <FullScreen />
+                <span>打开完整文本</span>
+              </button>
+            </div>
             <div v-else class="preview-state">{{ preview.content || '该文件暂无结构化预览。' }}</div>
           </div>
 
           <div v-else class="empty-assets">
-            <div class="empty-assets__icon">☰</div>
-            <strong>选择文件开始预览</strong>
-            <p>右侧会聚焦当前会话的上传文件、图表、报告与其他生成物。</p>
+            <div class="empty-assets__icon"><Files /></div>
+            <strong>上传后自动生成数据画像</strong>
+            <p>表格文件会显示字段、行列数、样例缺失率，并给出可直接使用的分析建议。</p>
           </div>
         </div>
       </aside>
@@ -459,6 +583,237 @@
         </div>
       </div>
     </Teleport>
+
+    <!-- Session Modal -->
+    <Teleport to="body">
+      <div v-if="showSessionModal" class="workbench-modal-overlay" @click.self="showSessionModal = false">
+        <div class="workbench-modal workbench-modal--sessions">
+          <header class="workbench-modal__header">
+            <div>
+              <p class="panel-label">Session Manager</p>
+              <h2>会话管理</h2>
+            </div>
+            <div class="workbench-modal__actions">
+              <button class="mini-action" type="button" @click="handleCreateSession">新建会话</button>
+              <button class="workbench-modal__close" type="button" @click="showSessionModal = false">&times;</button>
+            </div>
+          </header>
+          <div class="session-modal-list">
+            <div
+              v-for="session in sessions"
+              :key="session.id"
+              class="session-modal-row"
+              :class="{ 'is-active': session.id === currentSessionId }"
+            >
+              <button class="session-modal-row__main" type="button" @click="selectHistorySession(session.id)">
+                <div>
+                  <strong>{{ session.title }}</strong>
+                  <p>{{ session.last_user_message || '从这里继续你的分析任务' }}</p>
+                </div>
+                <span>{{ getStatusLabel(session.status) }}</span>
+              </button>
+              <button
+                class="session-modal-row__delete"
+                type="button"
+                title="删除会话"
+                @click="handleDeleteHistorySession(session)"
+              >
+                <Delete />
+              </button>
+            </div>
+            <div v-if="sessions.length === 0" class="history-empty">暂无历史会话</div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Prompt Modal -->
+    <Teleport to="body">
+      <div v-if="showPromptModal" class="workbench-modal-overlay" @click.self="showPromptModal = false">
+        <div class="workbench-modal workbench-modal--prompts">
+          <header class="workbench-modal__header">
+            <div>
+              <p class="panel-label">Suggested Analysis</p>
+              <h2>推荐分析任务</h2>
+            </div>
+            <button class="workbench-modal__close" type="button" @click="showPromptModal = false">&times;</button>
+          </header>
+          <div class="prompt-modal-grid">
+            <button
+              v-for="prompt in suggestedPrompts"
+              :key="prompt.title"
+              class="prompt-modal-card"
+              type="button"
+              @click="useSuggestedPrompt(prompt)"
+            >
+              <span class="prompt-modal-card__icon"><component :is="prompt.icon" /></span>
+              <strong>{{ prompt.title }}</strong>
+              <p>{{ prompt.description }}</p>
+              <small>{{ prompt.prompt }}</small>
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Preview Modal -->
+    <Teleport to="body">
+      <div v-if="showPreviewModal && selectedFile" class="workbench-modal-overlay" @click.self="showPreviewModal = false">
+        <div class="workbench-modal workbench-modal--preview">
+          <header class="workbench-modal__header">
+            <div>
+              <p class="panel-label">Asset Preview</p>
+              <h2>{{ selectedFile.name }}</h2>
+            </div>
+            <div class="workbench-modal__actions">
+              <a class="mini-action" :href="analysisDownloadUrl(selectedFile.path)" target="_blank" rel="noreferrer">下载</a>
+              <button class="mini-action" type="button" @click="copyAssetLink(selectedFile)">复制链接</button>
+              <button class="workbench-modal__close" type="button" @click="showPreviewModal = false">&times;</button>
+            </div>
+          </header>
+          <div class="workbench-modal__body">
+            <div v-if="dataObjectOptions.length" class="data-object-switch data-object-switch--modal">
+              <select v-if="sheetOptions.length" v-model="selectedSheetName" @change="handleDataObjectChange">
+                <option v-for="sheet in sheetOptions" :key="sheet" :value="sheet">{{ sheet }}</option>
+              </select>
+              <select v-if="tableOptions.length" v-model="selectedTableName" @change="handleDataObjectChange">
+                <option v-for="table in tableOptions" :key="table" :value="table">{{ table }}</option>
+              </select>
+            </div>
+            <div v-if="previewLoading" class="preview-state">加载预览中…</div>
+            <div v-else-if="previewError" class="preview-state preview-state--error">{{ previewError }}</div>
+            <div v-else-if="preview.kind === 'table' || preview.kind === 'database'" class="preview-table-stack preview-table-stack--modal">
+              <div v-if="profileLoading" class="profile-loading">正在计算全量数据画像…</div>
+              <div v-if="dataProfile" class="data-profile data-profile--modal">
+                <div class="data-profile__metrics">
+                  <div>
+                    <strong>{{ dataProfile.rowCount }}</strong>
+                    <span>行</span>
+                  </div>
+                  <div>
+                    <strong>{{ dataProfile.columnCount }}</strong>
+                    <span>列</span>
+                  </div>
+                  <div>
+                    <strong>{{ dataProfile.missingRate }}</strong>
+                    <span>样例缺失率</span>
+                  </div>
+                </div>
+                <div class="data-profile__fields">
+                  <span
+                    v-for="field in dataProfile.fields"
+                    :key="field.name"
+                    class="field-token"
+                  >
+                    {{ field.name }} · {{ field.type }}<template v-if="field.missingRate"> · 缺失 {{ field.missingRate }}</template>
+                  </span>
+                </div>
+              </div>
+              <div class="preview-pager">
+                <button type="button" :disabled="previewPage <= 1 || previewLoading" @click="changePreviewPage(previewPage - 1)">上一页</button>
+                <span>{{ previewPage }} / {{ previewTotalPages }}</span>
+                <button type="button" :disabled="previewPage >= previewTotalPages || previewLoading" @click="changePreviewPage(previewPage + 1)">下一页</button>
+              </div>
+              <div class="preview-grid preview-grid--modal">
+                <table>
+                  <thead>
+                    <tr>
+                      <th v-for="column in preview.columns || []" :key="column">{{ column }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(row, rowIndex) in preview.rows || []" :key="rowIndex">
+                      <td v-for="(cell, cellIndex) in row" :key="cellIndex">{{ cell }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div v-else-if="preview.kind === 'image'" class="preview-figure preview-figure--modal">
+              <img :src="analysisDownloadUrl(selectedFile.path)" :alt="selectedFile.name" />
+            </div>
+            <div v-else-if="preview.kind === 'text'" class="preview-rich preview-rich--modal" v-html="renderMarkdown(preview.content || '')"></div>
+            <div v-else class="preview-state">{{ preview.content || '该文件暂无结构化预览。' }}</div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Export Modal -->
+    <Teleport to="body">
+      <div v-if="showExportModal" class="workbench-modal-overlay" @click.self="showExportModal = false">
+        <div class="workbench-modal workbench-modal--export">
+          <header class="workbench-modal__header">
+            <div>
+              <p class="panel-label">Report Export</p>
+              <h2>导出分析报告</h2>
+            </div>
+            <button class="workbench-modal__close" type="button" @click="showExportModal = false">&times;</button>
+          </header>
+          <div class="export-panel">
+            <div class="export-format">
+              <button
+                class="export-format__item"
+                :class="{ 'is-active': exportDraft.format === 'md' }"
+                type="button"
+                @click="exportDraft.format = 'md'"
+              >
+                <Download />
+                <span>Markdown</span>
+              </button>
+              <button
+                class="export-format__item"
+                :class="{ 'is-active': exportDraft.format === 'pdf' }"
+                type="button"
+                @click="exportDraft.format = 'pdf'"
+              >
+                <Printer />
+                <span>PDF</span>
+              </button>
+            </div>
+
+            <label class="export-field">
+              <span>报告类型</span>
+              <select v-model="exportDraft.reportType">
+                <option value="executive">管理层摘要</option>
+                <option value="full">完整分析报告</option>
+                <option value="quality">数据质量报告</option>
+                <option value="technical">技术复盘</option>
+              </select>
+            </label>
+
+            <div class="export-checks">
+              <label>
+                <input v-model="exportDraft.includeCharts" type="checkbox" />
+                <span>包含图表</span>
+              </label>
+              <label>
+                <input v-model="exportDraft.includeCode" type="checkbox" />
+                <span>包含代码过程</span>
+              </label>
+              <label>
+                <input v-model="exportDraft.includeSamples" type="checkbox" />
+                <span>包含数据样例</span>
+              </label>
+            </div>
+
+            <div class="export-summary">
+              <span>{{ exportSummary.answerCount }} 条结论</span>
+              <span>{{ exportSummary.chartCount }} 张图表</span>
+              <span>{{ exportSummary.codeCount }} 段代码</span>
+              <span>{{ generatedFiles.length }} 个产物</span>
+            </div>
+
+            <div class="export-panel__footer">
+              <button class="cfg-form__btn" type="button" @click="showExportModal = false">取消</button>
+              <button class="cfg-form__btn cfg-form__btn--primary" type="button" :disabled="!!exporting" @click="confirmExport">
+                {{ exporting ? '导出中…' : '开始导出' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -466,20 +821,52 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import MarkdownIt from 'markdown-it'
 import {
+  ArrowDown,
+  ChatDotRound,
+  Close,
+  Cpu,
+  DataAnalysis,
+  Delete,
+  Document,
+  DocumentChecked,
+  Download,
+  Files,
+  Finished,
+  FullScreen,
+  Histogram,
+  MagicStick,
+  Monitor,
+  Picture,
+  Plus,
+  Printer,
+  Promotion,
+  QuestionFilled,
+  Setting,
+  TrendCharts,
+  Upload,
+  View,
+} from '@element-plus/icons-vue'
+import {
   clearAnalysisWorkspace,
   createAnalysisSession,
   deleteAnalysisFile,
   deleteAnalysisSession,
   exportAnalysisReport,
+  getAnalysisOverview,
   getAnalysisState,
   listAnalysisFiles,
   listAnalysisSessions,
   patchAnalysisSession,
   previewAnalysisFile,
+  profileAnalysisFile,
   streamAnalysisChat,
   uploadAnalysisFiles,
   type AnalysisSession,
+  type FileProfile,
+  type PreviewPayload,
+  type SelectedAnalysisFileContext,
   type WorkspaceFile,
+  type WorkspaceOverview,
 } from '@/api/analysis'
 import { useNotification } from '@/composables/useNotification'
 
@@ -497,6 +884,19 @@ interface ParsedSection {
   content: string
 }
 
+interface SuggestedPrompt {
+  title: string
+  description: string
+  prompt: string
+  icon: any
+}
+
+interface AssetGroup {
+  key: string
+  label: string
+  files: WorkspaceFile[]
+}
+
 const md = new MarkdownIt({
   html: false,
   linkify: true,
@@ -509,14 +909,34 @@ const sessions = ref<AnalysisSession[]>([])
 const currentSessionId = ref('')
 const workspaceFiles = ref<WorkspaceFile[]>([])
 const selectedFile = ref<WorkspaceFile | null>(null)
-const preview = ref<any>({ kind: '', content: '' })
+const workspaceOverview = ref<WorkspaceOverview | null>(null)
+const preview = ref<PreviewPayload>({ kind: '', content: '' })
+const profile = ref<FileProfile | null>(null)
 const previewLoading = ref(false)
 const previewError = ref('')
+const profileLoading = ref(false)
+const previewPage = ref(1)
+const previewPageSize = 50
+const selectedSheetName = ref('')
+const selectedTableName = ref('')
 const messages = ref<UIMessage[]>([])
 const draft = ref('')
 const sending = ref(false)
+const activeChatController = ref<AbortController | null>(null)
 const exporting = ref<'md' | 'pdf' | null>(null)
 const messageStreamRef = ref<HTMLElement | null>(null)
+const showSessionModal = ref(false)
+const showPromptModal = ref(false)
+const showPreviewModal = ref(false)
+const showExportModal = ref(false)
+const assetGroupExpanded = ref<Record<string, boolean>>({})
+const exportDraft = ref({
+  format: 'md' as 'md' | 'pdf',
+  reportType: 'executive',
+  includeCode: false,
+  includeCharts: true,
+  includeSamples: false,
+})
 
 // ─── Help Modal ─────────────────────────────────────────
 const showHelpModal = ref(false)
@@ -710,6 +1130,260 @@ const sourceFiles = computed(() => workspaceFiles.value.filter((item) => !item.i
 const generatedFiles = computed(() => workspaceFiles.value.filter((item) => item.is_generated))
 const tableFiles = computed(() => workspaceFiles.value.filter((item) => item.category === 'table'))
 const imageFiles = computed(() => workspaceFiles.value.filter((item) => item.category === 'image'))
+const reportFiles = computed(() => workspaceFiles.value.filter((item) => isReportFile(item)))
+const dataProfile = computed(() => {
+  if (profile.value?.fields) {
+    const missingRate = Number(profile.value.missing_rate || 0)
+    return {
+      rowCount: formatCount(Number(profile.value.row_count || 0)),
+      columnCount: Number(profile.value.column_count || profile.value.fields.length || 0),
+      missingRate: `${Math.round(missingRate * 100)}%`,
+      fields: profile.value.fields.map((field: any, index: number) => ({
+        name: String(field.name || `字段 ${index + 1}`),
+        type: String(field.type || '未知'),
+        missingRate: `${Math.round(Number(field.missing_rate || 0) * 100)}%`,
+        uniqueCount: Number(field.unique_count || 0),
+      })),
+    }
+  }
+  if (!selectedFile.value || !(preview.value?.kind === 'table' || preview.value?.kind === 'database')) return null
+  const columns = Array.isArray(preview.value.columns) ? preview.value.columns.map(String) : []
+  const rows: unknown[][] = Array.isArray(preview.value.rows)
+    ? preview.value.rows.map((row: unknown) => (Array.isArray(row) ? row : []))
+    : []
+  const totalCells = Math.max(columns.length * rows.length, 1)
+  const missingCells = rows.reduce((count: number, row: unknown[]) => {
+    return count + columns.reduce((innerCount, _, index) => innerCount + (isEmptyCell(row?.[index]) ? 1 : 0), 0)
+  }, 0)
+  const fields = columns.map((column, index) => ({
+    name: column || `字段 ${index + 1}`,
+    type: inferColumnType(rows.map((row: unknown[]) => row?.[index])),
+  }))
+  return {
+    rowCount: formatCount(Number(preview.value.row_count ?? rows.length)),
+    columnCount: columns.length,
+    missingRate: `${Math.round((missingCells / totalCells) * 100)}%`,
+    fields,
+  }
+})
+const previewTotalPages = computed(() => {
+  const total = Number(preview.value?.row_count || 0)
+  if (!total) return 1
+  return Math.max(1, Math.ceil(total / previewPageSize))
+})
+const sheetOptions = computed(() => {
+  const fromPreview = Array.isArray(preview.value?.sheet_names) ? preview.value.sheet_names : []
+  const fromProfile = Array.isArray(profile.value?.sheet_names) ? profile.value.sheet_names : []
+  return Array.from(new Set([...fromPreview, ...fromProfile].map(String).filter(Boolean)))
+})
+const tableOptions = computed(() => {
+  const fromPreview = Array.isArray(preview.value?.tables) ? preview.value.tables : []
+  const fromProfile = Array.isArray(profile.value?.tables) ? profile.value.tables : []
+  return Array.from(new Set([...fromPreview, ...fromProfile].map(String).filter(Boolean)))
+})
+const dataObjectOptions = computed(() => [...sheetOptions.value, ...tableOptions.value])
+const assetGroups = computed<AssetGroup[]>(() => {
+  const source = workspaceFiles.value.filter((file) => !file.is_generated)
+  const charts = workspaceFiles.value.filter((file) => file.is_generated && file.category === 'image')
+  const reports = workspaceFiles.value.filter((file) => file.is_generated && isReportFile(file))
+  const intermediate = workspaceFiles.value.filter((file) => file.is_generated && file.category === 'table' && !isReportFile(file))
+  const other = workspaceFiles.value.filter((file) => {
+    if (!file.is_generated) return false
+    if (file.category === 'image') return false
+    if (file.category === 'table') return false
+    if (isReportFile(file)) return false
+    return true
+  })
+  return [
+    { key: 'source', label: '源数据', files: source },
+    { key: 'charts', label: '图表', files: charts },
+    { key: 'reports', label: '报告', files: reports },
+    { key: 'intermediate', label: '中间表', files: intermediate },
+    { key: 'other', label: '其他产物', files: other },
+  ].filter((group) => group.files.length > 0)
+})
+const selectedFileGroupKey = computed(() => {
+  if (!selectedFile.value) return ''
+  return assetGroups.value.find((group) => group.files.some((file) => file.path === selectedFile.value?.path))?.key || ''
+})
+const isSelectedFileGroupExpanded = computed(() => {
+  if (!selectedFile.value || !selectedFileGroupKey.value) return false
+  return isAssetGroupExpanded(selectedFileGroupKey.value)
+})
+const shouldShowAssetPreview = computed(() => {
+  if (selectedFile.value) return isSelectedFileGroupExpanded.value
+  return workspaceFiles.value.length === 0
+})
+const selectedFileRelations = computed(() => {
+  if (!selectedFile.value || !workspaceOverview.value) return []
+  return workspaceOverview.value.relations.filter(
+    (relation) => relation.left === selectedFile.value?.path || relation.right === selectedFile.value?.path,
+  )
+})
+const suggestedPrompts = computed<SuggestedPrompt[]>(() => {
+  if (tableFiles.value.length > 0) {
+    const target = selectedFile.value?.category === 'table' ? selectedFile.value.name : tableFiles.value[0].name
+    const fields = dataProfile.value?.fields || []
+    const dateFields = fields.filter((field: any) => field.type === '日期').map((field: any) => field.name)
+    const numericFields = fields.filter((field: any) => field.type === '数值').map((field: any) => field.name)
+    const categoryFields = fields.filter((field: any) => field.type === '分类').map((field: any) => field.name)
+    const highMissingFields = fields.filter((field: any) => Number(String(field.missingRate || '0').replace('%', '')) >= 20).map((field: any) => field.name)
+    const prompts: SuggestedPrompt[] = [
+      {
+        title: '字段画像',
+        description: '解释字段含义、类型和可能的数据口径。',
+        prompt: `请先理解 ${target} 的字段含义，生成数据字典，并指出哪些字段适合作为关键指标、维度和时间字段。`,
+        icon: DataAnalysis,
+      },
+      {
+        title: '质量诊断',
+        description: '检查缺失、重复、异常值和格式问题。',
+        prompt: `请对 ${target} 做数据质量诊断，包括缺失值、重复值、异常值、字段格式问题，并给出清洗建议。`,
+        icon: Histogram,
+      },
+      {
+        title: '分组对比',
+        description: '自动寻找可分组字段并对比关键指标。',
+        prompt: `请基于 ${target} 自动识别适合分组的维度字段，做关键指标对比，并指出表现最好和最差的分组。`,
+        icon: TrendCharts,
+      },
+      {
+        title: '趋势洞察',
+        description: '识别时间字段并生成趋势分析。',
+        prompt: `如果 ${target} 中存在时间字段，请按合适粒度分析趋势变化，并生成图表和业务结论。`,
+        icon: TrendCharts,
+      },
+      {
+        title: '汇报报告',
+        description: '输出结论、证据和行动建议。',
+        prompt: `请基于当前数据生成一份面向业务汇报的分析报告，包含核心结论、图表证据、风险点和行动建议。`,
+        icon: DocumentChecked,
+      },
+    ]
+    if (dateFields.length && numericFields.length) {
+      prompts.unshift({
+        title: '自动趋势',
+        description: '基于时间字段和指标字段生成趋势图。',
+        prompt: `请基于 ${target} 的时间字段 ${dateFields.slice(0, 3).join('、')} 和指标字段 ${numericFields.slice(0, 4).join('、')} 做趋势分析，并生成图表。`,
+        icon: TrendCharts,
+      })
+    }
+    if (categoryFields.length && numericFields.length) {
+      prompts.unshift({
+        title: '维度拆解',
+        description: '按分类维度对关键指标做对比。',
+        prompt: `请基于 ${target} 的维度字段 ${categoryFields.slice(0, 4).join('、')} 对 ${numericFields.slice(0, 4).join('、')} 做分组对比，找出主要差异和原因假设。`,
+        icon: Histogram,
+      })
+    }
+    if (highMissingFields.length) {
+      prompts.unshift({
+        title: '缺失诊断',
+        description: '聚焦高缺失字段和清洗影响。',
+        prompt: `请重点诊断 ${target} 中缺失率较高的字段 ${highMissingFields.slice(0, 5).join('、')}，评估对分析结论的影响并给出处理方案。`,
+        icon: Histogram,
+      })
+    }
+    if (selectedFileRelations.value.length) {
+      const relation = selectedFileRelations.value[0]
+      prompts.unshift({
+        title: '关联分析',
+        description: '结合可关联字段分析多文件关系。',
+        prompt: `请基于当前文件 ${target} 与其他数据文件的共同字段 ${relation.common_fields.slice(0, 6).join('、')} 设计关联分析方案，并在必要时执行 join 分析。`,
+        icon: DataAnalysis,
+      })
+    }
+    return prompts
+  }
+  return [
+    {
+      title: '趋势洞察',
+      description: '适合销售、流量、运营等时间序列数据的快速拆解。',
+      prompt: '分析这个文件里的关键指标，并用图表展示趋势变化。',
+      icon: TrendCharts,
+    },
+    {
+      title: '质量诊断',
+      description: '先识别脏数据、缺失、异常点，再决定下一步分析方向。',
+      prompt: '请先理解字段含义，再做异常值检查和数据质量诊断。',
+      icon: Histogram,
+    },
+    {
+      title: '报告生成',
+      description: '面向业务汇报，直接产出结论、发现和行动建议。',
+      prompt: '基于当前数据给我一份结论明确、含建议项的分析报告。',
+      icon: DocumentChecked,
+    },
+  ]
+})
+const analysisScore = computed(() => {
+  const fileScore = Math.min(workspaceFiles.value.length * 12, 36)
+  const messageScore = Math.min(messages.value.length * 7, 42)
+  const generatedScore = Math.min(generatedFiles.value.length * 8, 18)
+  const runningScore = sending.value ? 4 : 0
+  return Math.min(100, 12 + fileScore + messageScore + generatedScore + runningScore)
+})
+const latestAssistantContent = computed(() => {
+  return [...messages.value].reverse().find((message) => message.role === 'assistant')?.content || ''
+})
+const currentPhaseKey = computed(() => {
+  if (awaitingClarification.value) return 'ask'
+  if (sending.value) {
+    const content = latestAssistantContent.value
+    if (content.includes('<Execute>') || content.includes('正在执行代码')) return 'run'
+    if (content.includes('<Code>')) return 'code'
+    if (content.includes('<Answer>')) return 'insight'
+    if (content.includes('<Analyze>') || content.includes('<Understand>')) return 'model'
+    return 'model'
+  }
+  if (generatedFiles.value.length > 0) return 'report'
+  if (messages.value.some((message) => message.role === 'assistant')) return 'insight'
+  if (workspaceFiles.value.length > 0) return 'model'
+  return 'ingest'
+})
+const currentPhaseLabel = computed(() => {
+  const phase = analysisPhases.value.find((item) => item.key === currentPhaseKey.value)
+  return phase?.label || '待命'
+})
+const phaseOrder = ['ingest', 'model', 'code', 'run', 'insight', 'report', 'ask']
+const analysisPhases = computed(() => [
+  { key: 'ingest', label: '采集', hint: '文件接入', icon: Upload, done: workspaceFiles.value.length > 0 },
+  { key: 'model', label: '理解', hint: '字段建模', icon: DataAnalysis, done: messages.value.length > 0 },
+  { key: 'code', label: '代码', hint: '生成脚本', icon: MagicStick, done: latestAssistantContent.value.includes('<Code>') || generatedFiles.value.length > 0 },
+  { key: 'run', label: '执行', hint: '代码沙箱', icon: Cpu, done: generatedFiles.value.length > 0 },
+  { key: 'insight', label: '洞察', hint: '结论归纳', icon: TrendCharts, done: messages.value.some((message) => message.content.includes('<Answer>')) },
+  { key: 'report', label: '报告', hint: '产物沉淀', icon: DocumentChecked, done: generatedFiles.value.length > 0 },
+  { key: 'ask', label: '追问', hint: '补充条件', icon: ChatDotRound, done: awaitingClarification.value },
+].map((phase) => ({
+  ...phase,
+  done: phase.done || phaseOrder.indexOf(phase.key) < phaseOrder.indexOf(currentPhaseKey.value),
+})))
+
+const engineStatusLabel = computed(() => {
+  const content = latestAssistantContent.value
+  if (!content) return '引擎连接中…'
+  if (awaitingClarification.value) return '等待补充信息…'
+  if (/error|traceback|exception|失败|报错/i.test(content)) return '执行遇到错误，等待修正…'
+  if (content.includes('<Answer>')) return '正在总结结论…'
+  if (content.includes('<File>')) return '正在整理生成物…'
+  if (content.includes('正在执行代码')) return '正在执行代码…'
+  if (content.includes('<Code>') && !content.includes('</Execute>')) return '代码执行中…'
+  if (content.includes('<Code>')) return '正在生成分析代码…'
+  if (content.includes('<Understand>')) return '正在理解字段与数据结构…'
+  if (content.includes('<Analyze>')) return '正在制定分析方案…'
+  return '引擎运行中…'
+})
+const exportSummary = computed(() => {
+  const assistantContent = messages.value
+    .filter((message) => message.role === 'assistant')
+    .map((message) => message.content)
+    .join('\n')
+  return {
+    answerCount: (assistantContent.match(/<Answer>/g) || []).length,
+    chartCount: (assistantContent.match(/!\[[^\]]*]\(/g) || []).length,
+    codeCount: (assistantContent.match(/<Code>/g) || []).length,
+  }
+})
 
 function formatTimestamp(timestamp: number) {
   return new Date(timestamp).toLocaleTimeString('zh-CN', { hour12: false })
@@ -719,6 +1393,44 @@ function formatFileMeta(file: WorkspaceFile) {
   const sizeKb = `${(file.size / 1024).toFixed(1)} KB`
   const category = file.category === 'table' ? '表格' : file.category === 'image' ? '图片' : '文档'
   return `${category} · ${sizeKb}`
+}
+
+function formatCount(value: number) {
+  if (!Number.isFinite(value)) return '0'
+  if (value >= 10000) return `${(value / 10000).toFixed(1)}万`
+  return String(value)
+}
+
+function getFileExtension(file: WorkspaceFile) {
+  const name = file.name || file.path
+  const match = name.toLowerCase().match(/\.([a-z0-9]+)$/)
+  return match?.[1] || ''
+}
+
+function isReportFile(file: WorkspaceFile) {
+  const ext = getFileExtension(file)
+  if (['md', 'markdown', 'pdf', 'doc', 'docx', 'html'].includes(ext)) return true
+  return /report|报告|分析结果|summary/i.test(file.name) || /report|报告|分析结果|summary/i.test(file.path)
+}
+
+function isEmptyCell(value: unknown) {
+  return value === null || value === undefined || String(value).trim() === ''
+}
+
+function inferColumnType(values: unknown[]) {
+  const sample = values.filter((value) => !isEmptyCell(value)).slice(0, 20)
+  if (!sample.length) return '空值'
+  const numericCount = sample.filter((value) => !Number.isNaN(Number(String(value).replace(/,/g, '')))).length
+  if (numericCount / sample.length >= 0.85) return '数值'
+  const dateCount = sample.filter((value) => {
+    const text = String(value).trim()
+    if (!/[/-]|年|月|日/.test(text)) return false
+    return !Number.isNaN(Date.parse(text.replace(/年|月/g, '-').replace(/日/g, '')))
+  }).length
+  if (dateCount / sample.length >= 0.65) return '日期'
+  const uniqueCount = new Set(sample.map((value) => String(value))).size
+  if (uniqueCount <= Math.max(6, sample.length * 0.45)) return '分类'
+  return '文本'
 }
 
 function getStatusLabel(status: string) {
@@ -744,12 +1456,87 @@ function parseSections(content: string): ParsedSection[] {
   return sections
 }
 
+function getSectionMeta(type: string) {
+  const meta: Record<string, { label: string; icon: any }> = {
+    Analyze: { label: '分析策略', icon: DataAnalysis },
+    Understand: { label: '数据理解', icon: Monitor },
+    Code: { label: '代码生成', icon: MagicStick },
+    Execute: { label: '执行回放', icon: Cpu },
+    Ask: { label: '需要补充', icon: ChatDotRound },
+    Answer: { label: '结论洞察', icon: Finished },
+    File: { label: '文件产物', icon: Files },
+  }
+  return meta[type] || { label: type, icon: Document }
+}
+
+function getFileIcon(file: WorkspaceFile) {
+  if (file.category === 'image') return Picture
+  if (file.category === 'table') return Histogram
+  return Document
+}
+
+function isAssetGroupExpanded(key: string) {
+  return assetGroupExpanded.value[key] !== false
+}
+
+function toggleAssetGroup(key: string) {
+  assetGroupExpanded.value = {
+    ...assetGroupExpanded.value,
+    [key]: !isAssetGroupExpanded(key),
+  }
+}
+
 function analysisDownloadUrl(path: string) {
   return `/api/analysis/workspace/download?session_id=${encodeURIComponent(currentSessionId.value)}&path=${encodeURIComponent(path)}`
 }
 
 function applyStarterPrompt(prompt: string) {
   draft.value = prompt
+}
+
+function useSuggestedPrompt(prompt: SuggestedPrompt) {
+  applyStarterPrompt(prompt.prompt)
+  showPromptModal.value = false
+}
+
+async function copyAssetLink(file: WorkspaceFile) {
+  const url = `${window.location.origin}${analysisDownloadUrl(file.path)}`
+  try {
+    await navigator.clipboard.writeText(url)
+    notification.success('链接已复制')
+  } catch {
+    notification.error('复制失败，请手动复制下载地址')
+  }
+}
+
+function openExportModal(format: 'md' | 'pdf') {
+  exportDraft.value = {
+    ...exportDraft.value,
+    format,
+  }
+  showExportModal.value = true
+}
+
+function buildSelectedFileContext(file: WorkspaceFile | null): SelectedAnalysisFileContext | null {
+  if (!file) return null
+  return {
+    name: file.name,
+    path: file.path,
+    category: file.category,
+    sheet_name: selectedSheetName.value || undefined,
+    table_name: selectedTableName.value || undefined,
+    size: file.size,
+    is_generated: file.is_generated,
+  }
+}
+
+async function confirmExport() {
+  await handleExport(exportDraft.value.format, {
+    reportType: exportDraft.value.reportType,
+    includeCode: exportDraft.value.includeCode,
+    includeCharts: exportDraft.value.includeCharts,
+    includeSamples: exportDraft.value.includeSamples,
+  })
 }
 
 async function refreshSessions(selectLatest = false) {
@@ -770,11 +1557,17 @@ async function refreshWorkspace() {
       if (!latest) {
         selectedFile.value = null
         preview.value = { kind: '', content: '' }
+        profile.value = null
         previewError.value = ''
       }
     }
   } catch {
     workspaceFiles.value = []
+  }
+  try {
+    workspaceOverview.value = await getAnalysisOverview(currentSessionId.value)
+  } catch {
+    workspaceOverview.value = null
   }
 }
 
@@ -800,6 +1593,11 @@ async function selectSession(sessionId: string) {
   messageStreamRef.value?.scrollTo({ top: messageStreamRef.value.scrollHeight, behavior: 'smooth' })
 }
 
+async function selectHistorySession(sessionId: string) {
+  await selectSession(sessionId)
+  showSessionModal.value = false
+}
+
 async function handleCreateSession() {
   try {
     const response = await createAnalysisSession({ model: activeConfig.value?.model })
@@ -813,24 +1611,39 @@ async function handleCreateSession() {
 
 async function handleDeleteSession() {
   if (!currentSession.value) return
-  const confirmed = await notification.confirm(`删除会话「${currentSession.value.title}」？`)
+  await deleteSessionRecord(currentSession.value)
+}
+
+async function deleteSessionRecord(session: AnalysisSession) {
+  const confirmed = await notification.confirm(`删除会话「${session.title}」？`)
   if (!confirmed) return
   try {
-    await deleteAnalysisSession(currentSession.value.id)
-    messages.value = []
-    workspaceFiles.value = []
-    selectedFile.value = null
-    preview.value = { kind: '', content: '' }
-    previewError.value = ''
-    currentSessionId.value = ''
+    await deleteAnalysisSession(session.id)
+    const deletingCurrent = session.id === currentSessionId.value
+    if (deletingCurrent) {
+      messages.value = []
+      workspaceFiles.value = []
+      workspaceOverview.value = null
+      selectedFile.value = null
+      selectedSheetName.value = ''
+      selectedTableName.value = ''
+      preview.value = { kind: '', content: '' }
+      profile.value = null
+      previewError.value = ''
+      currentSessionId.value = ''
+    }
     await refreshSessions()
-    if (sessions.value[0]) {
+    if (deletingCurrent && sessions.value[0]) {
       await selectSession(sessions.value[0].id)
     }
     notification.success('会话已删除')
   } catch (error) {
     notification.error((error as Error).message)
   }
+}
+
+async function handleDeleteHistorySession(session: AnalysisSession) {
+  await deleteSessionRecord(session)
 }
 
 async function handleClearWorkspace() {
@@ -841,8 +1654,12 @@ async function handleClearWorkspace() {
     await clearAnalysisWorkspace(currentSessionId.value)
     messages.value = []
     workspaceFiles.value = []
+    workspaceOverview.value = null
     selectedFile.value = null
+    selectedSheetName.value = ''
+    selectedTableName.value = ''
     preview.value = { kind: '', content: '' }
+    profile.value = null
     previewError.value = ''
     notification.success('Workspace 已清空')
   } catch (error) {
@@ -855,8 +1672,17 @@ async function handleUpload(event: Event) {
   const files = Array.from(input.files || [])
   if (!files.length || !currentSessionId.value) return
   try {
-    await uploadAnalysisFiles(currentSessionId.value, files)
+    const response = await uploadAnalysisFiles(currentSessionId.value, files)
     await refreshWorkspace()
+    const uploadedPaths = new Set((response.files || []).map((file) => file.path))
+    const preferredFile =
+      workspaceFiles.value.find((file) => uploadedPaths.has(file.path) && file.category === 'table') ||
+      workspaceFiles.value.find((file) => uploadedPaths.has(file.path)) ||
+      workspaceFiles.value.find((file) => file.category === 'table') ||
+      workspaceFiles.value[0]
+    if (preferredFile) {
+      await handlePreview(preferredFile)
+    }
     notification.success(`已上传 ${files.length} 个文件`)
   } catch (error) {
     notification.error((error as Error).message)
@@ -867,16 +1693,66 @@ async function handleUpload(event: Event) {
 
 async function handlePreview(file: WorkspaceFile) {
   selectedFile.value = file
+  previewPage.value = 1
+  selectedSheetName.value = ''
+  selectedTableName.value = ''
+  await loadPreview(file)
+  await loadProfile(file)
+}
+
+async function loadPreview(file = selectedFile.value) {
+  if (!file || !currentSessionId.value) return
   previewLoading.value = true
   previewError.value = ''
   try {
-    preview.value = await previewAnalysisFile(currentSessionId.value, file.path)
+    preview.value = await previewAnalysisFile(currentSessionId.value, file.path, {
+      page: previewPage.value,
+      pageSize: previewPageSize,
+      sheetName: selectedSheetName.value,
+      tableName: selectedTableName.value,
+    })
+    if (preview.value.sheet_name) selectedSheetName.value = String(preview.value.sheet_name)
+    if (preview.value.table_name) selectedTableName.value = String(preview.value.table_name)
   } catch (error) {
     preview.value = { kind: '', content: '' }
     previewError.value = (error as Error).message
   } finally {
     previewLoading.value = false
   }
+}
+
+async function loadProfile(file = selectedFile.value) {
+  if (!file || !currentSessionId.value || file.category !== 'table') {
+    profile.value = null
+    return
+  }
+  profileLoading.value = true
+  try {
+    profile.value = await profileAnalysisFile(currentSessionId.value, file.path, {
+      sheetName: selectedSheetName.value,
+      tableName: selectedTableName.value,
+    })
+    if (profile.value.sheet_name) selectedSheetName.value = String(profile.value.sheet_name)
+    if (profile.value.table_name) selectedTableName.value = String(profile.value.table_name)
+  } catch {
+    profile.value = null
+  } finally {
+    profileLoading.value = false
+  }
+}
+
+async function handleDataObjectChange() {
+  if (!selectedFile.value) return
+  previewPage.value = 1
+  await loadPreview(selectedFile.value)
+  await loadProfile(selectedFile.value)
+}
+
+async function changePreviewPage(page: number) {
+  const nextPage = Math.min(Math.max(page, 1), previewTotalPages.value)
+  if (nextPage === previewPage.value) return
+  previewPage.value = nextPage
+  await loadPreview()
 }
 
 async function handleDeleteFile(path: string) {
@@ -888,8 +1764,12 @@ async function handleDeleteFile(path: string) {
     await refreshWorkspace()
     if (selectedFile.value?.path === path) {
       selectedFile.value = null
+      selectedSheetName.value = ''
+      selectedTableName.value = ''
       preview.value = { kind: '', content: '' }
+      profile.value = null
       previewError.value = ''
+      showPreviewModal.value = false
     }
     notification.success('文件已删除')
   } catch (error) {
@@ -897,11 +1777,21 @@ async function handleDeleteFile(path: string) {
   }
 }
 
-async function handleExport(format: 'md' | 'pdf') {
+async function handleExport(
+  format: 'md' | 'pdf',
+  options?: { reportType: string; includeCode: boolean; includeCharts: boolean; includeSamples: boolean },
+) {
   if (!currentSessionId.value) return
   exporting.value = format
   try {
-    const payload = await exportAnalysisReport({ session_id: currentSessionId.value, format })
+    const payload = await exportAnalysisReport({
+      session_id: currentSessionId.value,
+      format,
+      report_type: options?.reportType,
+      include_code: options?.includeCode,
+      include_charts: options?.includeCharts,
+      include_samples: options?.includeSamples,
+    })
     const file = payload?.file || payload?.fallback?.file
     if (file?.download_url) {
       window.open(`/api/analysis${file.download_url}`, '_blank', 'noopener,noreferrer')
@@ -914,6 +1804,7 @@ async function handleExport(format: 'md' | 'pdf') {
       notification.error(payload.error || '导出失败')
     }
     await refreshWorkspace()
+    showExportModal.value = false
   } catch (error) {
     notification.error((error as Error).message)
   } finally {
@@ -923,6 +1814,8 @@ async function handleExport(format: 'md' | 'pdf') {
 
 async function handleSend() {
   if (!draft.value.trim() || !currentSessionId.value || sending.value) return
+  const controller = new AbortController()
+  activeChatController.value = controller
   const prompt = draft.value.trim()
   const userMessage: UIMessage = {
     id: `${currentSessionId.value}-user-${Date.now()}`,
@@ -955,6 +1848,8 @@ async function handleSend() {
         model: activeConfig.value?.model || '',
         api_base: activeConfig.value?.apiBase || '',
         api_key: activeConfig.value?.apiKey || '',
+        selected_file: buildSelectedFileContext(selectedFile.value),
+        selected_file_profile: profile.value,
         messages: requestMessages,
       },
       async (chunk) => {
@@ -969,13 +1864,34 @@ async function handleSend() {
         await nextTick()
         messageStreamRef.value?.scrollTo({ top: messageStreamRef.value.scrollHeight, behavior: 'smooth' })
       },
+      { signal: controller.signal },
     )
   } catch (error) {
-    assistantMessage.content += `\n<Answer>\n分析请求失败：${(error as Error).message}\n</Answer>`
-    notification.error((error as Error).message)
+    const isAbort = (error as Error).name === 'AbortError'
+    assistantMessage.content += `\n<Answer>\n${isAbort ? '分析已取消。' : `分析请求失败：${(error as Error).message}`}\n</Answer>`
+    if (isAbort) {
+      notification.warning('已取消当前分析')
+    } else {
+      notification.error((error as Error).message)
+    }
   } finally {
     sending.value = false
+    if (activeChatController.value === controller) {
+      activeChatController.value = null
+    }
   }
+}
+
+function cancelAnalysis() {
+  activeChatController.value?.abort()
+}
+
+function handleComposerAction() {
+  if (sending.value) {
+    cancelAnalysis()
+    return
+  }
+  handleSend()
 }
 
 onMounted(async () => {
@@ -1004,7 +1920,10 @@ onMounted(async () => {
   --analysis-main: #f8fafc;
   --analysis-blue: #3b82f6;
   --analysis-blue-strong: #2563eb;
+  --analysis-cyan: #22d3ee;
   --analysis-green: #10b981;
+  --analysis-violet: #8b5cf6;
+  --analysis-amber: #f59e0b;
   --analysis-danger: #fb7185;
   position: relative;
   min-height: calc(100vh - 24px);
@@ -1022,6 +1941,17 @@ onMounted(async () => {
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.02), transparent 34%),
     radial-gradient(circle at 20% 12%, rgba(255, 255, 255, 0.03), transparent 20%);
+  pointer-events: none;
+}
+
+.analysis-shell__grid {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(rgba(148, 163, 184, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.055) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.9), transparent 78%);
   pointer-events: none;
 }
 
@@ -1058,10 +1988,30 @@ onMounted(async () => {
   width: 42px;
   height: 42px;
   border-radius: 12px;
-  background: linear-gradient(135deg, var(--analysis-blue), #60a5fa);
+  background:
+    linear-gradient(135deg, rgba(34, 211, 238, 0.24), rgba(59, 130, 246, 0.16)),
+    rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(125, 211, 252, 0.36);
+  box-shadow: 0 0 28px rgba(34, 211, 238, 0.18);
   color: white;
-  font-size: 20px;
-  font-weight: 700;
+}
+
+.brand-mark svg,
+.status-chip svg,
+.help-trigger svg,
+.new-session-btn svg,
+.workrail-menu__item svg,
+.side-action svg,
+.tool-pill svg,
+.config-selector__manage svg,
+.send-trigger svg,
+.pipeline-node svg,
+.flow-section__tag svg,
+.asset-item__icon svg,
+.welcome-card__icon svg,
+.welcome-state__glyph svg {
+  width: 1em;
+  height: 1em;
 }
 
 .brand-eyebrow,
@@ -1101,6 +2051,11 @@ onMounted(async () => {
   font-size: 12px;
 }
 
+.status-chip.is-running {
+  color: #a7f3d0;
+  background: rgba(16, 185, 129, 0.12);
+}
+
 .status-chip--muted {
   background: rgba(255, 255, 255, 0.05);
   color: var(--analysis-soft);
@@ -1114,6 +2069,15 @@ onMounted(async () => {
   box-shadow: 0 0 0 5px rgba(16, 185, 129, 0.12);
 }
 
+.status-chip.is-running .status-chip__dot {
+  animation: status-breathe 1.4s ease-in-out infinite;
+}
+
+@keyframes status-breathe {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.12), 0 0 0 rgba(16, 185, 129, 0); }
+  50% { box-shadow: 0 0 0 7px rgba(16, 185, 129, 0.16), 0 0 22px rgba(16, 185, 129, 0.45); }
+}
+
 .analysis-stage {
   position: relative;
   z-index: 1;
@@ -1121,7 +2085,8 @@ onMounted(async () => {
   grid-template-columns: 260px minmax(0, 1fr) 320px;
   gap: 20px;
   margin-top: 18px;
-  min-height: calc(100vh - 150px);
+  height: calc(100vh - 150px);
+  min-height: 680px;
 }
 
 .workrail,
@@ -1142,11 +2107,85 @@ onMounted(async () => {
   padding: 12px 14px;
   border: 0;
   border-radius: 12px;
-  background: linear-gradient(135deg, var(--analysis-blue), var(--analysis-blue-strong));
+  background: linear-gradient(135deg, var(--analysis-cyan), var(--analysis-blue) 52%, var(--analysis-violet));
   color: white;
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+  box-shadow: 0 16px 36px rgba(37, 99, 235, 0.26);
+}
+
+.mission-card {
+  position: relative;
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  min-height: 96px;
+  padding: 14px 16px;
+  overflow: hidden;
+  border: 1px solid rgba(34, 211, 238, 0.18);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(34, 211, 238, 0.12), transparent 46%),
+    rgba(255, 255, 255, 0.035);
+}
+
+.mission-card::after {
+  content: '';
+  position: absolute;
+  inset: auto -20% -44px 18%;
+  height: 80px;
+  background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.18), transparent);
+  transform: rotate(-8deg);
+}
+
+.mission-card__head {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.mission-card__head > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mission-card p,
+.mission-card span {
+  margin: 0;
+  color: var(--analysis-soft);
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.mission-card strong {
+  flex: 0 0 auto;
+  color: var(--analysis-main);
+  font-family: var(--font-mono);
+  font-size: 32px;
+  line-height: 1;
+}
+
+.mission-card__bar {
+  position: relative;
+  z-index: 1;
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.mission-card__bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--analysis-cyan), var(--analysis-green), var(--analysis-amber));
+  transition: width 0.36s ease;
 }
 
 .workrail-section {
@@ -1163,14 +2202,12 @@ onMounted(async () => {
 }
 
 .workrail-menu,
-.history-list,
 .assetrail__list {
   display: grid;
   gap: 8px;
 }
 
 .workrail-menu__item,
-.history-item,
 .asset-item {
   width: 100%;
   border: 1px solid transparent;
@@ -1191,14 +2228,12 @@ onMounted(async () => {
 }
 
 .workrail-menu__item.is-active,
-.history-item.is-active,
 .asset-item.is-active {
   border-color: rgba(59, 130, 246, 0.36);
   background: rgba(59, 130, 246, 0.12);
   color: var(--analysis-main);
 }
 
-.history-item,
 .asset-item {
   display: grid;
   gap: 8px;
@@ -1206,20 +2241,43 @@ onMounted(async () => {
   border-radius: 12px;
 }
 
-.history-item__top {
+.session-manager-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--analysis-main);
+  text-align: left;
+  cursor: pointer;
 }
 
-.history-item strong,
+.session-manager-card:hover {
+  border-color: rgba(34, 211, 238, 0.28);
+  background: rgba(34, 211, 238, 0.07);
+}
+
+.session-manager-card > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.session-manager-card strong,
 .asset-item strong {
+  min-width: 0;
+  overflow: hidden;
   color: var(--analysis-main);
   font-size: 14px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.history-item p,
+.session-manager-card span,
 .asset-item span,
 .assetrail__stats span,
 .workrail-footer {
@@ -1228,11 +2286,125 @@ onMounted(async () => {
   line-height: 1.5;
 }
 
+.session-manager-card span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.session-manager-card small {
+  flex: 0 0 auto;
+  color: #67e8f9;
+  font-size: 12px;
+}
+
+.session-modal-list {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px;
+}
+
+.session-modal-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.session-modal-row__main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--analysis-main);
+  text-align: left;
+  cursor: pointer;
+}
+
+.session-modal-row.is-active .session-modal-row__main {
+  border-color: rgba(59, 130, 246, 0.42);
+  background: rgba(59, 130, 246, 0.12);
+}
+
+.session-modal-row__main > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.session-modal-row__main strong,
+.session-modal-row__main p {
+  min-width: 0;
+  overflow: hidden;
+  margin: 0;
+  text-overflow: ellipsis;
+}
+
+.session-modal-row__main strong {
+  color: var(--analysis-main);
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.session-modal-row__main p {
+  color: var(--analysis-soft);
+  font-size: 12px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.session-modal-row__main span {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--analysis-soft);
+  font-size: 11px;
+}
+
+.session-modal-row__delete {
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(251, 113, 133, 0.2);
+  border-radius: 12px;
+  background: rgba(251, 113, 133, 0.06);
+  color: #fecdd3;
+  cursor: pointer;
+}
+
+.session-modal-row__delete:hover {
+  border-color: rgba(251, 113, 133, 0.44);
+  background: rgba(251, 113, 133, 0.12);
+}
+
+.history-empty {
+  padding: 16px 12px;
+  border: 1px dashed rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  color: var(--analysis-soft);
+  font-size: 12px;
+  text-align: center;
+}
+
 .workrail-footer {
   display: grid;
   gap: 10px;
   margin-top: auto;
   padding-top: 18px;
+}
+
+.workrail-footer > span {
+  color: var(--analysis-soft);
+  font-size: 11px;
 }
 
 .side-action,
@@ -1246,6 +2418,10 @@ onMounted(async () => {
 }
 
 .side-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   padding: 10px 12px;
   border-radius: 10px;
   cursor: pointer;
@@ -1296,6 +2472,78 @@ onMounted(async () => {
   color: var(--analysis-main);
 }
 
+.analysis-title {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.analysis-pipeline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.pipeline-node {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 999px;
+  color: var(--analysis-soft);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.analysis-pipeline::-webkit-scrollbar {
+  display: none;
+}
+
+.pipeline-node.is-active {
+  color: var(--analysis-main);
+  border-color: rgba(34, 211, 238, 0.24);
+  background: rgba(34, 211, 238, 0.08);
+}
+
+.pipeline-node.is-done {
+  color: #a7f3d0;
+}
+
+.pipeline-node__icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.pipeline-node.is-active .pipeline-node__icon {
+  color: #cffafe;
+  background: rgba(34, 211, 238, 0.18);
+  box-shadow: 0 0 24px rgba(34, 211, 238, 0.18);
+}
+
+.pipeline-node strong {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pipeline-node strong {
+  color: currentColor;
+  font-size: 11px;
+}
+
 .analysis-center__body {
   flex: 1;
   min-height: 0;
@@ -1316,6 +2564,15 @@ onMounted(async () => {
 }
 
 .welcome-state__glyph {
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border: 1px solid rgba(34, 211, 238, 0.26);
+  border-radius: 22px;
+  background:
+    linear-gradient(135deg, rgba(34, 211, 238, 0.12), rgba(139, 92, 246, 0.12)),
+    rgba(255, 255, 255, 0.04);
   font-size: 54px;
   color: #93c5fd;
 }
@@ -1345,8 +2602,10 @@ onMounted(async () => {
   gap: 10px;
   padding: 18px;
   border: 1px solid var(--analysis-border);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(34, 211, 238, 0.08), transparent 44%),
+    rgba(255, 255, 255, 0.03);
   color: var(--analysis-main);
   text-align: left;
   cursor: pointer;
@@ -1360,7 +2619,14 @@ onMounted(async () => {
 }
 
 .welcome-card__icon {
-  font-size: 24px;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: rgba(59, 130, 246, 0.12);
+  color: #bfdbfe;
+  font-size: 20px;
 }
 
 .welcome-card p {
@@ -1515,6 +2781,9 @@ onMounted(async () => {
 }
 
 .flow-section__tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: 11px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -1533,26 +2802,27 @@ onMounted(async () => {
 }
 
 .analysis-composer {
-  padding: 18px 20px 20px;
-  background: linear-gradient(to top, rgba(21, 27, 43, 1), rgba(21, 27, 43, 0.55));
+  padding: 10px 14px 12px;
+  background: linear-gradient(to top, rgba(21, 27, 43, 0.98), rgba(21, 27, 43, 0.42));
   border-top: 1px solid var(--analysis-border);
 }
 
 .analysis-composer__toolbar {
   display: flex;
-  gap: 10px;
+  gap: 6px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
 }
 
 .tool-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 9px 12px;
-  border-radius: 10px;
+  gap: 6px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border-radius: 9px;
   cursor: pointer;
+  font-size: 13px;
 }
 
 .tool-pill--file {
@@ -1565,30 +2835,59 @@ onMounted(async () => {
   cursor: not-allowed;
 }
 
+.tool-pill:hover,
+.side-action:hover,
+.mini-action:hover {
+  border-color: rgba(34, 211, 238, 0.3);
+  background: rgba(34, 211, 238, 0.08);
+}
+
 .composer-box {
-  padding: 16px;
+  position: relative;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
   border: 1px solid var(--analysis-border);
-  border-radius: 18px;
+  border-radius: 14px;
   background: var(--analysis-card-strong);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
+.composer-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
 .composer-input {
   display: flex;
-  align-items: flex-end;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 0 0 4px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 12px;
+  background:
+    linear-gradient(90deg, rgba(34, 211, 238, 0.045), transparent 32%),
+    rgba(255, 255, 255, 0.025);
 }
 
 .composer-input__textarea {
   width: 100%;
-  min-height: 90px;
+  height: 44px;
+  min-height: 44px;
+  max-height: 96px;
   resize: none;
+  overflow-y: auto;
   border: 0;
   outline: none;
   background: transparent;
   color: var(--analysis-main);
   font: inherit;
-  line-height: 1.6;
+  line-height: 1.5;
+  padding: 11px 4px 8px;
 }
 
 .composer-input__textarea::placeholder {
@@ -1596,15 +2895,19 @@ onMounted(async () => {
 }
 
 .send-trigger {
+  display: grid;
+  place-items: center;
   flex-shrink: 0;
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
+  margin-right: 4px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 10px;
   background: linear-gradient(135deg, var(--analysis-blue), #60a5fa);
   color: white;
   font-size: 20px;
   cursor: pointer;
+  box-shadow: 0 14px 30px rgba(59, 130, 246, 0.26);
 }
 
 .send-trigger:disabled {
@@ -1612,10 +2915,12 @@ onMounted(async () => {
   cursor: not-allowed;
 }
 
-.composer-footnote {
-  margin-top: 12px;
-  color: var(--analysis-soft);
-  font-size: 12px;
+.is-spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .assetrail__stats {
@@ -1650,6 +2955,159 @@ onMounted(async () => {
   font-size: 11px;
 }
 
+.prompt-dock {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid rgba(34, 211, 238, 0.14);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(34, 211, 238, 0.08), transparent 46%),
+    rgba(255, 255, 255, 0.025);
+}
+
+.prompt-dock--composer {
+  margin-bottom: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background:
+    linear-gradient(90deg, rgba(34, 211, 238, 0.07), transparent 58%),
+    rgba(255, 255, 255, 0.025);
+}
+
+.prompt-dock__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--analysis-main);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.text-action {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: #67e8f9;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.text-action:hover {
+  color: #cffafe;
+}
+
+.prompt-dock__head small {
+  color: var(--analysis-soft);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.prompt-dock__list {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.prompt-dock__list::-webkit-scrollbar {
+  display: none;
+}
+
+.prompt-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 7px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  color: #dbeafe;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.prompt-chip svg {
+  width: 14px;
+  height: 14px;
+  color: #67e8f9;
+}
+
+.prompt-chip:hover {
+  border-color: rgba(34, 211, 238, 0.32);
+  background: rgba(34, 211, 238, 0.08);
+}
+
+.asset-groups {
+  max-height: 240px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.asset-group {
+  display: grid;
+  gap: 8px;
+}
+
+.asset-group + .asset-group {
+  margin-top: 10px;
+}
+
+.asset-group__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--analysis-soft);
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-align: left;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.asset-group__head > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.asset-group__head svg {
+  width: 13px;
+  height: 13px;
+  transition: transform 0.18s ease;
+}
+
+.asset-group__head.is-collapsed svg {
+  transform: rotate(-90deg);
+}
+
+.asset-group__head:hover {
+  color: var(--analysis-main);
+}
+
+.asset-group__head small {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--analysis-main);
+  letter-spacing: 0;
+}
+
 .asset-item {
   display: flex;
   align-items: center;
@@ -1657,9 +3115,29 @@ onMounted(async () => {
   gap: 10px;
 }
 
+.asset-item__icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  color: #bfdbfe;
+  background: rgba(59, 130, 246, 0.1);
+}
+
 .asset-item__copy {
   display: grid;
   gap: 6px;
+  min-width: 0;
+  margin-right: auto;
+}
+
+.asset-item__copy strong,
+.asset-item__copy span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .asset-item__badge {
@@ -1700,22 +3178,96 @@ onMounted(async () => {
 .preview-sheet__head {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  align-items: flex-start;
+  gap: 14px;
   padding: 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+.preview-sheet__head > div:first-child {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.preview-sheet__head strong {
+  overflow: hidden;
+  color: var(--analysis-main);
+  font-size: 15px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .preview-sheet__head span {
   display: block;
-  margin-top: 4px;
   color: var(--analysis-soft);
   font-size: 12px;
 }
 
 .preview-sheet__actions {
   display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.data-object-switch {
+  display: flex;
   gap: 8px;
   flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.data-object-switch--modal {
+  margin: 0 0 12px;
+}
+
+.data-object-switch select {
+  min-width: 150px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--analysis-main);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.icon-action {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--analysis-border);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--analysis-main);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.icon-action svg {
+  width: 16px;
+  height: 16px;
+}
+
+.icon-action:hover {
+  border-color: rgba(34, 211, 238, 0.34);
+  background: rgba(34, 211, 238, 0.08);
+  color: #cffafe;
+}
+
+.icon-action--danger {
+  color: #fecdd3;
+  border-color: rgba(251, 113, 133, 0.28);
+}
+
+.icon-action--danger:hover {
+  color: #fecdd3;
+  border-color: rgba(251, 113, 133, 0.44);
+  background: rgba(251, 113, 133, 0.09);
 }
 
 .mini-action {
@@ -1745,10 +3297,182 @@ onMounted(async () => {
   color: #fecdd3;
 }
 
+.profile-loading {
+  padding: 10px 14px 0;
+  color: var(--analysis-soft);
+  font-size: 12px;
+}
+
+.preview-summary {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.preview-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: calc(100% - 28px);
+  margin: 0 14px 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(34, 211, 238, 0.22);
+  border-radius: 10px;
+  background: rgba(34, 211, 238, 0.08);
+  color: #cffafe;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.preview-open svg {
+  width: 15px;
+  height: 15px;
+}
+
+.preview-open:hover {
+  border-color: rgba(34, 211, 238, 0.38);
+  background: rgba(34, 211, 238, 0.12);
+}
+
+.preview-table-stack {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.preview-table-stack--modal {
+  height: 100%;
+}
+
+.data-profile {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  background: transparent;
+}
+
+.data-profile__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.data-profile--modal {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  margin-bottom: 12px;
+}
+
+.data-profile__metrics div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.data-profile__metrics strong {
+  overflow: hidden;
+  color: var(--analysis-main);
+  font-size: 17px;
+  line-height: 1;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.data-profile__metrics span {
+  color: var(--analysis-soft);
+  font-size: 10px;
+}
+
+.data-profile__fields {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.data-profile__fields-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--analysis-soft);
+  font-size: 11px;
+}
+
+.data-profile__fields-head small {
+  color: #93c5fd;
+}
+
+.field-token {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid rgba(148, 163, 184, 0.1);
+  border-radius: 8px;
+  color: var(--analysis-main);
+  background: rgba(255, 255, 255, 0.025);
+  font-size: 11px;
+}
+
+.field-token strong {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.field-token em {
+  flex: 0 0 auto;
+  color: #93c5fd;
+  font-style: normal;
+}
+
 .preview-grid table {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
+}
+
+.preview-grid--modal {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.preview-pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-bottom: 10px;
+  color: var(--analysis-soft);
+  font-size: 12px;
+}
+
+.preview-pager button {
+  padding: 6px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--analysis-main);
+  font: inherit;
+  cursor: pointer;
+}
+
+.preview-pager button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .preview-grid th,
@@ -1765,6 +3489,30 @@ onMounted(async () => {
   width: 100%;
   height: auto;
   border-radius: 12px;
+}
+
+.preview-figure--modal {
+  display: grid;
+  place-items: center;
+  height: 100%;
+}
+
+.preview-figure--modal img {
+  max-width: 100%;
+  max-height: 72vh;
+  object-fit: contain;
+}
+
+.preview-rich--compact {
+  max-height: 180px;
+  overflow: hidden;
+  padding-bottom: 0;
+  mask-image: linear-gradient(to bottom, #000 72%, transparent);
+}
+
+.preview-rich--modal {
+  height: 100%;
+  overflow: auto;
 }
 
 .empty-assets {
@@ -1794,31 +3542,355 @@ onMounted(async () => {
   color: #93c5fd;
 }
 
-/* ── Config Selector ──────────────────────────────────── */
-.runtime-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-
-.config-selector {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.config-selector__select {
-  padding: 8px 12px;
+.flow-section__body :deep(img),
+.flow-section__body--files :deep(img) {
+  display: block;
+  max-width: 100%;
+  max-height: 480px;
+  border-radius: 12px;
+  margin: 10px 0;
   border: 1px solid var(--analysis-border);
+  background: rgba(0, 0, 0, 0.15);
+  object-fit: contain;
+}
+
+/* ── Engine Indicator ────────────────────────────────── */
+.engine-indicator {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  margin: 8px 56px;
+  border-radius: 14px;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.18);
+  animation: engine-fade-in 0.3s ease;
+}
+
+@keyframes engine-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.engine-indicator__pulse {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.engine-indicator__pulse span {
+  display: block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--analysis-blue);
+  animation: engine-dot 1.4s ease-in-out infinite;
+}
+
+.engine-indicator__pulse span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.engine-indicator__pulse span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes engine-dot {
+  0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1.2); }
+}
+
+.engine-indicator__label {
+  margin: 0;
+  color: #93c5fd;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+/* ── Workbench Modals ────────────────────────────────── */
+.workbench-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background: rgba(3, 7, 18, 0.68);
+  backdrop-filter: blur(8px);
+}
+
+.workbench-modal {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(1120px, calc(100vw - 56px));
+  max-height: min(820px, calc(100vh - 56px));
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top left, rgba(34, 211, 238, 0.1), transparent 34%),
+    #101827;
+  box-shadow: 0 34px 90px rgba(0, 0, 0, 0.56);
+}
+
+.workbench-modal--prompts {
+  width: min(980px, calc(100vw - 56px));
+}
+
+.workbench-modal--sessions {
+  width: min(820px, calc(100vw - 56px));
+  height: min(720px, calc(100vh - 56px));
+}
+
+.workbench-modal--preview {
+  width: min(1280px, calc(100vw - 56px));
+  height: min(820px, calc(100vh - 56px));
+}
+
+.workbench-modal--export {
+  width: min(620px, calc(100vw - 56px));
+}
+
+.workbench-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 22px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  background: rgba(15, 23, 42, 0.78);
+}
+
+.workbench-modal__header h2 {
+  margin: 0;
+  color: var(--analysis-main);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.workbench-modal__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.workbench-modal__close {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--analysis-soft);
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.workbench-modal__close:hover {
+  color: var(--analysis-main);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.workbench-modal__body {
+  min-height: 0;
+  overflow: auto;
+  padding: 18px;
+}
+
+.prompt-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px;
+  min-height: 0;
+  overflow: auto;
+  padding: 18px;
+}
+
+.prompt-modal-card {
+  display: grid;
+  gap: 10px;
+  min-height: 180px;
+  padding: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, rgba(34, 211, 238, 0.08), transparent 48%),
+    rgba(255, 255, 255, 0.035);
+  color: var(--analysis-main);
+  text-align: left;
+  cursor: pointer;
+}
+
+.prompt-modal-card:hover {
+  border-color: rgba(34, 211, 238, 0.32);
+  transform: translateY(-1px);
+}
+
+.prompt-modal-card__icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  color: #cffafe;
+  background: rgba(34, 211, 238, 0.12);
+}
+
+.prompt-modal-card__icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.prompt-modal-card strong {
+  font-size: 15px;
+}
+
+.prompt-modal-card p,
+.prompt-modal-card small {
+  margin: 0;
+  color: var(--analysis-soft);
+  line-height: 1.55;
+}
+
+.prompt-modal-card p {
+  font-size: 13px;
+}
+
+.prompt-modal-card small {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 12px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.export-panel {
+  display: grid;
+  gap: 18px;
+  padding: 20px 22px 22px;
+}
+
+.export-format {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.export-format__item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 58px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--analysis-main);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.export-format__item svg {
+  width: 18px;
+  height: 18px;
+}
+
+.export-format__item.is-active {
+  border-color: rgba(34, 211, 238, 0.36);
+  background: rgba(34, 211, 238, 0.1);
+  color: #cffafe;
+}
+
+.export-field {
+  display: grid;
+  gap: 8px;
+}
+
+.export-field span {
+  color: var(--analysis-soft);
+  font-size: 12px;
+}
+
+.export-field select {
+  min-height: 42px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.04);
   color: var(--analysis-main);
   font: inherit;
+  padding: 0 12px;
+  outline: none;
+}
+
+.export-checks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.export-checks label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--analysis-main);
+  font-size: 12px;
+}
+
+.export-checks input {
+  accent-color: var(--analysis-cyan);
+}
+
+.export-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.export-summary span {
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--analysis-soft);
+  font-size: 12px;
+  text-align: center;
+}
+
+.export-panel__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+/* ── Config Selector ──────────────────────────────────── */
+.config-selector {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+
+.config-selector__select {
+  min-height: 34px;
+  max-width: 260px;
+  padding: 6px 10px;
+  border: 1px solid var(--analysis-border);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--analysis-main);
+  font: inherit;
   font-size: 13px;
-  min-width: 200px;
+  min-width: 180px;
   cursor: pointer;
   outline: none;
 }
@@ -1828,9 +3900,13 @@ onMounted(async () => {
 }
 
 .config-selector__manage {
-  padding: 8px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 10px;
   border: 1px solid var(--analysis-border);
-  border-radius: 10px;
+  border-radius: 9px;
   background: rgba(255, 255, 255, 0.04);
   color: var(--analysis-soft);
   font-size: 13px;
@@ -1841,21 +3917,6 @@ onMounted(async () => {
 .config-selector__manage:hover {
   border-color: var(--analysis-blue);
   color: var(--analysis-main);
-}
-
-.config-summary {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.config-summary__tag {
-  padding: 4px 10px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--analysis-soft);
-  font-size: 11px;
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
 /* ── Config Modal ─────────────────────────────────────── */
@@ -2159,6 +4220,8 @@ onMounted(async () => {
 @media (max-width: 1180px) {
   .analysis-stage {
     grid-template-columns: 1fr;
+    height: auto;
+    min-height: 0;
   }
 
   .assetrail__segments {
@@ -2179,6 +4242,17 @@ onMounted(async () => {
   .assetrail {
     padding-left: 16px;
     padding-right: 16px;
+  }
+
+  .composer-topbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .config-selector,
+  .config-selector__select {
+    width: 100%;
+    max-width: none;
   }
 
   .stream-row--assistant {
@@ -2223,13 +4297,12 @@ onMounted(async () => {
   }
 
   .composer-input {
-    flex-direction: column;
-    align-items: stretch;
+    align-items: center;
   }
 
   .send-trigger {
-    width: 100%;
-    height: 48px;
+    width: 42px;
+    height: 42px;
   }
 
   .stream-row {
@@ -2255,6 +4328,37 @@ onMounted(async () => {
   }
 
   .assetrail__segments {
+    grid-template-columns: 1fr;
+  }
+
+  .engine-indicator {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .workbench-modal-overlay {
+    padding: 12px;
+  }
+
+  .workbench-modal,
+  .workbench-modal--prompts,
+  .workbench-modal--preview {
+    width: calc(100vw - 24px);
+    max-height: calc(100vh - 24px);
+  }
+
+  .workbench-modal__header {
+    align-items: flex-start;
+    padding: 14px;
+  }
+
+  .prompt-modal-grid,
+  .workbench-modal__body {
+    padding: 12px;
+  }
+
+  .export-checks,
+  .export-format {
     grid-template-columns: 1fr;
   }
 }

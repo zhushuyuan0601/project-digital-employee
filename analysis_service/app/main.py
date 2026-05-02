@@ -25,7 +25,17 @@ from .storage import (
     save_session_state,
     workspace_dir,
 )
-from .workspace import build_tree, clear_workspace, delete_path, download_file, list_workspace_files, preview_file, upload_files
+from .workspace import (
+    build_tree,
+    clear_workspace,
+    delete_path,
+    download_file,
+    list_workspace_files,
+    preview_file,
+    profile_file,
+    upload_files,
+    workspace_data_overview,
+)
 
 
 def create_app() -> FastAPI:
@@ -91,6 +101,8 @@ def create_app() -> FastAPI:
             "api_base": body.get("api_base"),
             "api_key": body.get("api_key"),
             "max_rounds": body.get("max_rounds", 8),
+            "selected_file": body.get("selected_file"),
+            "selected_file_profile": body.get("selected_file_profile"),
         }
         if body.get("stream", True):
             return StreamingResponse(run_analysis(messages, runtime, session_id), media_type="text/event-stream")
@@ -122,6 +134,19 @@ def create_app() -> FastAPI:
         sheet_name: str = Query(""),
     ):
         return preview_file(session_id, path, page=page, page_size=page_size, table_name=table_name, sheet_name=sheet_name)
+
+    @app.get("/workspace/profile")
+    async def workspace_profile(
+        session_id: str = Query(...),
+        path: str = Query(...),
+        table_name: str = Query(""),
+        sheet_name: str = Query(""),
+    ):
+        return profile_file(session_id, path, table_name=table_name, sheet_name=sheet_name)
+
+    @app.get("/workspace/overview")
+    async def workspace_overview(session_id: str = Query(...)):
+        return workspace_data_overview(session_id)
 
     @app.get("/workspace/download")
     async def workspace_download(session_id: str = Query(...), path: str = Query(...)):
@@ -168,9 +193,15 @@ def create_app() -> FastAPI:
         if not session_id:
             raise HTTPException(status_code=400, detail="session_id is required")
         export_format = str(body.get("format") or "md").lower()
+        export_options = {
+            "report_type": body.get("report_type") or "full",
+            "include_code": body.get("include_code", True),
+            "include_charts": body.get("include_charts", True),
+            "include_samples": body.get("include_samples", False),
+        }
         state = load_session_state(session_id)
         messages = state.get("messages") or []
-        markdown_path = export_markdown(messages, workspace_dir(session_id))
+        markdown_path = export_markdown(messages, workspace_dir(session_id), export_options)
         if export_format == "md":
             return {
                 "success": True,

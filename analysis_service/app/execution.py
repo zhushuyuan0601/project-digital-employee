@@ -82,6 +82,7 @@ async def execute_python(code: str, workspace: Path, timeout_sec: int | None = N
     workspace.mkdir(parents=True, exist_ok=True)
     fd, tmp_path = tempfile.mkstemp(suffix=".py", dir=str(workspace))
     os.close(fd)
+    process: asyncio.subprocess.Process | None = None
     try:
         Path(tmp_path).write_text(code, encoding="utf-8")
         env = {k: v for k, v in os.environ.items() if k in SAFE_ENV_KEYS}
@@ -110,6 +111,11 @@ async def execute_python(code: str, workspace: Path, timeout_sec: int | None = N
             return f"[Timeout]: execution exceeded {timeout} seconds"
         output = (stdout.decode("utf-8", errors="replace") if stdout else "") + (stderr.decode("utf-8", errors="replace") if stderr else "")
         return output or "[Execute]: completed without stdout"
+    except asyncio.CancelledError:
+        if process and process.returncode is None:
+            process.kill()
+            await process.wait()
+        raise
     except subprocess.TimeoutExpired:
         return f"[Timeout]: execution exceeded {timeout} seconds"
     except Exception as exc:

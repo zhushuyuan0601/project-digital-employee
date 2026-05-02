@@ -11,7 +11,7 @@ from openai import AsyncOpenAI
 from .execution import collect_artifacts, execute_python, snapshot_workspace
 from .settings import settings
 from .storage import load_session_state, save_session_state, workspace_dir
-from .workspace import build_download_url, collect_file_info
+from .workspace import IMAGE_EXTENSIONS, build_download_url, classify_artifact, classify_file, collect_file_info, workspace_data_overview
 
 
 SYSTEM_PROMPT = """You are a structured data analysis assistant.
@@ -41,16 +41,98 @@ def normalize_content(raw: Any) -> str:
     return str(raw or "")
 
 
-def prepare_messages(messages: list[dict[str, Any]], session_id: str) -> list[dict[str, str]]:
+def format_selected_file_context(selected_file: Any) -> str:
+    if not isinstance(selected_file, dict):
+        return ""
+    name = str(selected_file.get("name") or "").strip()
+    path = str(selected_file.get("path") or "").strip()
+    if not name and not path:
+        return ""
+    context = {
+        "name": name or Path(path).name,
+        "path": path,
+        "category": str(selected_file.get("category") or "unknown"),
+        "size": selected_file.get("size"),
+        "is_generated": bool(selected_file.get("is_generated")),
+    }
+    return (
+        "The user currently has this file selected in the right-side file panel. "
+        "When multiple files exist, treat it as the primary analysis target unless the user explicitly names another file.\n"
+        f"{json.dumps(context, ensure_ascii=False, indent=2)}"
+    )
+
+
+def format_selected_file_profile(profile: Any) -> str:
+    if not isinstance(profile, dict):
+        return ""
+    fields = profile.get("fields") if isinstance(profile.get("fields"), list) else []
+    compact_fields = []
+    for field in fields[:40]:
+        item = {
+            "name": field.get("name"),
+            "type": field.get("type"),
+            "missing_rate": field.get("missing_rate"),
+            "unique_count": field.get("unique_count"),
+            "samples": field.get("samples", [])[:5] if isinstance(field.get("samples"), list) else [],
+        }
+        if field.get("stats"):
+            item["stats"] = field.get("stats")
+        compact_fields.append(item)
+    payload = {
+        "kind": profile.get("kind"),
+        "source_path": profile.get("source_path"),
+        "sheet_name": profile.get("sheet_name"),
+        "table_name": profile.get("table_name"),
+        "row_count": profile.get("row_count"),
+        "column_count": profile.get("column_count"),
+        "missing_rate": profile.get("missing_rate"),
+        "sampled_rows": profile.get("sampled_rows"),
+        "fields": compact_fields,
+    }
+    payload = {key: value for key, value in payload.items() if value not in (None, "", [])}
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def format_workspace_overview(session_id: str) -> str:
+    try:
+        overview = workspace_data_overview(session_id)
+    except Exception:
+        return ""
+    datasets = overview.get("datasets") if isinstance(overview.get("datasets"), list) else []
+    compact = {
+        "datasets": datasets[:12],
+        "relations": (overview.get("relations") or [])[:12],
+    }
+    return json.dumps(compact, ensure_ascii=False, indent=2)
+
+
+def prepare_messages(
+    messages: list[dict[str, Any]],
+    session_id: str,
+    selected_file: Any = None,
+    selected_file_profile: Any = None,
+) -> list[dict[str, str]]:
     prepared: list[dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
     for message in messages:
         role = str(message.get("role") or "user")
         prepared.append({"role": role, "content": normalize_content(message.get("content"))})
     file_info = collect_file_info(session_id)
+    selected_file_context = format_selected_file_context(selected_file)
+    selected_profile_context = format_selected_file_profile(selected_file_profile)
+    workspace_overview = format_workspace_overview(session_id)
+    injected_sections: list[str] = []
+    if selected_file_context:
+        injected_sections.append(f"# Current Selected File\n{selected_file_context}")
+    if selected_profile_context:
+        injected_sections.append(f"# Current Selected File Profile\n{selected_profile_context}")
+    if workspace_overview:
+        injected_sections.append(f"# Workspace Data Overview\n{workspace_overview}")
     if file_info:
+        injected_sections.append(f"# Data\n{file_info}")
+    if injected_sections:
         for idx in range(len(prepared) - 1, -1, -1):
             if prepared[idx]["role"] == "user":
-                prepared[idx]["content"] = f"# Instruction\n{prepared[idx]['content']}\n\n# Data\n{file_info}"
+                prepared[idx]["content"] = f"# Instruction\n{prepared[idx]['content']}\n\n" + "\n\n".join(injected_sections)
                 break
     return prepared
 
@@ -96,6 +178,10 @@ def extract_code(content: str) -> str | None:
     return fenced.group(1).strip() if fenced else code
 
 
+def build_inline_image_url(session_id: str, rel_path: str) -> str:
+    return f"/api/analysis/workspace/download?session_id={session_id}&path={rel_path}"
+
+
 def render_file_block(session_id: str, artifacts: list[Path], workspace: Path, files_sink: list[dict[str, str]]) -> str:
     if not artifacts:
         return ""
@@ -106,12 +192,41 @@ def render_file_block(session_id: str, artifacts: list[Path], workspace: Path, f
         except Exception:
             rel = artifact.name
         url = build_download_url(session_id, rel)
-        entry = {"name": artifact.name, "url": url}
+        entry = {
+            "name": artifact.name,
+            "url": url,
+            "path": rel,
+            "category": classify_file(artifact),
+            "artifact_type": classify_artifact(artifact),
+            "size": artifact.stat().st_size if artifact.exists() else 0,
+        }
         if entry not in files_sink:
             files_sink.append(entry)
-        lines.append(f"- [{artifact.name}]({url})")
+        ext = artifact.suffix.lower()
+        if ext in IMAGE_EXTENSIONS:
+            inline_url = build_inline_image_url(session_id, rel)
+            lines.append(f"![{artifact.name}]({inline_url})")
+        else:
+            lines.append(f"- [{artifact.name}]({url})")
     lines.append("</File>")
     return "\n" + "\n".join(lines) + "\n"
+
+
+def render_artifact_metadata(artifacts: list[Path], workspace: Path) -> list[dict[str, Any]]:
+    metadata: list[dict[str, Any]] = []
+    for artifact in artifacts:
+        try:
+            rel = artifact.resolve().relative_to(workspace.resolve()).as_posix()
+        except Exception:
+            rel = artifact.name
+        metadata.append({
+            "name": artifact.name,
+            "path": rel,
+            "category": classify_file(artifact),
+            "artifact_type": classify_artifact(artifact),
+            "size": artifact.stat().st_size if artifact.exists() else 0,
+        })
+    return metadata
 
 
 def persist_session_messages(
@@ -142,7 +257,12 @@ async def run_analysis(messages: list[dict[str, Any]], runtime: dict[str, Any], 
 
     model = str(runtime.get("model") or settings.default_model).strip() or settings.default_model
     temperature = float(runtime.get("temperature") or 0.3)
-    prepared = prepare_messages(messages, session_id)
+    prepared = prepare_messages(
+        messages,
+        session_id,
+        runtime.get("selected_file"),
+        runtime.get("selected_file_profile"),
+    )
     workspace = workspace_dir(session_id)
     max_rounds = int(runtime.get("max_rounds") or 8)
 
@@ -180,16 +300,22 @@ async def run_analysis(messages: list[dict[str, Any]], runtime: dict[str, Any], 
             break
 
         before = snapshot_workspace(workspace)
+        executing_hint = "\n<Execute>\n⏳ 正在执行代码，请稍候...\n"
+        accumulated += executing_hint
+        yield chunk_payload(executing_hint)
         execution_output = await execute_python(code, workspace)
         after = snapshot_workspace(workspace)
         artifacts = collect_artifacts(before, after, workspace)
-        execute_block = f"\n<Execute>\n```\n{execution_output}\n```\n</Execute>\n"
+        artifact_metadata = render_artifact_metadata(artifacts, workspace)
+        execute_result = f"```\n{execution_output}\n```\n</Execute>\n"
         file_block = render_file_block(session_id, artifacts, workspace, generated_files)
         prepared.append({"role": "assistant", "content": segment})
-        prepared.append({"role": "user", "content": f"# Execute Result\n{execution_output}"})
-        accumulated += execute_block + file_block
-        if execute_block:
-            yield chunk_payload(execute_block + file_block)
+        execute_feedback = f"# Execute Result\n{execution_output}"
+        if artifact_metadata:
+            execute_feedback += "\n\n# Generated Artifacts\n" + json.dumps(artifact_metadata, ensure_ascii=False, indent=2)
+        prepared.append({"role": "user", "content": execute_feedback})
+        accumulated += execute_result + file_block
+        yield chunk_payload(execute_result + file_block)
 
     persist_session_messages(session_id, messages, accumulated, generated_files)
     yield final_chunk(session_id, generated_files)
