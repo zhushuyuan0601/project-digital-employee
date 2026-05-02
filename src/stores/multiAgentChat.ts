@@ -653,23 +653,19 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
     agent.typingStartTime = Date.now()
     saveMessages(agentId)
 
-    // 使用 'agent' 方法创建新 session 并发送消息（与 Mission-control 一致）
-    // 从 gatewayAgentId 提取简短的 agent ID（如 'agent:ceo:main' -> 'ceo'）
-    const agentIdShort = normalizeGatewayAgentId(agent.config.gatewayAgentId || '') || agentId
-
+    // 使用 Gateway 文档约定的 chat.send + sessionKey，避免新版 Gateway 拒绝短 agentId。
     const msg = {
       type: 'req',
       id: `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      method: 'agent',
+      method: 'chat.send',
       params: {
-        agentId: agentIdShort,
+        sessionKey: agent.config.sessionKey,
         message: text.trim(),
         idempotencyKey: `ik-${Date.now()}`,
-        deliver: true,
       },
     }
     console.log(`[MultiAgentChat] [${agentId}] 发送消息:`, JSON.stringify(msg.params, null, 2))
-    pendingRequests.value[msg.id] = { method: 'agent', agentId }
+    pendingRequests.value[msg.id] = { method: 'chat.send', agentId }
     agent.ws.send(JSON.stringify(msg))
   }
 

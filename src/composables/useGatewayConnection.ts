@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import {
   buildGatewaySocketUrl,
   getDefaultGatewayConnectionSettings,
+  getGatewayToken,
   type GatewayConnectionSettings,
 } from '@/config/gateway'
 import {
@@ -15,11 +16,20 @@ export function useGatewayConnection(initialSettings?: Partial<GatewayConnection
     ...initialSettings,
   })
 
+  function refreshTokenFromStorage() {
+    const token = getGatewayToken()
+    if (token && token !== settings.value.token) {
+      settings.value.token = token
+    }
+  }
+
   function resolveSocketUrl(): string {
+    refreshTokenFromStorage()
     return buildGatewaySocketUrl(settings.value.wsUrl, settings.value.token)
   }
 
   async function createChallengeResponse(payload: ConnectChallengePayload) {
+    refreshTokenFromStorage()
     if (!settings.value.token) return null
     return buildChallengeResponseMessage(settings.value.token, payload)
   }
@@ -28,5 +38,6 @@ export function useGatewayConnection(initialSettings?: Partial<GatewayConnection
     settings,
     resolveSocketUrl,
     createChallengeResponse,
+    refreshTokenFromStorage,
   }
 }
