@@ -290,6 +290,15 @@ router.get('/workspace/overview', async (req, res) => {
     const payload = await proxyJson('/workspace/overview', {}, req.query)
     res.json(payload)
   } catch (err) {
+    if (err.status === 404) {
+      res.json({
+        session_id: String(req.query.session_id || ''),
+        datasets: [],
+        relations: [],
+        generated_at: Date.now(),
+      })
+      return
+    }
     console.error('[Analysis API] Workspace overview error:', err)
     res.status(err.status || 500).json(err.payload || { error: err.message })
   }

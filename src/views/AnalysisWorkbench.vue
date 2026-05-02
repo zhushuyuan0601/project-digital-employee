@@ -1508,6 +1508,18 @@ function toDisplaySteps(message: UIMessage): AnalysisDisplayStep[] {
   })
 }
 
+function isStepExpanded(step: AnalysisDisplayStep) {
+  if (!step.collapsed) return true
+  return expandedStepIds.value[step.id] === true
+}
+
+function toggleStep(step: AnalysisDisplayStep) {
+  expandedStepIds.value = {
+    ...expandedStepIds.value,
+    [step.id]: !isStepExpanded(step),
+  }
+}
+
 async function copyStepContent(content: string) {
   try {
     await navigator.clipboard.writeText(content)
