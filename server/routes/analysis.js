@@ -102,9 +102,22 @@ function deriveSessionTitle(text = '') {
   return text.trim().slice(0, 48) || '未命名分析会话'
 }
 
-router.get('/sessions', (req, res) => {
+router.get('/sessions', async (req, res) => {
   try {
-    const sessions = listAnalysisSessions()
+    const sessions = await Promise.all(listAnalysisSessions().map(async (session) => {
+      try {
+        const state = await proxyJson('/workspace/state', {}, { session_id: session.id })
+        return {
+          ...session,
+          last_analysis_summary: state?.last_analysis_summary || null,
+        }
+      } catch {
+        return {
+          ...session,
+          last_analysis_summary: null,
+        }
+      }
+    }))
     res.json({ sessions })
   } catch (err) {
     console.error('[Analysis API] List sessions error:', err)

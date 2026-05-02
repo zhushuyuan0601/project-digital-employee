@@ -7,8 +7,23 @@ export interface AnalysisSession {
   model?: string | null
   last_user_message?: string | null
   last_report_path?: string | null
+  last_analysis_summary?: AnalysisSessionSummary | null
   created_at: number
   updated_at: number
+}
+
+export interface AnalysisSessionSummary {
+  goal?: string
+  selected_file?: {
+    name?: string
+    path?: string
+    sheet_name?: string
+    table_name?: string
+  } | null
+  fields_used?: string[]
+  artifacts?: Array<{ name?: string; path?: string; url?: string; category?: string; artifact_type?: string }>
+  final_answer_excerpt?: string
+  updated_at?: number
 }
 
 export interface WorkspaceFile {
@@ -82,9 +97,21 @@ export interface WorkspaceOverview {
   generated_at: number
 }
 
+export interface AnalysisMessageContext {
+  fileName?: string
+  filePath?: string
+  sheetName?: string
+  tableName?: string
+  category?: WorkspaceFile['category']
+  rowCount?: number
+  columnCount?: number
+  fieldNames?: string[]
+}
+
 export interface AnalysisMessage {
   role: 'user' | 'assistant'
   content: string
+  context?: AnalysisMessageContext | null
 }
 
 export async function listAnalysisSessions() {
@@ -116,6 +143,7 @@ export async function getAnalysisState(sessionId: string) {
     session_id: string
     messages: AnalysisMessage[]
     generated_files: Array<{ name: string; url: string }>
+    last_analysis_summary?: AnalysisSessionSummary | null
     updated_at: number
   }>(`/api/analysis/workspace/state?session_id=${encodeURIComponent(sessionId)}`)
 }

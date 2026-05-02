@@ -158,22 +158,73 @@
                 <span>{{ formatTimestamp(message.createdAt) }}</span>
               </header>
 
-              <div v-if="message.role === 'assistant' && parseSections(message.content).length" class="flow-sections">
+              <div v-if="message.context" class="message-context">
+                <span>请求上下文</span>
+                <strong>{{ formatMessageContext(message.context) }}</strong>
+              </div>
+
+              <div v-if="message.role === 'assistant' && toDisplaySteps(message).length" class="analysis-steps">
                 <section
-                  v-for="(section, index) in parseSections(message.content)"
-                  :key="`${message.id}-${section.type}-${index}`"
-                  class="flow-section"
-                  :class="`flow-section--${section.type.toLowerCase()}`"
+                  v-for="step in toDisplaySteps(message)"
+                  :key="step.id"
+                  class="analysis-step"
+                  :class="[`analysis-step--${step.type}`, `analysis-step--${step.tone}`, { 'is-collapsed': !isStepExpanded(step) }]"
                 >
-                  <div class="flow-section__tag">
-                    <component :is="getSectionMeta(section.type).icon" />
-                    <span>{{ getSectionMeta(section.type).label }}</span>
+                  <div class="analysis-step__head">
+                    <span class="analysis-step__icon"><component :is="getStepMeta(step.type).icon" /></span>
+                    <div class="analysis-step__title">
+                      <strong>{{ step.title }}</strong>
+                      <small>{{ step.summary }}</small>
+                    </div>
+                    <button
+                      v-if="step.collapsed"
+                      class="analysis-step__toggle"
+                      type="button"
+                      @click="toggleStep(step)"
+                    >
+                      {{ isStepExpanded(step) ? '收起' : '查看' }}
+                    </button>
                   </div>
-                  <div v-if="section.type === 'Code' || section.type === 'Execute'" class="flow-section__code">
-                    <pre>{{ section.content }}</pre>
+
+                  <div v-if="isStepExpanded(step)" class="analysis-step__body">
+                    <template v-if="step.type === 'code' || step.type === 'execute'">
+                      <div class="analysis-step__tools">
+                        <span>{{ step.type === 'code' ? 'Python 代码' : '运行日志' }}</span>
+                        <button class="mini-action" type="button" @click="copyStepContent(getStepDisplayContent(step))">复制</button>
+                      </div>
+                      <pre class="analysis-step__code">{{ getStepDisplayContent(step) }}</pre>
+                    </template>
+                    <template v-else-if="step.type === 'file'">
+                      <div v-if="parseFileArtifacts(step.content).length" class="artifact-grid">
+                        <a
+                          v-for="artifact in parseFileArtifacts(step.content)"
+                          :key="artifact.url"
+                          class="artifact-card"
+                          :href="artifact.url"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <img v-if="artifact.isImage" :src="artifact.url" :alt="artifact.label" />
+                          <span v-else class="artifact-card__icon"><component :is="artifact.kind === 'table' ? Histogram : DocumentChecked" /></span>
+                          <div>
+                            <strong>{{ artifact.label }}</strong>
+                            <p>{{ artifact.kind === 'chart' ? '图表' : artifact.kind === 'table' ? '数据表' : artifact.kind === 'report' ? '报告' : '文件' }}</p>
+                          </div>
+                          <Download />
+                        </a>
+                      </div>
+                      <div v-else class="analysis-step__markdown" v-html="renderMarkdown(step.content)"></div>
+                    </template>
+                    <template v-else-if="step.type === 'answer'">
+                      <div class="analysis-step__markdown analysis-step__markdown--answer" v-html="renderMarkdown(step.content)"></div>
+                      <div class="analysis-followups">
+                        <button type="button" @click="applyFollowupPrompt('explain')">解释依据</button>
+                        <button type="button" @click="applyFollowupPrompt('next')">继续深挖</button>
+                        <button type="button" @click="applyFollowupPrompt('report')">整理报告</button>
+                      </div>
+                    </template>
+                    <div v-else class="analysis-step__markdown" v-html="renderMarkdown(step.content)"></div>
                   </div>
-                  <div v-else-if="section.type === 'File'" class="flow-section__body flow-section__body--files" v-html="renderMarkdown(section.content)"></div>
-                  <div v-else class="flow-section__body" v-html="renderMarkdown(section.content)"></div>
                 </section>
               </div>
 
@@ -608,9 +659,9 @@
               <button class="session-modal-row__main" type="button" @click="selectHistorySession(session.id)">
                 <div>
                   <strong>{{ session.title }}</strong>
-                  <p>{{ session.last_user_message || '从这里继续你的分析任务' }}</p>
+                  <p>{{ getSessionSummary(session) }}</p>
                 </div>
-                <span>{{ getStatusLabel(session.status) }}</span>
+                <span>{{ getSessionMeta(session) }}</span>
               </button>
               <button
                 class="session-modal-row__delete"
@@ -877,11 +928,43 @@ interface UIMessage {
   role: MessageRole
   content: string
   createdAt: number
+  context?: MessageContextSnapshot | null
 }
 
 interface ParsedSection {
   type: string
   content: string
+}
+
+interface MessageContextSnapshot {
+  fileName?: string
+  filePath?: string
+  sheetName?: string
+  tableName?: string
+  category?: WorkspaceFile['category']
+  rowCount?: number
+  columnCount?: number
+  fieldNames?: string[]
+}
+
+type AnalysisDisplayStepType = 'analysis' | 'understand' | 'code' | 'execute' | 'ask' | 'answer' | 'file' | 'note'
+
+interface AnalysisDisplayStep {
+  id: string
+  type: AnalysisDisplayStepType
+  title: string
+  summary: string
+  content: string
+  rawType: string
+  collapsed: boolean
+  tone: 'neutral' | 'info' | 'success' | 'warning' | 'danger'
+}
+
+interface FileArtifact {
+  label: string
+  url: string
+  isImage: boolean
+  kind: 'chart' | 'table' | 'report' | 'file'
 }
 
 interface SuggestedPrompt {
@@ -928,6 +1011,7 @@ const messageStreamRef = ref<HTMLElement | null>(null)
 const showSessionModal = ref(false)
 const showPromptModal = ref(false)
 const showPreviewModal = ref(false)
+const expandedStepIds = ref<Record<string, boolean>>({})
 const showExportModal = ref(false)
 const assetGroupExpanded = ref<Record<string, boolean>>({})
 const exportDraft = ref({
@@ -1456,17 +1540,214 @@ function parseSections(content: string): ParsedSection[] {
   return sections
 }
 
-function getSectionMeta(type: string) {
-  const meta: Record<string, { label: string; icon: any }> = {
-    Analyze: { label: '分析策略', icon: DataAnalysis },
-    Understand: { label: '数据理解', icon: Monitor },
-    Code: { label: '代码生成', icon: MagicStick },
-    Execute: { label: '执行回放', icon: Cpu },
-    Ask: { label: '需要补充', icon: ChatDotRound },
-    Answer: { label: '结论洞察', icon: Finished },
-    File: { label: '文件产物', icon: Files },
+function getStepMeta(type: AnalysisDisplayStepType) {
+  const meta: Record<AnalysisDisplayStepType, { label: string; icon: any }> = {
+    analysis: { label: '分析策略', icon: DataAnalysis },
+    understand: { label: '数据理解', icon: Monitor },
+    code: { label: '代码已准备', icon: MagicStick },
+    execute: { label: '执行结果', icon: Cpu },
+    ask: { label: '需要补充', icon: ChatDotRound },
+    answer: { label: '结论洞察', icon: Finished },
+    file: { label: '分析产物', icon: Files },
+    note: { label: '过程记录', icon: Document },
   }
-  return meta[type] || { label: type, icon: Document }
+  return meta[type] || meta.note
+}
+
+function toStepType(type: string): AnalysisDisplayStepType {
+  const map: Record<string, AnalysisDisplayStepType> = {
+    Analyze: 'analysis',
+    Understand: 'understand',
+    Code: 'code',
+    Execute: 'execute',
+    Ask: 'ask',
+    Answer: 'answer',
+    File: 'file',
+  }
+  return map[type] || 'note'
+}
+
+function summarizePlainText(content: string, fallback = '已生成一段分析记录') {
+  const plain = content
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/!\[[^\]]*]\([^)]+\)/g, ' ')
+    .replace(/\[[^\]]+]\([^)]+\)/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!plain) return fallback
+  return plain.length > 68 ? `${plain.slice(0, 68)}...` : plain
+}
+
+function summarizeExecution(content: string) {
+  const plain = content.replace(/```/g, '').trim()
+  if (!plain) return '执行完成，没有返回额外日志'
+  const lowered = plain.toLowerCase()
+  if (lowered.includes('traceback') || lowered.includes('error') || lowered.includes('exception')) {
+    return '执行遇到异常，已保留完整日志'
+  }
+  if (plain.includes('⏳')) return '代码正在执行，等待结果返回'
+  return summarizePlainText(plain, '代码执行完成')
+}
+
+function getStepTone(type: AnalysisDisplayStepType, content: string): AnalysisDisplayStep['tone'] {
+  if (type === 'answer' || type === 'file') return 'success'
+  if (type === 'ask') return 'warning'
+  if (type === 'execute') {
+    const lowered = content.toLowerCase()
+    return lowered.includes('traceback') || lowered.includes('error') || lowered.includes('exception') ? 'danger' : 'info'
+  }
+  if (type === 'code') return 'neutral'
+  return 'info'
+}
+
+function toDisplaySteps(message: UIMessage): AnalysisDisplayStep[] {
+  return parseSections(message.content).map((section, index) => {
+    const type = toStepType(section.type)
+    const meta = getStepMeta(type)
+    const codeLineCount = section.content.split('\n').filter(Boolean).length
+    const summaryByType: Record<AnalysisDisplayStepType, string> = {
+      analysis: summarizePlainText(section.content, '正在规划分析路径'),
+      understand: summarizePlainText(section.content, '正在理解当前数据'),
+      code: `${codeLineCount} 行代码，默认收起`,
+      execute: summarizeExecution(section.content),
+      ask: summarizePlainText(section.content, '需要你补充信息'),
+      answer: summarizePlainText(section.content, '已生成分析结论'),
+      file: `${parseFileArtifacts(section.content).length || 1} 个可查看产物`,
+      note: summarizePlainText(section.content),
+    }
+    return {
+      id: `${message.id}-${section.type}-${index}`,
+      type,
+      title: meta.label,
+      summary: summaryByType[type],
+      content: section.content,
+      rawType: section.type,
+      collapsed: type === 'code' || type === 'execute',
+      tone: getStepTone(type, section.content),
+    }
+  })
+}
+
+function getStepDisplayContent(step: AnalysisDisplayStep) {
+  if (step.type !== 'code' && step.type !== 'execute') return step.content
+  const fenced = step.content.match(/^```(?:\w+)?\s*\n([\s\S]*?)\n```$/)
+  return fenced ? fenced[1].trim() : step.content
+}
+
+function isStepExpanded(step: AnalysisDisplayStep) {
+  if (expandedStepIds.value[step.id] !== undefined) return expandedStepIds.value[step.id]
+  return !step.collapsed
+}
+
+function toggleStep(step: AnalysisDisplayStep) {
+  expandedStepIds.value = {
+    ...expandedStepIds.value,
+    [step.id]: !isStepExpanded(step),
+  }
+}
+
+function normalizeArtifactUrl(url: string) {
+  if (url.startsWith('/workspace/')) return `/api/analysis${url}`
+  return url
+}
+
+function getArtifactKind(label: string): FileArtifact['kind'] {
+  const lower = label.toLowerCase()
+  if (/\.(png|jpg|jpeg|webp|gif|svg)$/.test(lower)) return 'chart'
+  if (/\.(csv|tsv|xlsx|xls|parquet)$/.test(lower)) return 'table'
+  if (/\.(md|pdf|docx|pptx)$/.test(lower)) return 'report'
+  return 'file'
+}
+
+function parseFileArtifacts(content: string): FileArtifact[] {
+  const artifacts: FileArtifact[] = []
+  const imagePattern = /!\[([^\]]*)]\(([^)]+)\)/g
+  const linkPattern = /(?:^|\n)\s*-?\s*\[([^\]]+)]\(([^)]+)\)/g
+  let match: RegExpExecArray | null
+
+  while ((match = imagePattern.exec(content)) !== null) {
+    const label = match[1] || '图表产物'
+    artifacts.push({
+      label,
+      url: normalizeArtifactUrl(match[2]),
+      isImage: true,
+      kind: getArtifactKind(label),
+    })
+  }
+
+  while ((match = linkPattern.exec(content)) !== null) {
+    const label = match[1] || '文件产物'
+    const url = normalizeArtifactUrl(match[2])
+    if (artifacts.some((artifact) => artifact.url === url)) continue
+    artifacts.push({
+      label,
+      url,
+      isImage: /\.(png|jpg|jpeg|webp|gif|svg)(\?|$)/i.test(url),
+      kind: getArtifactKind(label),
+    })
+  }
+
+  return artifacts
+}
+
+async function copyStepContent(content: string) {
+  try {
+    await navigator.clipboard.writeText(content)
+    notification.success('内容已复制')
+  } catch {
+    notification.error('复制失败')
+  }
+}
+
+function applyFollowupPrompt(kind: 'explain' | 'next' | 'report') {
+  const prompts = {
+    explain: '请把刚才的分析结论用业务语言解释一遍，并说明每个结论对应的数据依据。',
+    next: '基于刚才的分析结果，继续挖掘最值得关注的异常、机会点和下一步验证方向。',
+    report: '请把本次分析整理成一份结构化报告，包含背景、关键发现、图表说明、风险和行动建议。',
+  }
+  draft.value = prompts[kind]
+}
+
+function buildMessageContextSnapshot(): MessageContextSnapshot | null {
+  if (!selectedFile.value) return null
+  return {
+    fileName: selectedFile.value.name,
+    filePath: selectedFile.value.path,
+    category: selectedFile.value.category,
+    sheetName: selectedSheetName.value || profile.value?.sheet_name,
+    tableName: selectedTableName.value || profile.value?.table_name,
+    rowCount: profile.value?.row_count,
+    columnCount: profile.value?.column_count,
+    fieldNames: (profile.value?.fields || []).map((field) => field.name).slice(0, 8),
+  }
+}
+
+function formatMessageContext(context?: MessageContextSnapshot | null) {
+  if (!context?.fileName) return ''
+  const scope = [context.sheetName && `工作表 ${context.sheetName}`, context.tableName && `表 ${context.tableName}`]
+    .filter(Boolean)
+    .join(' · ')
+  const shape = [
+    typeof context.rowCount === 'number' ? `${context.rowCount} 行` : '',
+    typeof context.columnCount === 'number' ? `${context.columnCount} 列` : '',
+  ].filter(Boolean).join(' · ')
+  return [context.fileName, scope, shape].filter(Boolean).join(' · ')
+}
+
+function getSessionSummary(session: AnalysisSession) {
+  const summary = session.last_analysis_summary
+  if (summary?.final_answer_excerpt) return summary.final_answer_excerpt
+  if (summary?.goal) return summary.goal
+  return session.last_user_message || '从这里继续你的分析任务'
+}
+
+function getSessionMeta(session: AnalysisSession) {
+  const summary = session.last_analysis_summary
+  const fileName = summary?.selected_file?.name
+  const artifactCount = summary?.artifacts?.length || 0
+  return [fileName && `文件 ${fileName}`, artifactCount ? `${artifactCount} 个产物` : '', getStatusLabel(session.status)]
+    .filter(Boolean)
+    .join(' · ')
 }
 
 function getFileIcon(file: WorkspaceFile) {
@@ -1580,6 +1861,7 @@ async function refreshState() {
       role: message.role,
       content: message.content,
       createdAt: Date.now() + index,
+      context: message.context || null,
     }))
   } catch {
     messages.value = []
@@ -1817,11 +2099,13 @@ async function handleSend() {
   const controller = new AbortController()
   activeChatController.value = controller
   const prompt = draft.value.trim()
+  const context = buildMessageContextSnapshot()
   const userMessage: UIMessage = {
     id: `${currentSessionId.value}-user-${Date.now()}`,
     role: 'user',
     content: prompt,
     createdAt: Date.now(),
+    context,
   }
   const assistantMessage: UIMessage = {
     id: `${currentSessionId.value}-assistant-${Date.now()}`,
@@ -1829,7 +2113,11 @@ async function handleSend() {
     content: '',
     createdAt: Date.now(),
   }
-  const requestMessages = [...messages.value, userMessage].map((item) => ({ role: item.role, content: item.content }))
+  const requestMessages = [...messages.value, userMessage].map((item) => ({
+    role: item.role,
+    content: item.content,
+    context: item.context || undefined,
+  }))
   messages.value.push(userMessage, assistantMessage)
   draft.value = ''
   sending.value = true
@@ -2364,11 +2652,15 @@ onMounted(async () => {
 
 .session-modal-row__main span {
   flex: 0 0 auto;
+  max-width: 210px;
   padding: 4px 8px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.06);
   color: var(--analysis-soft);
   font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .session-modal-row__delete {
@@ -2740,6 +3032,231 @@ onMounted(async () => {
 .flow-section__body :deep(p:last-child),
 .preview-rich :deep(p:last-child) {
   margin-bottom: 0;
+}
+
+.message-context {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  border: 1px solid rgba(147, 197, 253, 0.18);
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.08);
+  color: #bfdbfe;
+  font-size: 12px;
+}
+
+.message-context span {
+  color: var(--analysis-soft);
+}
+
+.message-context strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analysis-steps {
+  display: grid;
+  gap: 12px;
+}
+
+.analysis-step {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.13);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.analysis-step--success {
+  border-color: rgba(16, 185, 129, 0.24);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.11), rgba(255, 255, 255, 0.025));
+}
+
+.analysis-step--warning {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.analysis-step--danger {
+  border-color: rgba(251, 113, 133, 0.32);
+  background: rgba(251, 113, 133, 0.08);
+}
+
+.analysis-step__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.analysis-step__icon {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: rgba(59, 130, 246, 0.14);
+  color: #93c5fd;
+}
+
+.analysis-step--success .analysis-step__icon {
+  background: rgba(16, 185, 129, 0.14);
+  color: #6ee7b7;
+}
+
+.analysis-step--warning .analysis-step__icon {
+  background: rgba(245, 158, 11, 0.14);
+  color: #fcd34d;
+}
+
+.analysis-step--danger .analysis-step__icon {
+  background: rgba(251, 113, 133, 0.14);
+  color: #fda4af;
+}
+
+.analysis-step__title {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.analysis-step__title strong {
+  color: var(--analysis-main);
+  font-size: 14px;
+}
+
+.analysis-step__title small {
+  overflow: hidden;
+  color: var(--analysis-soft);
+  font-size: 12px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analysis-step__toggle {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 6px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+  cursor: pointer;
+}
+
+.analysis-step__body {
+  display: grid;
+  gap: 10px;
+}
+
+.analysis-step__tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--analysis-soft);
+  font-size: 12px;
+}
+
+.analysis-step__code {
+  max-height: 360px;
+  margin: 0;
+  padding: 14px;
+  overflow: auto;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 12px;
+  background: rgba(2, 6, 23, 0.64);
+  color: #dbeafe;
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.analysis-step__markdown {
+  color: var(--analysis-main);
+  line-height: 1.7;
+}
+
+.analysis-step__markdown--answer {
+  font-size: 14px;
+}
+
+.artifact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.artifact-card {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 18px;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.56);
+  color: inherit;
+  text-decoration: none;
+}
+
+.artifact-card img,
+.artifact-card__icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.artifact-card__icon {
+  display: grid;
+  place-items: center;
+  color: #93c5fd;
+}
+
+.artifact-card strong,
+.artifact-card p {
+  min-width: 0;
+  overflow: hidden;
+  margin: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-card strong {
+  color: var(--analysis-main);
+  font-size: 13px;
+}
+
+.artifact-card p {
+  color: var(--analysis-soft);
+  font-size: 12px;
+}
+
+.analysis-followups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.analysis-followups button {
+  padding: 7px 10px;
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  border-radius: 999px;
+  background: rgba(34, 211, 238, 0.08);
+  color: #a5f3fc;
+  cursor: pointer;
 }
 
 .flow-sections {

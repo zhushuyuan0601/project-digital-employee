@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Iterable
@@ -28,6 +29,7 @@ Rules:
 
 
 CODE_RE = re.compile(r"<Code>([\s\S]*?)</Code>", re.DOTALL)
+SECTION_RE = re.compile(r"<(Analyze|Understand|Code|Execute|Ask|Answer|File)>([\s\S]*?)</\1>", re.DOTALL)
 
 
 def normalize_content(raw: Any) -> str:
@@ -161,11 +163,11 @@ def chunk_payload(delta: str | None = None, *, finish_reason: str | None = None,
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def final_chunk(session_id: str, files: list[dict[str, str]]) -> str:
+def final_chunk(session_id: str, files: list[dict[str, str]], summary: dict[str, Any] | None = None) -> str:
     return chunk_payload(
         None,
         finish_reason="stop",
-        extra_delta={"session_id": session_id, "files": files},
+        extra_delta={"session_id": session_id, "files": files, "summary": summary or {}},
     ) + "data: [DONE]\n\n"
 
 
@@ -229,17 +231,79 @@ def render_artifact_metadata(artifacts: list[Path], workspace: Path) -> list[dic
     return metadata
 
 
+def extract_last_section(content: str, section_type: str) -> str:
+    matches = [body.strip() for tag, body in SECTION_RE.findall(content) if tag == section_type]
+    return matches[-1] if matches else ""
+
+
+def compact_text(content: str, limit: int = 180) -> str:
+    plain = re.sub(r"```[\s\S]*?```", " ", content)
+    plain = re.sub(r"!\[[^\]]*]\([^)]+\)", " ", plain)
+    plain = re.sub(r"\[[^\]]+]\([^)]+\)", " ", plain)
+    plain = re.sub(r"\s+", " ", plain).strip()
+    return plain[:limit] + ("..." if len(plain) > limit else "")
+
+
+def normalize_persisted_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for msg in messages:
+        item: dict[str, Any] = {
+            "role": msg.get("role", "user"),
+            "content": normalize_content(msg.get("content")),
+        }
+        context = msg.get("context")
+        if isinstance(context, dict):
+            item["context"] = context
+        normalized.append(item)
+    return normalized
+
+
+def build_session_summary(
+    messages: list[dict[str, Any]],
+    assistant_content: str,
+    generated_files: list[dict[str, str]],
+    selected_file: Any = None,
+    selected_file_profile: Any = None,
+) -> dict[str, Any]:
+    user_messages = [normalize_content(msg.get("content")) for msg in messages if msg.get("role") == "user"]
+    selected_payload = selected_file if isinstance(selected_file, dict) else None
+    fields: list[str] = []
+    if isinstance(selected_file_profile, dict) and isinstance(selected_file_profile.get("fields"), list):
+        fields = [
+            str(field.get("name"))
+            for field in selected_file_profile.get("fields", [])[:12]
+            if isinstance(field, dict) and field.get("name")
+        ]
+    return {
+        "goal": compact_text(user_messages[-1] if user_messages else "", 120),
+        "selected_file": {
+            "name": selected_payload.get("name"),
+            "path": selected_payload.get("path"),
+            "sheet_name": selected_payload.get("sheet_name"),
+            "table_name": selected_payload.get("table_name"),
+        } if selected_payload else None,
+        "fields_used": fields,
+        "artifacts": generated_files,
+        "final_answer_excerpt": compact_text(extract_last_section(assistant_content, "Answer"), 180),
+        "updated_at": int(time.time() * 1000),
+    }
+
+
 def persist_session_messages(
     session_id: str,
     messages: list[dict[str, Any]],
     assistant_content: str,
     generated_files: list[dict[str, str]],
+    selected_file: Any = None,
+    selected_file_profile: Any = None,
 ) -> None:
     state = load_session_state(session_id)
-    normalized_messages = [{"role": msg.get("role", "user"), "content": normalize_content(msg.get("content"))} for msg in messages]
+    normalized_messages = normalize_persisted_messages(messages)
     normalized_messages.append({"role": "assistant", "content": assistant_content})
+    summary = build_session_summary(messages, assistant_content, generated_files, selected_file, selected_file_profile)
     state["messages"] = normalized_messages
     state["generated_files"] = generated_files
+    state["last_analysis_summary"] = summary
     save_session_state(session_id, state)
 
 
@@ -250,9 +314,23 @@ async def run_analysis(messages: list[dict[str, Any]], runtime: dict[str, Any], 
         client = create_client(runtime)
     except Exception as exc:
         accumulated = f"<Answer>\n分析配置错误：{exc}\n</Answer>"
-        persist_session_messages(session_id, messages, accumulated, generated_files)
+        persist_session_messages(
+            session_id,
+            messages,
+            accumulated,
+            generated_files,
+            runtime.get("selected_file"),
+            runtime.get("selected_file_profile"),
+        )
+        summary = build_session_summary(
+            messages,
+            accumulated,
+            generated_files,
+            runtime.get("selected_file"),
+            runtime.get("selected_file_profile"),
+        )
         yield chunk_payload(accumulated)
-        yield final_chunk(session_id, generated_files)
+        yield final_chunk(session_id, generated_files, summary)
         return
 
     model = str(runtime.get("model") or settings.default_model).strip() or settings.default_model
@@ -317,5 +395,19 @@ async def run_analysis(messages: list[dict[str, Any]], runtime: dict[str, Any], 
         accumulated += execute_result + file_block
         yield chunk_payload(execute_result + file_block)
 
-    persist_session_messages(session_id, messages, accumulated, generated_files)
-    yield final_chunk(session_id, generated_files)
+    persist_session_messages(
+        session_id,
+        messages,
+        accumulated,
+        generated_files,
+        runtime.get("selected_file"),
+        runtime.get("selected_file_profile"),
+    )
+    summary = build_session_summary(
+        messages,
+        accumulated,
+        generated_files,
+        runtime.get("selected_file"),
+        runtime.get("selected_file_profile"),
+    )
+    yield final_chunk(session_id, generated_files, summary)
