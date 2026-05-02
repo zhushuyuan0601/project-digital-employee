@@ -245,7 +245,7 @@ function logout() {
 
 .nav-link.is-active {
   background: rgba(88, 166, 255, 0.1);
-  border-left: 3px solid var(--color-primary);
+  border-color: rgba(var(--color-primary-rgb), 0.35);
   color: var(--color-primary);
   box-shadow: none;
 }

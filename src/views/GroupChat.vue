@@ -134,6 +134,15 @@
                 :avatar-text="message.sender === 'agent' ? (message.senderAvatar || '◈') : message.sender === 'system' ? '⚙' : '我'"
                 :mentions="(message.mentions || []).map(getAgentName)"
               />
+              <button
+                v-if="message.sender === 'user'"
+                type="button"
+                class="message-task-btn"
+                @click="createTaskFromMessage(message.content)"
+              >
+                <i class="ri-node-tree"></i>
+                转任务
+              </button>
             </div>
           </div>
         </div>
@@ -177,6 +186,14 @@
                 <span>未上线成员会收到系统提醒，不会静默失败。</span>
               </div>
               <button
+                class="draft-task-btn"
+                type="button"
+                :disabled="sendDisabled"
+                @click="createTaskFromMessage(inputContent)"
+              >
+                转为任务
+              </button>
+              <button
                 class="send-btn"
                 @click="handleSend"
                 :disabled="sendDisabled"
@@ -193,15 +210,19 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useGroupChatStore } from '@/stores/groupChat'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
-import { ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { extractText } from '@/utils/gateway-protocol'
 import ChatMessageBubble from '@/components/chat/ChatMessageBubble.vue'
 import { useChatFormatting } from '@/composables/useChatFormatting'
+import { useTasksStore } from '@/stores/tasks'
 
 const groupStore = useGroupChatStore()
 const multiAgentStore = useMultiAgentChatStore()
+const tasksStore = useTasksStore()
+const router = useRouter()
 const { formatTime, formatRichText } = useChatFormatting()
 
 const groupConfig = computed(() => groupStore.groupConfig)
@@ -260,6 +281,23 @@ const appendMention = (agentName: string) => {
   const prefix = inputContent.value && !/\s$/.test(inputContent.value) ? ' ' : ''
   inputContent.value = `${inputContent.value}${prefix}${token}`
   nextTick(() => inputRef.value?.focus())
+}
+
+const createTaskFromMessage = async (content: string) => {
+  const description = content.trim()
+  if (!description) return
+  const plainTitle = description.replace(/@\S+/g, '').trim().slice(0, 32) || '群聊协作任务'
+  try {
+    const response = await tasksStore.createTask({
+      title: plainTitle,
+      description,
+      priority: 'normal',
+    })
+    ElMessage.success('已从群聊创建任务')
+    router.push({ path: '/task-center-2', query: { task: response.task.id } })
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '创建任务失败')
+  }
 }
 
 const setupAgentStatusWatcher = () => {
@@ -817,6 +855,8 @@ onUnmounted(() => {
 
 .stream-row {
   display: flex;
+  align-items: flex-start;
+  gap: 8px;
 }
 
 .stream-row--user {
@@ -829,6 +869,43 @@ onUnmounted(() => {
 
 .stream-row :deep(.chat-message-bubble__body) {
   max-width: min(44rem, calc(100% - 52px));
+}
+
+.message-task-btn,
+.draft-task-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border-default);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.message-task-btn {
+  min-height: 30px;
+  padding: 0 9px;
+  margin-top: 20px;
+  font-size: 12px;
+}
+
+.draft-task-btn {
+  width: 100%;
+  height: 40px;
+  font-weight: 700;
+}
+
+.message-task-btn:hover,
+.draft-task-btn:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.draft-task-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .composer-shell {

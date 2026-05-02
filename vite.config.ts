@@ -52,6 +52,14 @@ export default defineConfig({
         target: 'http://127.0.0.1:18888',
         changeOrigin: true
       },
+      '/api/tasks': {
+        target: 'http://127.0.0.1:18888',
+        changeOrigin: true
+      },
+      '/api/subtasks': {
+        target: 'http://127.0.0.1:18888',
+        changeOrigin: true
+      },
       '/api/analysis': {
         target: 'http://127.0.0.1:18888',
         changeOrigin: true

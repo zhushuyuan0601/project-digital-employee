@@ -1,5 +1,5 @@
 <template>
-  <div class="task-center-2">
+  <div class="task-command-page">
     <TaskControlBar
       :ai-status="aiStatus"
       :ai-status-text="aiStatusText"
@@ -11,444 +11,342 @@
       @toggle-theme="toggleTheme"
       @connect-all="handleConnectAll"
       @disconnect-all="handleDisconnectAll"
-      @reset="handleReset"
+      @reset="handleRefresh"
     />
 
-    <div class="main-container">
-      <!-- 左侧面板 -->
-      <aside class="left-panel">
-        <!-- 活跃任务 -->
-        <section class="panel task-list-panel">
-          <div class="panel-header">
-            <div class="panel-title">
-              <i class="ri-list-check-2"></i>
-              <span>活跃任务</span>
+    <div class="task-command-layout">
+      <aside class="task-rail">
+        <section class="surface task-create">
+          <div class="surface-heading">
+            <div>
+              <p class="eyebrow">任务入口</p>
+              <h2>小呦任务分发</h2>
             </div>
-            <span class="panel-badge">{{ missionCards.length }}</span>
+            <span class="agent-pill">ceo</span>
           </div>
-          <div class="panel-content">
-            <div
-              v-for="mission in missionCards"
-              :key="mission.id"
-              class="list-item"
-              :class="{ active: selectedAgent === mission.agentId }"
-              @click="selectAgent(mission.agentId)"
-            >
-              <div class="list-item__icon">
-                <i :class="mission.icon"></i>
-              </div>
-              <div class="list-item__info">
-                <div class="list-item__name">{{ mission.title }}</div>
-                <div class="list-item__desc">{{ mission.desc }}</div>
-              </div>
-              <span class="list-item__status" :class="mission.statusClass">{{ mission.status }}</span>
-            </div>
-          </div>
+          <button class="create-launcher" type="button" @click="createDialog = true">
+            <span>
+              <i class="ri-add-line"></i>
+            </span>
+            <strong>新增协作任务</strong>
+          </button>
         </section>
 
-        <!-- 在线 Agent -->
-        <section class="panel agent-list-panel">
-          <div class="panel-header">
-            <div class="panel-title">
-              <i class="ri-group-line"></i>
-              <span>在线 Agent</span>
+        <section class="surface task-list">
+          <div class="surface-heading">
+            <div>
+              <p class="eyebrow">任务队列</p>
+              <h2>活跃任务</h2>
             </div>
-            <span class="panel-badge">{{ connectedAgentCount }}/{{ agentList.length }}</span>
-          </div>
-          <div class="panel-content">
-            <el-popover
-              v-for="agent in agentList"
-              :key="agent.id"
-              trigger="hover"
-              placement="right-start"
-              :width="320"
-              :show-after="300"
-              :hide-after="0"
-              popper-class="agent-tip-popper"
-            >
-              <template #reference>
-                <div
-                  class="list-item agent-item"
-                  :class="{ active: selectedAgent === agent.id, offline: getAgentStatus(agent.id) === 'offline' }"
-                  @click="selectAgent(agent.id)"
-                >
-                  <div class="agent-avatar">
-                    <img :src="getAgentIcon(agent.id)" :alt="agent.name" />
-                    <div class="agent-status-dot" :class="getAgentStatus(agent.id)"></div>
-                  </div>
-                  <div class="list-item__info">
-                    <div class="list-item__name">
-                      {{ agent.name }}
-                      <i v-if="agent.id === 'xiaomu'" class="ri-verified-badge-fill" style="color: var(--color-primary); font-size: 14px;"></i>
-                    </div>
-                    <div class="list-item__desc">{{ agent.role }}</div>
-                  </div>
-                </div>
-              </template>
-              <div class="agent-tip-card">
-                <div class="agent-tip-header">
-                  <img class="agent-tip-avatar" :src="getAgentIcon(agent.id)" :alt="agent.name" />
-                  <div class="agent-tip-title">
-                    <div class="agent-tip-name">{{ agent.name }}</div>
-                    <div class="agent-tip-role">{{ getAgentRole(agent.id) }}</div>
-                  </div>
-                  <div class="status-badge-mini" :class="getAgentStatus(agent.id)">
-                    <i :class="getAgentStatusIcon(agent.id)"></i>
-                    {{ getAgentStatusText(agent.id) }}
-                  </div>
-                </div>
-                <div class="agent-tip-tags">
-                  <span class="tag" v-for="tag in agent.tags" :key="tag">{{ tag }}</span>
-                </div>
-                <div class="agent-tip-desc">{{ agent.desc }}</div>
-                <div class="agent-tip-stats">
-                  <div class="agent-tip-stat">
-                    <span class="stat-label">消息</span>
-                    <span class="stat-value">{{ agents[agent.id]?.messages.length || 0 }}</span>
-                  </div>
-                  <div class="agent-tip-stat">
-                    <span class="stat-label">产出文件</span>
-                    <span class="stat-value">{{ getAgentFiles(agent.id).length }}</span>
-                  </div>
-                  <div class="agent-tip-stat">
-                    <span class="stat-label">状态</span>
-                    <span class="stat-value">{{ getAgentStatusText(agent.id) }}</span>
-                  </div>
-                </div>
-              </div>
-            </el-popover>
-
-            <div
-              v-if="claudeCodeSessions.length > 0"
-              class="list-item agent-item claude-item"
-              :class="{ active: selectedAgent === 'claude' }"
-              @click="selectAgent('claude')"
-            >
-              <div class="agent-avatar claude-avatar">
-                <i class="ri-robot-line"></i>
-                <div class="agent-status-dot busy"></div>
-              </div>
-              <div class="list-item__info">
-                <div class="list-item__name">ClaudeCode</div>
-                <div class="list-item__desc">{{ claudeCodeSessions.length }} 个活跃会话</div>
-              </div>
-            </div>
-          </div>
-        </section>
-      </aside>
-
-      <!-- 中间面板：对话区域 -->
-      <section class="panel middle-panel">
-        <template v-if="selectedAgent && selectedAgent !== 'claude'">
-          <div class="chat-header">
-            <div class="chat-header__agent">
-              <div class="agent-avatar agent-avatar--sm">
-                <img :src="getAgentIcon(selectedAgent)" :alt="getAgentName(selectedAgent)" />
-                <div class="agent-status-dot" :class="getAgentStatus(selectedAgent)"></div>
-              </div>
-              <div>
-                <div class="chat-header__name">{{ getAgentName(selectedAgent) }}</div>
-                <div class="chat-header__status">
-                  <span class="status-dot-sm" :class="getAgentStatus(selectedAgent)"></span>
-                  {{ getAgentStatusText(selectedAgent) }}
-                </div>
-              </div>
-            </div>
-            <div class="chat-header__actions">
-              <el-popover
-                v-if="currentAgentFiles.length > 0"
-                trigger="click"
-                placement="bottom-end"
-                :width="320"
-                popper-class="file-list-popper"
-              >
-                <template #reference>
-                  <button class="header-action-btn" :class="{ 'has-new': hasNewFiles(selectedAgent) }">
-                    <i class="ri-folder-zip-line"></i>
-                    <span>{{ currentAgentFiles.length }}</span>
-                    <span v-if="hasNewFiles(selectedAgent)" class="red-dot"></span>
-                  </button>
-                </template>
-                <div class="file-dropdown">
-                  <div
-                    v-for="file in currentAgentFiles"
-                    :key="reviewFileKey(file)"
-                    class="file-dropdown-item"
-                    @click="previewFile(file)"
-                  >
-                    <i :class="getFileIcon(file.name)"></i>
-                    <span class="file-dropdown-name">{{ file.name }}</span>
-                    <span class="file-dropdown-meta">{{ file.mtimeStr || '' }}</span>
-                  </div>
-                </div>
-              </el-popover>
-              <button class="header-action-btn" @click="toggleTheme" :title="isLight ? '深色模式' : '浅色模式'">
-                <el-icon><Sunny v-if="isLight" /><Moon v-else /></el-icon>
-              </button>
-            </div>
-          </div>
-
-          <div class="detail-content">
-            <TaskMessagePanel
-              v-model="taskInput"
-              :messages="currentAgentMessages"
-              :agent-name="getAgentName(selectedAgent)"
-              :agent-icon="getAgentIcon(selectedAgent)"
-              :connected="selectedAgentConnected"
-              :placeholder="chatInputPlaceholder"
-              @send="sendToSelectedAgent"
-            />
-          </div>
-        </template>
-
-        <template v-else-if="selectedAgent === 'claude'">
-          <div class="chat-header">
-            <div class="chat-header__agent">
-              <div class="agent-avatar agent-avatar--sm claude-avatar">
-                <i class="ri-robot-line"></i>
-                <div class="agent-status-dot busy"></div>
-              </div>
-              <div>
-                <div class="chat-header__name">ClaudeCode</div>
-                <div class="chat-header__status">
-                  <span class="status-dot-sm busy"></span>
-                  执行中 · {{ claudeCodeSessions.length }} 个会话
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="detail-content">
-            <div class="claude-shell">
-              <div class="claude-session-selector">
-                <button
-                  v-for="session in claudeCodeSessions"
-                  :key="session.id"
-                  type="button"
-                  class="session-item"
-                  :class="{ active: selectedClaudeSession?.id === session.id }"
-                  @click="selectClaudeSession(session)"
-                >
-                  <span class="session-model-badge">{{ session.model }}</span>
-                  <span class="session-name">{{ getSessionDisplayName(session) }}</span>
-                  <span class="session-stats">{{ session.tokens }} tokens</span>
-                </button>
-              </div>
-
-              <div class="claude-chat-container">
-                <div class="claude-messages-container" ref="claudeMessagesRef">
-                  <div v-if="claudeTranscriptLoading" class="chat-loading">
-                    <i class="ri-loader-4-line ri-spin"></i> 加载消息中...
-                  </div>
-                  <div v-else-if="claudeTranscript.length === 0" class="empty-state">
-                    <i class="ri-chat-smile-2-line"></i>
-                    <span>暂无消息记录</span>
-                  </div>
-                  <div v-else class="claude-message-stream">
-                    <div
-                      v-for="(msg, idx) in claudeTranscript"
-                      :key="idx"
-                      class="chat-msg"
-                      :class="{ user: msg.role === 'user' }"
-                    >
-                      <div class="msg-avatar">
-                        <i :class="msg.role === 'user' ? 'ri-user-line' : 'ri-robot-line'"></i>
-                      </div>
-                      <div class="msg-bubble">
-                        <template v-for="(part, pidx) in msg.parts" :key="pidx">
-                          <div v-if="part.type === 'text'">{{ part.text }}</div>
-                          <div v-else-if="part.type === 'thinking'" class="msg-thinking"><i class="ri-brain-line"></i> {{ part.thinking }}</div>
-                          <div v-else-if="part.type === 'tool_use'" class="msg-tool"><i class="ri-tools-line"></i> {{ part.name }}</div>
-                        </template>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="claude-input-area">
-                  <input
-                    v-model="claudeInputMessage"
-                    type="text"
-                    placeholder="输入消息发送到 ClaudeCode..."
-                    class="claude-input"
-                    @keydown.enter="sendClaudeMessage"
-                    :disabled="claudeSending"
-                  />
-                  <button
-                    type="button"
-                    class="send-btn"
-                    @click="sendClaudeMessage"
-                    :disabled="!claudeInputMessage.trim() || claudeSending"
-                  >
-                    {{ claudeSending ? '...' : '发送' }}
-                  </button>
-                </div>
-                <div v-if="claudeSendError" class="send-error">{{ claudeSendError }}</div>
-              </div>
-            </div>
-          </div>
-        </template>
-
-        <div v-else class="empty-state">
-          <i class="ri-arrow-left-line"></i>
-          <span>请先选择一个执行对象</span>
-        </div>
-      </section>
-
-      <!-- 右侧面板 -->
-      <aside class="right-panel">
-        <!-- 执行状态 -->
-        <section class="panel execution-panel">
-          <div class="panel-header">
-            <div class="panel-title">
-              <i class="ri-radar-line"></i>
-              <span>执行状态</span>
-            </div>
-            <span class="panel-badge">{{ connectedAgentCount }}/{{ agentList.length }}</span>
-          </div>
-          <div class="panel-content">
-            <div class="execution-metrics">
-              <div class="execution-metric">
-                <span>连接覆盖</span>
-                <strong>{{ connectedAgentCount }}/{{ agentList.length }}</strong>
-              </div>
-              <div class="execution-metric">
-                <span>忙碌 Agent</span>
-                <strong>{{ busyAgentCount }}</strong>
-              </div>
-              <div class="execution-metric">
-                <span>执行时长</span>
-                <strong>{{ taskElapsedText }}</strong>
-              </div>
-            </div>
-            <div class="status-timeline">
-              <div
-                v-for="item in commandTimeline"
-                :key="item.id"
-                class="timeline-item"
-                :class="[item.state, { active: item.state === 'active', completed: item.state === 'completed' }]"
-              >
-                <span class="timeline-dot"></span>
-                <div class="timeline-time">{{ item.time }}</div>
-                <div class="timeline-content">
-                  <strong>{{ item.title }}</strong>
-                  <p>{{ item.desc }}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <!-- 成果资产 -->
-        <section class="panel output-panel">
-          <div class="panel-header">
-            <div class="panel-title">
-              <i class="ri-folder-open-line"></i>
-              <span>成果资产</span>
-            </div>
-            <span class="panel-badge">{{ totalOutputCount }}</span>
-          </div>
-          <div class="panel-content">
-            <div v-if="outputReviewGroups.length === 0" class="review-empty">
-              暂无可审阅成果
-            </div>
-
-            <div
-              v-for="group in outputReviewGroups"
-              :key="group.id"
-              class="review-group"
-            >
-              <div class="review-group__header">
-                <strong>{{ group.name }}</strong>
-                <span>{{ group.files.length }} 项</span>
-              </div>
-              <button
-                v-for="file in group.files"
-                :key="reviewFileKey(file)"
-                type="button"
-                class="review-file"
-                :class="{ 'is-active': selectedReviewAgentId === group.id && reviewSelectionKey === reviewFileKey(file) }"
-                @click="inspectReviewFile(group.id, file)"
-              >
-                <i :class="getFileIcon(file.name)"></i>
-                <span>{{ file.name }}</span>
-                <small>{{ file.mtimeStr || group.role }}</small>
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <!-- 文件预览 -->
-        <section class="panel preview-panel">
-          <div class="panel-header">
-            <div class="panel-title">
-              <i class="ri-file-search-line"></i>
-              <span>{{ previewFileItem?.name || '文件预览' }}</span>
-            </div>
-            <button
-              v-if="previewFileItem"
-              type="button"
-              class="header-action-btn"
-              @click="showPreviewDialog = true"
-            >
-              <i class="ri-fullscreen-line"></i>
+            <button class="icon-btn" type="button" title="刷新任务" @click="handleRefresh">
+              <i class="ri-refresh-line"></i>
             </button>
           </div>
 
-          <div class="panel-content preview-content-area">
-            <div v-if="previewLoading" class="preview-loading">
-              <el-icon class="is-loading"><Loading /></el-icon>
-              <span>加载文件中...</span>
-            </div>
-            <div v-else-if="previewError" class="preview-error">
-              <el-icon><Warning /></el-icon>
-              <span>{{ previewError }}</span>
-            </div>
-            <div v-else-if="previewFileItem" class="preview-content preview-content--inline">
-              <div v-if="previewContent.type === 'markdown'" class="markdown-rendered" v-html="renderPreviewContent()"></div>
-              <pre v-else-if="previewContent.type === 'text'" v-html="escapeHtml(previewContent.content)"></pre>
-              <div v-else-if="previewContent.type === 'html'" v-html="sanitizeHtml(previewContent.content)"></div>
-              <div v-else class="preview-unsupported">
-                <el-icon><Document /></el-icon>
-                <p>该文件类型暂不支持在线预览</p>
-                <p class="hint">{{ previewFileItem?.name }}</p>
-                <el-button type="primary" @click="downloadFile">下载文件</el-button>
+          <div v-if="tasksStore.loading" class="quiet-state">任务加载中...</div>
+          <div v-else-if="tasks.length === 0" class="quiet-state">暂无任务，先创建一个协作目标。</div>
+          <template v-else>
+            <button
+              v-for="task in tasks"
+              :key="task.id"
+              type="button"
+              class="task-row"
+              :class="{ active: selectedTask?.id === task.id }"
+              @click="selectTask(task.id)"
+            >
+              <div class="task-row__top">
+                <strong>{{ task.title }}</strong>
+                <span class="status-chip" :class="`status-chip--${task.status}`">{{ statusText(task.status) }}</span>
               </div>
+              <div class="task-row__meta">
+                <span>{{ task.progress || 0 }}%</span>
+                <span>{{ task.completed_subtask_count || completedCount(task) }}/{{ task.subtask_count || task.subtasks?.length || 0 }} 子任务</span>
+                <span>{{ formatTime(task.updated_at) }}</span>
+              </div>
+              <div class="mini-progress">
+                <span :style="{ width: `${task.progress || 0}%` }"></span>
+              </div>
+            </button>
+          </template>
+        </section>
+      </aside>
+
+      <main class="mission-stage">
+        <section v-if="selectedTask" class="surface mission-hero">
+          <div class="mission-hero__copy">
+            <p class="eyebrow">当前任务</p>
+            <h1>{{ selectedTask.title }}</h1>
+            <p>{{ selectedTask.description }}</p>
+          </div>
+          <div class="mission-hero__metrics">
+            <div>
+              <span>进度</span>
+              <strong>{{ selectedTask.progress || 0 }}%</strong>
             </div>
-            <div v-else class="empty-state">
-              <i class="ri-folder-open-line"></i>
-              <span>选择成果文件开始审阅</span>
+            <div>
+              <span>子任务</span>
+              <strong>{{ completedCount(selectedTask) }}/{{ selectedTask.subtasks.length }}</strong>
+            </div>
+            <div>
+              <span>成果</span>
+              <strong>{{ selectedTask.outputs.length }}</strong>
             </div>
           </div>
+        </section>
+
+        <section v-if="selectedTask?.subtasks.length" class="surface team-live">
+          <div class="surface-heading">
+            <div>
+              <p class="eyebrow">协作现场</p>
+              <h2>团队成员正在处理什么</h2>
+            </div>
+            <span class="status-chip status-chip--running">{{ selectedTask.subtasks.length }} 名成员</span>
+          </div>
+          <div class="team-live-grid">
+            <button
+              v-for="subtask in selectedTask.subtasks"
+              :key="subtask.id"
+              class="member-card"
+              type="button"
+              @click="openMemberConversation(subtask)"
+            >
+              <div class="member-card__top">
+                <span class="member-avatar">{{ agentInitial(subtask.assigned_agent_id) }}</span>
+                <div>
+                  <strong>{{ agentName(subtask.assigned_agent_id) }}</strong>
+                  <small>{{ subtask.title }}</small>
+                </div>
+                <i class="ri-message-3-line"></i>
+              </div>
+              <div class="member-card__activity">
+                <span class="status-chip" :class="`status-chip--${subtask.status}`">{{ subtaskStatusText(subtask.status) }}</span>
+                <span>{{ subtask.progress || 0 }}%</span>
+              </div>
+              <p>{{ latestAgentMessage(subtask.assigned_agent_id) || subtask.description }}</p>
+            </button>
+          </div>
+        </section>
+
+        <section v-if="selectedTask && needsPlan(selectedTask)" class="surface plan-console">
+          <div class="surface-heading">
+            <div>
+              <p class="eyebrow">拆解计划</p>
+              <h2>应用小呦返回的 JSON</h2>
+            </div>
+            <button class="ghost-btn" type="button" @click="fillFromCoordinator">
+              <i class="ri-robot-line"></i>
+              使用小呦最新回复
+            </button>
+          </div>
+          <textarea
+            v-model="planDraft"
+            class="field field--plan"
+            placeholder="粘贴小呦返回的结构化 JSON，平台会校验并自动派发子任务。"
+          ></textarea>
+          <div class="plan-actions">
+            <span>状态：{{ statusText(selectedTask.status) }}</span>
+            <button class="primary-btn" type="button" :disabled="applyingPlan || !planDraft.trim()" @click="applyPlan">
+              <i class="ri-node-tree"></i>
+              {{ applyingPlan ? '应用中' : '校验并派发' }}
+            </button>
+          </div>
+        </section>
+
+        <section v-if="selectedTask" class="surface subtask-board">
+          <div class="surface-heading">
+            <div>
+              <p class="eyebrow">执行板</p>
+              <h2>子任务和负责人</h2>
+            </div>
+            <button class="ghost-btn" type="button" :disabled="scanningOutputs" @click="scanOutputs">
+              <i class="ri-folder-search-line"></i>
+              {{ scanningOutputs ? '扫描中' : '扫描成果' }}
+            </button>
+          </div>
+
+          <div v-if="selectedTask.subtasks.length === 0" class="quiet-state">等待小呦拆解计划。</div>
+          <div v-else class="subtask-grid">
+            <article v-for="subtask in selectedTask.subtasks" :key="subtask.id" class="subtask-card">
+              <div class="subtask-card__head">
+                <span class="agent-token">{{ agentName(subtask.assigned_agent_id) }}</span>
+                <span class="status-chip" :class="`status-chip--${subtask.status}`">{{ subtaskStatusText(subtask.status) }}</span>
+              </div>
+              <h3>{{ subtask.title }}</h3>
+              <p>{{ subtask.description }}</p>
+              <div class="subtask-progress">
+                <span :style="{ width: `${subtask.progress || 0}%` }"></span>
+              </div>
+              <div class="subtask-meta">
+                <span>{{ subtask.progress || 0 }}%</span>
+                <span>{{ subtask.session_key }}</span>
+              </div>
+              <p v-if="subtask.error" class="error-line">{{ subtask.error }}</p>
+              <div class="subtask-actions">
+                <button class="ghost-btn ghost-btn--compact" type="button" @click="retrySubtask(subtask.id)">
+                  <i class="ri-restart-line"></i>
+                  重试
+                </button>
+                <button class="ghost-btn ghost-btn--compact" type="button" :disabled="subtask.status === 'completed'" @click="completeSubtask(subtask.id)">
+                  <i class="ri-check-line"></i>
+                  标记完成
+                </button>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section v-if="!selectedTask" class="surface empty-mission">
+          <i class="ri-route-line"></i>
+          <h2>选择或创建一个任务</h2>
+          <p>平台会把任务交给小呦拆解，再由系统派发给研究、产品、研发和测试 Agent。</p>
+        </section>
+      </main>
+
+      <aside class="task-inspector">
+        <section class="surface">
+          <div class="surface-heading">
+            <div>
+              <p class="eyebrow">事件流</p>
+              <h2>真实进度</h2>
+            </div>
+          </div>
+          <div v-if="!selectedTask?.events?.length" class="quiet-state">暂无事件。</div>
+          <div v-else class="event-list">
+            <div v-for="event in selectedTask.events" :key="event.id" class="event-item">
+              <span class="event-dot"></span>
+              <div>
+                <strong>{{ event.type }}</strong>
+                <p>{{ event.message }}</p>
+                <small>{{ formatTime(event.created_at) }} · {{ event.agent_id || 'system' }}</small>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="surface outputs-panel">
+          <div class="surface-heading">
+            <div>
+              <p class="eyebrow">成果资产</p>
+              <h2>任务归属</h2>
+            </div>
+          </div>
+          <div v-if="!selectedTask?.outputs?.length" class="quiet-state">暂无绑定成果。</div>
+          <button
+            v-for="output in selectedTask?.outputs || []"
+            :key="output.id"
+            type="button"
+            class="output-row"
+            @click="previewOutput(output)"
+          >
+            <i :class="fileIcon(output.name)"></i>
+            <span>{{ output.name }}</span>
+            <small>{{ agentName(output.agent_id || '') }}</small>
+          </button>
+        </section>
+
+        <section v-if="selectedTask" class="surface review-panel">
+          <div class="surface-heading">
+            <div>
+              <p class="eyebrow">汇总验收</p>
+              <h2>小呦收口</h2>
+            </div>
+          </div>
+          <textarea v-model="summaryDraft" class="field field--textarea" placeholder="最终验收备注，可留空。"></textarea>
+          <div class="review-actions">
+            <button class="ghost-btn" type="button" :disabled="!canFinalize" @click="finalizeTask">
+              <i class="ri-file-list-3-line"></i>
+              请求汇总
+            </button>
+            <button class="primary-btn" type="button" :disabled="selectedTask.status === 'completed'" @click="completeTask">
+              <i class="ri-archive-line"></i>
+              验收归档
+            </button>
+          </div>
+          <p v-if="selectedTask.summary" class="summary-text">{{ selectedTask.summary }}</p>
         </section>
       </aside>
     </div>
 
-    <el-dialog
-      v-model="showPreviewDialog"
-      :title="previewFileItem?.name || '文件预览'"
-      width="900px"
-      :close-on-click-modal="true"
-    >
-      <div class="preview-dialog-body">
-        <div v-if="previewLoading" class="preview-loading">
-          <el-icon class="is-loading"><Loading /></el-icon>
-          <span>加载文件中...</span>
+    <el-dialog v-model="previewDialog" :title="previewFileItem?.name || '成果预览'" width="880px">
+      <div v-if="previewLoading" class="preview-state">加载中...</div>
+      <div v-else-if="previewError" class="preview-state preview-state--error">{{ previewError }}</div>
+      <div v-else-if="previewFileItem" class="preview-content">
+        <div v-if="previewType === 'markdown'" class="markdown-rendered" v-html="renderPreview()"></div>
+        <pre v-else>{{ previewContent }}</pre>
+      </div>
+    </el-dialog>
+
+    <el-dialog v-model="createDialog" title="新增协作任务" width="560px" class="task-create-dialog">
+      <div class="dialog-create-form">
+        <div class="dialog-create-form__head">
+          <span class="agent-pill">ceo</span>
+          <p>任务会先交给小呦拆解，再由平台通过 WebSocket 派发给执行 Agent。</p>
         </div>
-        <div v-else-if="previewError" class="preview-error">
-          <el-icon><Warning /></el-icon>
-          <span>{{ previewError }}</span>
+        <label>
+          <span>任务标题</span>
+          <input v-model="createForm.title" class="field" placeholder="例如：东南亚智能客服上线方案" />
+        </label>
+        <label>
+          <span>任务描述</span>
+          <textarea v-model="createForm.description" class="field field--textarea" placeholder="描述目标、背景和期望交付物"></textarea>
+        </label>
+        <label>
+          <span>优先级</span>
+          <select v-model="createForm.priority" class="field field--select" aria-label="任务优先级">
+            <option value="normal">普通</option>
+            <option value="high">高优先级</option>
+            <option value="urgent">紧急</option>
+          </select>
+        </label>
+      </div>
+      <template #footer>
+        <div class="dialog-actions">
+          <button class="ghost-btn" type="button" :disabled="creating" @click="createDialog = false">取消</button>
+          <button class="primary-btn" type="button" :disabled="creating || !canCreateTask" @click="createTask">
+            <i class="ri-send-plane-line"></i>
+            {{ creating ? '创建中' : '创建任务' }}
+          </button>
         </div>
-        <div v-else class="preview-content">
-          <div v-if="previewContent.type === 'markdown'" class="markdown-rendered" v-html="renderPreviewContent()"></div>
-          <pre v-else-if="previewContent.type === 'text'" v-html="escapeHtml(previewContent.content)"></pre>
-          <div v-else-if="previewContent.type === 'html'" v-html="sanitizeHtml(previewContent.content)"></div>
-          <div v-else class="preview-unsupported">
-            <el-icon><Document /></el-icon>
-            <p>该文件类型暂不支持在线预览</p>
-            <p class="hint">{{ previewFileItem?.name }}</p>
-            <el-button type="primary" @click="downloadFile">下载文件</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="memberDialog" width="760px" class="member-dialog">
+      <template #header>
+        <div class="member-dialog__header" v-if="activeMemberSubtask">
+          <span class="member-avatar">{{ agentInitial(activeMemberSubtask.assigned_agent_id) }}</span>
+          <div>
+            <p class="eyebrow">成员对话</p>
+            <h2>{{ agentName(activeMemberSubtask.assigned_agent_id) }} · {{ activeMemberSubtask.title }}</h2>
           </div>
+          <span class="status-chip" :class="`status-chip--${activeMemberSubtask.status}`">{{ subtaskStatusText(activeMemberSubtask.status) }}</span>
+        </div>
+      </template>
+      <div v-if="activeMemberSubtask" class="member-chat-shell">
+        <div class="member-task-context">
+          <strong>负责内容</strong>
+          <p>{{ activeMemberSubtask.description }}</p>
+        </div>
+        <div class="member-chat-list">
+          <div v-if="activeMemberMessages.length === 0" class="quiet-state">暂无对话。派发任务后，这里会显示平台与 OpenClaw 的问答。</div>
+          <div
+            v-for="message in activeMemberMessages"
+            :key="message.id"
+            class="chat-bubble"
+            :class="`chat-bubble--${message.role}`"
+          >
+            <div class="chat-bubble__meta">
+              <span>{{ message.role === 'user' ? '平台' : message.role === 'assistant' ? agentName(activeMemberSubtask.assigned_agent_id) : '系统' }}</span>
+              <small>{{ formatMsTime(message.timestamp) }}</small>
+            </div>
+            <p>{{ message.content }}</p>
+          </div>
+        </div>
+        <div class="member-followup">
+          <textarea v-model="memberFollowupDraft" class="field" placeholder="继续追问这个成员，例如：请补充风险和文件路径"></textarea>
+          <button class="primary-btn" type="button" :disabled="sendingMemberFollowup || !memberFollowupDraft.trim()" @click="sendMemberFollowup">
+            <i class="ri-send-plane-line"></i>
+            {{ sendingMemberFollowup ? '发送中' : '发送追问' }}
+          </button>
         </div>
       </div>
     </el-dialog>
@@ -456,615 +354,622 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, Loading, Moon, Sunny, Warning } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
-import { sanitizeHtml } from '@/utils/sanitize'
 import TaskControlBar from '@/components/task-center/TaskControlBar.vue'
-import TaskMessagePanel from '@/components/task-center/TaskMessagePanel.vue'
-import { AGENT_CONFIG } from '@/simulation'
-import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
-import { useThemeStore } from '@/stores/theme'
 import { useAuthStore } from '@/stores/auth'
+import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
+import { useTasksStore } from '@/stores/tasks'
+import { useThemeStore } from '@/stores/theme'
+import { extractChatText, extractText } from '@/utils/gateway-protocol'
+import type { Subtask, Task, TaskDispatch, TaskOutput, TaskStatus, SubtaskStatus } from '@/types/task'
 
-interface AgentFile {
-  name: string
-  content: string
-  type: string
-  path?: string
-  gitUrl?: string
-  mtimeStr?: string
-}
-
+const tasksStore = useTasksStore()
 const multiAgentStore = useMultiAgentChatStore()
 const themeStore = useThemeStore()
 const authStore = useAuthStore()
-const md = new MarkdownIt({
-  html: false,
-  linkify: true,
-  typographer: true,
+const route = useRoute()
+const md = new MarkdownIt({ html: false, linkify: true, typographer: true })
+
+const createForm = reactive({
+  title: '',
+  description: '',
+  priority: 'normal',
 })
-
-const agentList = [
-  { id: 'xiaomu', name: '小呦', role: '项目统筹', desc: '项目统筹与任务协调，负责分配任务给其他 Agent 并跟踪进度。', tags: ['项目管理', '任务分配', '进度跟踪'] },
-  { id: 'xiaoyan', name: '研究员', role: '调研分析', desc: '深度调研与信息分析，生成调研报告和数据分析结果。', tags: ['调研分析', '数据处理', '报告生成'] },
-  { id: 'xiaochan', name: '产品经理', role: '产品设计', desc: '产品需求分析与设计，输出产品方案和功能规格说明。', tags: ['需求分析', '产品设计', '文档编写'] },
-  { id: 'xiaokai', name: '研发工程师', role: '技术开发', desc: '代码开发与技术实现，完成功能开发和代码提交。', tags: ['代码开发', '技术实现', 'Git'] },
-  { id: 'xiaoce', name: '测试员', role: '质量检查', desc: '代码质量检查与测试，发现 Bug 并输出测试报告。', tags: ['代码审查', '测试', 'Bug 发现'] },
-]
-
-const AGENT_TO_ROLE_ID: Record<string, string> = {
-  xiaomu: 'ceo',
-  xiaoyan: 'researcher',
-  xiaochan: 'pm',
-  xiaokai: 'tech-lead',
-  xiaoce: 'team-qa',
-}
-
-const aiStatus = ref<'connected' | 'disconnected' | 'error'>('connected')
-const taskInput = ref('')
-const selectedAgent = ref<string | null>(null)
-const selectedReviewAgentId = ref<string | null>(null)
-const previewFileItem = ref<AgentFile | null>(null)
-const previewContent = ref<{ type: string; content: string }>({ type: '', content: '' })
+const createDialog = ref(false)
+const creating = ref(false)
+const applyingPlan = ref(false)
+const scanningOutputs = ref(false)
+const planDraft = ref('')
+const summaryDraft = ref('')
+const currentTimeMs = ref(Date.now())
+const previewDialog = ref(false)
+const previewFileItem = ref<TaskOutput | null>(null)
+const previewContent = ref('')
+const previewType = ref('')
 const previewLoading = ref(false)
 const previewError = ref<string | null>(null)
-const showPreviewDialog = ref(false)
-const fileCache = ref<Record<string, { files: AgentFile[]; timestamp: number }>>({})
-const fileChangeCount = ref<Record<string, number>>({})
-const taskStartTime = ref<number>(0)
-const taskEndTime = ref<number>(0)
-const currentTimeMs = ref(Date.now())
-const claudeCodeSessions = ref<any[]>([])
-const selectedClaudeSession = ref<any>(null)
-const claudeTranscript = ref<any[]>([])
-const claudeTranscriptLoading = ref(false)
-const claudeInputMessage = ref('')
-const claudeSending = ref(false)
-const claudeSendError = ref('')
-const claudeMessagesRef = ref<HTMLElement | null>(null)
-
+const memberDialog = ref(false)
+const activeMemberSubtaskId = ref('')
+const memberFollowupDraft = ref('')
+const sendingMemberFollowup = ref(false)
 let clockTimer: ReturnType<typeof setInterval> | null = null
-let claudeCodePollInterval: ReturnType<typeof setInterval> | null = null
-let fileRefreshTimer: ReturnType<typeof setInterval> | null = null
+let refreshTimer: ReturnType<typeof setInterval> | null = null
+type PendingTaskDispatch = { taskId: string; subtaskId: string; agentId: string; sessionKey: string; sentAt: number }
+type GatewayTaskEventType = 'start' | 'assistant' | 'final' | 'done' | 'error'
+const pendingTaskDispatches = ref<Record<string, PendingTaskDispatch>>({})
+const recordedGatewayEvents = new Set<string>()
 
-const agents = computed(() => multiAgentStore.agents)
+const tasks = computed(() => tasksStore.tasks)
+const selectedTask = computed(() => tasksStore.selectedTask)
 const isLight = computed(() => themeStore.isLight)
-const lastMessageTime = ref<Record<string, number>>({})
-
-const connectedAgentCount = computed(() =>
-  agentList.filter(agent => agents.value[agent.id]?.isConnected).length,
-)
-const busyAgentCount = computed(() =>
-  agentList.filter(agent => isAgentBusy(agent.id)).length,
-)
-const anyConnected = computed(() => connectedAgentCount.value > 0)
-const allConnected = computed(() => connectedAgentCount.value === agentList.length)
-const aiStatusText = computed(() => {
-  if (aiStatus.value === 'connected') return '节点运行正常'
-  if (aiStatus.value === 'error') return '连接异常'
-  return '未连接'
-})
-const timestampText = computed(() =>
-  new Date(currentTimeMs.value).toLocaleString('zh-CN', { hour12: false }),
-)
+const allConnected = computed(() => multiAgentStore.allConnected)
+const anyConnected = computed(() => multiAgentStore.anyConnected)
+const aiStatus = computed<'connected' | 'disconnected' | 'error'>(() => allConnected.value ? 'connected' : anyConnected.value ? 'error' : 'disconnected')
+const aiStatusText = computed(() => allConnected.value ? '全部 Agent 在线' : anyConnected.value ? '部分 Agent 在线' : 'Gateway 未连接')
+const timestampText = computed(() => new Date(currentTimeMs.value).toLocaleString('zh-CN', { hour12: false }))
 const currentUserLabel = computed(() => authStore.user?.username || 'Admin')
-const selectedAgentConnected = computed(() => {
-  if (!selectedAgent.value || selectedAgent.value === 'claude') return false
-  return !!agents.value[selectedAgent.value]?.isConnected
+const canCreateTask = computed(() => createForm.title.trim().length > 0 && createForm.description.trim().length > 0)
+const canFinalize = computed(() => !!selectedTask.value?.subtasks.length && selectedTask.value.subtasks.every(subtask => subtask.status === 'completed'))
+const activeMemberSubtask = computed(() => selectedTask.value?.subtasks.find(subtask => subtask.id === activeMemberSubtaskId.value) || null)
+const activeMemberMessages = computed(() => {
+  const agentId = activeMemberSubtask.value?.assigned_agent_id
+  if (!agentId) return []
+  return multiAgentStore.agents[agentId]?.messages || []
 })
-const currentAgentMessages = computed(() => {
-  if (!selectedAgent.value || selectedAgent.value === 'claude') return []
-  return agents.value[selectedAgent.value]?.messages || []
-})
-const currentAgentFiles = computed(() => {
-  if (!selectedAgent.value || selectedAgent.value === 'claude') return []
-  return getAgentFiles(selectedAgent.value)
-})
-const chatInputPlaceholder = computed(() => {
-  if (!selectedAgent.value) return '请先选择一个 Agent'
-  if (!selectedAgentConnected.value) return `${getAgentName(selectedAgent.value)} 未连接`
-  return `向 ${getAgentName(selectedAgent.value)} 下发任务指令...`
-})
-const totalOutputCount = computed(() =>
-  outputReviewGroups.value.reduce((sum, group) => sum + group.files.length, 0),
-)
-const pendingReviewCount = computed(() => {
-  let count = 0
-  for (const agentId of Object.keys(AGENT_TO_ROLE_ID)) {
-    count += fileChangeCount.value[agentId] || 0
+
+const agentLabels: Record<string, string> = {
+  xiaomu: '小呦',
+  xiaoyan: '研究员',
+  xiaochan: '产品经理',
+  xiaokai: '研发工程师',
+  xiaoce: '测试员',
+}
+
+const taskStatusLabels: Record<TaskStatus, string> = {
+  draft: '草稿',
+  planning: '拆解中',
+  dispatching: '派发中',
+  running: '执行中',
+  reviewing: '待验收',
+  completed: '已完成',
+  failed: '异常',
+  cancelled: '已取消',
+}
+
+const subtaskStatusLabels: Record<SubtaskStatus, string> = {
+  pending: '待派发',
+  assigned: '已分配',
+  running: '执行中',
+  blocked: '阻塞',
+  completed: '完成',
+  failed: '失败',
+}
+
+async function handleRefresh() {
+  await tasksStore.fetchTasks()
+  if (tasksStore.error) ElMessage.error(tasksStore.error)
+}
+
+async function selectTask(taskId: string) {
+  try {
+    await tasksStore.fetchTask(taskId)
+    planDraft.value = ''
+    summaryDraft.value = selectedTask.value?.summary || ''
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '加载任务失败')
   }
-  return count
-})
-const outputReviewGroups = computed(() => {
-  const groups: { id: string; name: string; role: string; files: AgentFile[] }[] = []
-  for (const agent of agentList) {
-    const files = getAgentFiles(agent.id)
-    if (files.length > 0) {
-      groups.push({ id: agent.id, name: agent.name, role: agent.role, files })
+}
+
+async function createTask() {
+  if (!canCreateTask.value || creating.value) return
+  creating.value = true
+  try {
+    const response = await tasksStore.createTask({
+      title: createForm.title.trim(),
+      description: createForm.description.trim(),
+      priority: createForm.priority,
+    })
+    createForm.title = ''
+    createForm.description = ''
+    createDialog.value = false
+    const sent = await sendCoordinatorDispatch(response.dispatch, 'plan')
+    if (sent) {
+      ElMessage.success('任务已创建，并已通过 WebSocket 请求小呦拆解')
+    } else {
+      ElMessage.warning('任务已创建，但 WebSocket 派发失败，请先全连 Agent 后重试')
+    }
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '创建任务失败')
+  } finally {
+    creating.value = false
+  }
+}
+
+function fillFromCoordinator() {
+  const coordinator = multiAgentStore.agents.xiaomu
+  const latest = [...(coordinator?.messages || [])].reverse().find(message => message.role === 'assistant' && message.content.includes('{'))
+  if (!latest) {
+    ElMessage.warning('没有找到小呦最近的 JSON 回复')
+    return
+  }
+  planDraft.value = latest.content
+}
+
+async function applyPlan() {
+  if (!selectedTask.value || !planDraft.value.trim()) return
+  applyingPlan.value = true
+  try {
+    const response = await tasksStore.applyPlan(selectedTask.value.id, planDraft.value)
+    planDraft.value = ''
+    const result = await sendSubtaskDispatches(response.dispatches || [])
+    if (result.failed > 0) {
+      ElMessage.warning(`计划已校验，${result.sent} 个子任务已派发，${result.failed} 个失败：${result.firstError}`)
+    } else {
+      ElMessage.success(`计划已校验，${result.sent} 个子任务已通过 WebSocket 派发`)
+    }
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '计划应用失败')
+    await tasksStore.fetchTask(selectedTask.value.id)
+  } finally {
+    applyingPlan.value = false
+  }
+}
+
+async function retrySubtask(subtaskId: string) {
+  try {
+    const response = await tasksStore.retrySubtask(subtaskId)
+    const result = response.dispatch ? await sendSubtaskDispatch(response.dispatch) : { ok: false, error: '缺少派发指令' }
+    if (result.ok) {
+      ElMessage.success('子任务已通过 WebSocket 重新派发')
+    } else {
+      ElMessage.warning(`已生成重试指令，但 WebSocket 派发失败：${result.error}`)
+    }
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '重试失败')
+  }
+}
+
+async function completeSubtask(subtaskId: string) {
+  try {
+    await tasksStore.completeSubtask(subtaskId, '由操作员在任务指挥中心确认完成')
+    ElMessage.success('子任务已标记完成')
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '更新失败')
+  }
+}
+
+async function scanOutputs() {
+  if (!selectedTask.value || scanningOutputs.value) return
+  scanningOutputs.value = true
+  try {
+    await tasksStore.scanOutputs(selectedTask.value.id)
+    ElMessage.success('成果扫描完成')
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '成果扫描失败')
+  } finally {
+    scanningOutputs.value = false
+  }
+}
+
+async function finalizeTask() {
+  if (!selectedTask.value) return
+  try {
+    const response = await tasksStore.finalizeTask(selectedTask.value.id)
+    const sent = await sendCoordinatorDispatch(response.dispatch, 'summary')
+    if (sent) {
+      ElMessage.success('已通过 WebSocket 请求小呦生成最终汇总')
+    } else {
+      ElMessage.warning('已生成汇总请求，但 WebSocket 派发失败，请先连接小呦后重试')
+    }
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '汇总请求失败')
+  }
+}
+
+async function completeTask() {
+  if (!selectedTask.value) return
+  const confirmed = await ElMessageBox.confirm('确认将该任务标记为验收完成并归档？', '验收归档', {
+    confirmButtonText: '归档',
+    cancelButtonText: '取消',
+    type: 'success',
+  }).catch(() => false)
+  if (!confirmed) return
+  try {
+    await tasksStore.completeTask(selectedTask.value.id, summaryDraft.value.trim())
+    ElMessage.success('任务已归档')
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '归档失败')
+  }
+}
+
+async function previewOutput(output: TaskOutput) {
+  previewFileItem.value = output
+  previewDialog.value = true
+  previewContent.value = ''
+  previewType.value = output.type
+  previewError.value = null
+  if (!output.path) {
+    previewContent.value = output.git_url || '该成果没有可预览路径'
+    return
+  }
+  previewLoading.value = true
+  try {
+    const data = await fetch(`/api/files/content?path=${encodeURIComponent(output.path)}`).then(res => res.json())
+    if (!data.success) throw new Error(data.error || '读取失败')
+    previewContent.value = data.content || ''
+  } catch (err) {
+    previewError.value = err instanceof Error ? err.message : '读取失败'
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+function renderPreview() {
+  return md.render(previewContent.value)
+}
+
+function completedCount(task: Task) {
+  return task.subtasks?.filter(subtask => subtask.status === 'completed').length || 0
+}
+
+function needsPlan(task: Task) {
+  return ['planning', 'dispatching', 'failed'].includes(task.status) && !task.subtasks.length
+}
+
+function statusText(status: TaskStatus) {
+  return taskStatusLabels[status] || status
+}
+
+function subtaskStatusText(status: SubtaskStatus) {
+  return subtaskStatusLabels[status] || status
+}
+
+function agentName(agentId: string) {
+  return agentLabels[agentId] || agentId || '未归属'
+}
+
+function agentInitial(agentId: string) {
+  return agentName(agentId).slice(0, 1)
+}
+
+function latestAgentMessage(agentId: string) {
+  const messages = multiAgentStore.agents[agentId]?.messages || []
+  return [...messages].reverse().find(message => message.role === 'assistant')?.content || ''
+}
+
+function openMemberConversation(subtask: Subtask) {
+  activeMemberSubtaskId.value = subtask.id
+  memberFollowupDraft.value = ''
+  memberDialog.value = true
+  multiAgentStore.selectAgent(subtask.assigned_agent_id)
+}
+
+async function sendMemberFollowup() {
+  const subtask = activeMemberSubtask.value
+  const task = selectedTask.value
+  if (!subtask || !task || !memberFollowupDraft.value.trim()) return
+  sendingMemberFollowup.value = true
+  const message = `[OpenClaw Task Follow-up]
+taskId: ${task.id}
+subTaskId: ${subtask.id}
+主任务: ${task.title}
+子任务: ${subtask.title}
+
+用户补充/追问:
+${memberFollowupDraft.value.trim()}
+
+请基于当前子任务上下文继续回答；如果产生文件，请继续写入任务目录。`
+  try {
+    multiAgentStore.sendMessage(subtask.assigned_agent_id, message)
+    rememberSubtaskDispatch({
+      taskId: task.id,
+      subtaskId: subtask.id,
+      agentId: subtask.assigned_agent_id,
+      sessionKey: subtask.session_key,
+      message,
+    })
+    await tasksStore.recordSubtaskDispatchResult(subtask.id, {
+      ok: true,
+      payload: {
+        mode: 'member-followup',
+        agentId: subtask.assigned_agent_id,
+        sessionKey: subtask.session_key,
+      },
+    })
+    memberFollowupDraft.value = ''
+    ElMessage.success('已发送给成员')
+  } catch (err) {
+    ElMessage.error(toErrorMessage(err))
+  } finally {
+    sendingMemberFollowup.value = false
+  }
+}
+
+function loadPendingTaskDispatches() {
+  try {
+    pendingTaskDispatches.value = JSON.parse(localStorage.getItem('task_center_pending_dispatches') || '{}')
+  } catch {
+    pendingTaskDispatches.value = {}
+  }
+}
+
+function persistPendingTaskDispatches() {
+  localStorage.setItem('task_center_pending_dispatches', JSON.stringify(pendingTaskDispatches.value))
+}
+
+function rememberSubtaskDispatch(dispatch: TaskDispatch) {
+  if (!dispatch.subtaskId) return
+  pendingTaskDispatches.value[dispatch.agentId] = {
+    taskId: dispatch.taskId,
+    subtaskId: dispatch.subtaskId,
+    agentId: dispatch.agentId,
+    sessionKey: dispatch.sessionKey,
+    sentAt: Date.now(),
+  }
+  persistPendingTaskDispatches()
+}
+
+function clearSubtaskDispatch(agentId: string, subtaskId: string) {
+  if (pendingTaskDispatches.value[agentId]?.subtaskId === subtaskId) {
+    delete pendingTaskDispatches.value[agentId]
+    persistPendingTaskDispatches()
+  }
+}
+
+function loadedTasks() {
+  const map = new Map<string, Task>()
+  tasks.value.forEach(task => map.set(task.id, task))
+  if (selectedTask.value) map.set(selectedTask.value.id, selectedTask.value)
+  return [...map.values()]
+}
+
+function findSubtaskIdFromText(text: string) {
+  if (!text) return ''
+  const explicit = text.match(/subTaskId\s*[:：]\s*([a-zA-Z0-9_-]+)/i) || text.match(/subtaskId\s*[:：]\s*([a-zA-Z0-9_-]+)/i)
+  if (explicit?.[1]) return explicit[1]
+  for (const task of loadedTasks()) {
+    const match = task.subtasks?.find(subtask => text.includes(subtask.id))
+    if (match) return match.id
+  }
+  return ''
+}
+
+function findSubtaskForGatewayEvent(agentId: string, text: string) {
+  const textSubtaskId = findSubtaskIdFromText(text)
+  if (textSubtaskId) {
+    for (const task of loadedTasks()) {
+      const subtask = task.subtasks?.find(item => item.id === textSubtaskId)
+      if (subtask) return { task, subtaskId: subtask.id }
     }
   }
-  return groups
-})
-const currentTargetLabel = computed(() => {
-  if (!selectedAgent.value) return '未选择'
-  if (selectedAgent.value === 'claude') return 'ClaudeCode'
-  return getAgentName(selectedAgent.value)
-})
-const reviewSelectionKey = computed(() => reviewFileKey(previewFileItem.value))
-const taskElapsedText = computed(() => {
-  if (!taskStartTime.value) return '尚未开始派发'
-  const end = taskEndTime.value || Date.now()
-  const duration = Math.max(0, Math.floor((end - taskStartTime.value) / 1000))
-  if (duration < 60) return `${duration}s`
-  return `${Math.floor(duration / 60)}m ${duration % 60}s`
-})
-const missionCards = computed(() => [
-  {
-    id: 'xiaomu',
-    agentId: 'xiaomu',
-    title: '任务创建 / 派发',
-    desc: `当前对象 ${getAgentName('xiaomu')}`,
-    icon: 'ri-send-plane-line',
-    status: selectedAgent.value === 'xiaomu' ? '进行中' : taskStartTime.value ? '已准备' : '待处理',
-    statusClass: selectedAgent.value === 'xiaomu' ? 'running' : taskStartTime.value ? 'standby' : 'queued',
-  },
-  {
-    id: 'execution',
-    agentId: selectedAgent.value || 'xiaomu',
-    title: '执行会话',
-    desc: `跟踪 ${busyAgentCount.value} 个忙碌 Agent`,
-    icon: 'ri-pulse-line',
-    status: busyAgentCount.value > 0 ? '执行中' : '待命',
-    statusClass: busyAgentCount.value > 0 ? 'running' : 'standby',
-  },
-  {
-    id: 'review',
-    agentId: selectedAgent.value || 'xiaomu',
-    title: '成果审阅',
-    desc: `${totalOutputCount.value} 份成果已回流`,
-    icon: 'ri-file-list-3-line',
-    status: pendingReviewCount.value > 0 ? '待审阅' : totalOutputCount.value > 0 ? '已同步' : '空',
-    statusClass: pendingReviewCount.value > 0 ? 'queued' : totalOutputCount.value > 0 ? 'standby' : 'muted',
-  },
-])
-const commandTimeline = computed(() => [
-  {
-    id: 'connect',
-    time: anyConnected.value ? '在线' : '离线',
-    title: '连接与握手',
-    desc: anyConnected.value ? `${connectedAgentCount.value} 个 Agent 已建立 Gateway 链路` : '等待建立 Gateway 连接',
-    state: allConnected.value ? 'completed' : anyConnected.value ? 'active' : 'pending',
-  },
-  {
-    id: 'dispatch',
-    time: taskStartTime.value ? new Date(taskStartTime.value).toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' }) : '--:--',
-    title: '任务派发',
-    desc: taskStartTime.value ? `当前派发对象：${currentTargetLabel.value}` : '选择 Agent 并下发任务指令',
-    state: taskStartTime.value ? 'completed' : 'pending',
-  },
-  {
-    id: 'execute',
-    time: busyAgentCount.value > 0 ? `${busyAgentCount.value} busy` : 'idle',
-    title: '执行跟踪',
-    desc: selectedAgent.value === 'claude'
-      ? `ClaudeCode 正在处理会话`
-      : `${currentTargetLabel.value} 当前${getAgentStatusText(selectedAgent.value || 'xiaomu')}`,
-    state: busyAgentCount.value > 0 || selectedAgent.value === 'claude' ? 'active' : 'pending',
-  },
-  {
-    id: 'review',
-    time: `${totalOutputCount.value} files`,
-    title: '成果回流',
-    desc: previewFileItem.value ? `正在审阅 ${previewFileItem.value.name}` : '等待选择成果文件进行审阅',
-    state: previewFileItem.value ? 'active' : totalOutputCount.value > 0 ? 'completed' : 'pending',
-  },
-])
+
+  const pending = pendingTaskDispatches.value[agentId]
+  if (pending) {
+    const task = loadedTasks().find(item => item.id === pending.taskId)
+    if (task?.subtasks?.some(subtask => subtask.id === pending.subtaskId)) {
+      return { task, subtaskId: pending.subtaskId }
+    }
+    return { task: selectedTask.value || undefined, subtaskId: pending.subtaskId }
+  }
+
+  const task = selectedTask.value
+  const active = task?.subtasks?.find(subtask =>
+    subtask.assigned_agent_id === agentId && ['assigned', 'running', 'blocked'].includes(subtask.status)
+  )
+  return active ? { task, subtaskId: active.id } : null
+}
+
+function gatewayEventKind(event: string, payload: any): GatewayTaskEventType | null {
+  if (event === 'chat') {
+    if (payload?.state === 'start') return 'start'
+    if (payload?.state === 'final' || payload?.state === 'committed') return 'final'
+    if (payload?.state === 'error') return 'error'
+    if (payload?.state === 'delta') return 'assistant'
+  }
+  if (event === 'agent') {
+    const stream = payload?.stream
+    const state = payload?.data?.state || payload?.phase
+    if (stream === 'assistant') return 'assistant'
+    if (stream === 'lifecycle' && state === 'start') return 'start'
+    if (stream === 'lifecycle' && (state === 'done' || state === 'final')) return 'done'
+    if (stream === 'lifecycle' && (state === 'error' || payload?.phase === 'error')) return 'error'
+  }
+  return null
+}
+
+function gatewayEventText(event: string, payload: any) {
+  if (event === 'chat') return extractChatText(payload) || payload?.errorMessage || ''
+  if (event === 'agent') return extractText(payload) || payload?.data?.error || payload?.error || ''
+  return ''
+}
+
+async function handleTaskGatewayEvent(agentId: string, event: string, payload: any) {
+  const eventType = gatewayEventKind(event, payload)
+  if (!eventType) return
+
+  const message = gatewayEventText(event, payload)
+  const match = findSubtaskForGatewayEvent(agentId, message)
+  if (!match?.subtaskId) return
+
+  const runId = payload?.runId || payload?.data?.runId || 'default'
+  const eventKey = `${match.subtaskId}:${eventType}:${runId}`
+  if (recordedGatewayEvents.has(eventKey)) return
+  recordedGatewayEvents.add(eventKey)
+
+  try {
+    await tasksStore.recordSubtaskAgentEvent(match.subtaskId, {
+      eventType,
+      message,
+      payload: {
+        gatewayEvent: event,
+        agentId,
+        runId,
+        state: payload?.state,
+        stream: payload?.stream,
+        phase: payload?.phase,
+      },
+    })
+    if (eventType === 'final' || eventType === 'done') {
+      clearSubtaskDispatch(agentId, match.subtaskId)
+      if (match.task?.id) {
+        tasksStore.scanOutputs(match.task.id).catch(() => {})
+        window.setTimeout(() => tasksStore.scanOutputs(match.task!.id).catch(() => {}), 2500)
+      }
+    }
+  } catch (err) {
+    console.error('[TaskCenter2] 写入 Agent 任务事件失败:', err)
+  }
+}
+
+function toErrorMessage(err: unknown) {
+  return err instanceof Error ? err.message : String(err || 'WebSocket 派发失败')
+}
+
+async function sendCoordinatorDispatch(dispatch: TaskDispatch | undefined, phase: 'plan' | 'summary') {
+  if (!dispatch) return false
+  try {
+    multiAgentStore.sendMessage(dispatch.agentId, dispatch.message)
+    await tasksStore.recordTaskDispatchResult(dispatch.taskId, {
+      phase,
+      ok: true,
+      payload: {
+        agentId: dispatch.agentId,
+        sessionKey: dispatch.sessionKey,
+        mode: 'frontend-websocket',
+      },
+    })
+    return true
+  } catch (err) {
+    const error = toErrorMessage(err)
+    try {
+      await tasksStore.recordTaskDispatchResult(dispatch.taskId, {
+        phase,
+        ok: false,
+        error,
+        payload: {
+          agentId: dispatch.agentId,
+          sessionKey: dispatch.sessionKey,
+          mode: 'frontend-websocket',
+        },
+      })
+    } catch (recordErr) {
+      console.error('[TaskCenter2] 记录任务派发失败:', recordErr)
+    }
+    return false
+  }
+}
+
+async function sendSubtaskDispatch(dispatch: TaskDispatch) {
+  try {
+    if (!dispatch.subtaskId) throw new Error('缺少子任务 ID')
+    multiAgentStore.sendMessage(dispatch.agentId, dispatch.message)
+    rememberSubtaskDispatch(dispatch)
+    await tasksStore.recordSubtaskDispatchResult(dispatch.subtaskId, {
+      ok: true,
+      payload: {
+        agentId: dispatch.agentId,
+        sessionKey: dispatch.sessionKey,
+        mode: 'frontend-websocket',
+      },
+    })
+    return { ok: true, error: '' }
+  } catch (err) {
+    const error = toErrorMessage(err)
+    if (dispatch.subtaskId) {
+      try {
+        await tasksStore.recordSubtaskDispatchResult(dispatch.subtaskId, {
+          ok: false,
+          error,
+          payload: {
+            agentId: dispatch.agentId,
+            sessionKey: dispatch.sessionKey,
+            mode: 'frontend-websocket',
+          },
+        })
+      } catch (recordErr) {
+        console.error('[TaskCenter2] 记录子任务派发失败:', recordErr)
+      }
+    }
+    return { ok: false, error }
+  }
+}
+
+async function sendSubtaskDispatches(dispatches: TaskDispatch[] = []) {
+  let sent = 0
+  let failed = 0
+  let firstError = ''
+  for (const dispatch of dispatches) {
+    const result = await sendSubtaskDispatch(dispatch)
+    if (result.ok) {
+      sent += 1
+    } else {
+      failed += 1
+      if (!firstError) firstError = result.error
+    }
+  }
+  return { sent, failed, firstError }
+}
+
+function formatTime(value?: number | null) {
+  if (!value) return '--'
+  return new Date(value * 1000).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+function formatMsTime(value?: number | null) {
+  if (!value) return '--'
+  return new Date(value).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+function fileIcon(name: string) {
+  if (/\.(md|markdown)$/i.test(name)) return 'ri-markdown-line'
+  if (/\.(js|ts|vue|py|json|sh)$/i.test(name)) return 'ri-code-s-slash-line'
+  if (/\.(docx?|txt)$/i.test(name)) return 'ri-file-text-line'
+  return 'ri-file-line'
+}
 
 function toggleTheme() {
   themeStore.toggle()
 }
 
-function selectAgent(agentId: string) {
-  selectedAgent.value = agentId
-}
-
-function getAgentName(agentId: string) {
-  return agentList.find(agent => agent.id === agentId)?.name || agentId
-}
-
-function getAgentRole(agentId: string) {
-  const roles: Record<string, string> = {
-    xiaomu: '项目统筹 · agent:ceo:main',
-    xiaoyan: '调研分析 · agent:researcher:main',
-    xiaochan: '产品设计 · agent:pm:main',
-    xiaokai: '技术开发 · agent:tech-lead:main',
-    xiaoce: '质量检查 · agent:team-qa:main',
-  }
-  return roles[agentId] || ''
-}
-
-function getAgentIcon(agentId: string) {
-  return AGENT_CONFIG[agentId]?.icon || ''
-}
-
-function isAgentBusy(agentId: string) {
-  const agent = agents.value[agentId]
-  if (!agent) return false
-  return Date.now() - (lastMessageTime.value[agentId] || 0) < 2000
-}
-
-function getAgentStatus(agentId: string) {
-  if (agentId === 'claude') return 'busy'
-  const agent = agents.value[agentId]
-  if (!agent?.isConnected) return 'offline'
-  if (isAgentBusy(agentId)) return 'busy'
-  return 'idle'
-}
-
-function getAgentStatusIcon(agentId: string) {
-  const status = getAgentStatus(agentId)
-  if (status === 'busy') return 'ri-loader-4-line ri-spin'
-  if (status === 'offline') return 'ri-cloud-off-line'
-  return 'ri-checkbox-circle-line'
-}
-
-function getAgentStatusText(agentId: string) {
-  const status = getAgentStatus(agentId)
-  if (status === 'busy') return '工作中'
-  if (status === 'offline') return '未连接'
-  return '空闲'
-}
-
-function hasNewFiles(agentId: string) {
-  return (fileChangeCount.value[agentId] || 0) > 0
-}
-
-function getAgentFiles(agentId: string): AgentFile[] {
-  const roleId = AGENT_TO_ROLE_ID[agentId]
-  if (!roleId) return []
-  const now = new Date()
-  const dateStr = now.toISOString().split('T')[0]
-  const cacheKey = `files_${agentId}_${dateStr}`
-  return fileCache.value[cacheKey]?.files || []
-}
-
-async function refreshAgentFiles(agentId: string) {
-  const roleId = AGENT_TO_ROLE_ID[agentId]
-  if (!roleId) return
-
-  const now = new Date()
-  const dateStr = now.toISOString().split('T')[0]
-  const cacheKey = `files_${agentId}_${dateStr}`
-  const cached = fileCache.value[cacheKey]
-  if (cached && Date.now() - cached.timestamp < 5000) return
-
-  try {
-    const res = await fetch(`/api/files/role?roleId=${roleId}&date=${dateStr}`)
-    const data = await res.json()
-    if (data.success && data.files) {
-      const newFiles: AgentFile[] = data.files.map((file: any) => ({
-        name: file.name,
-        content: '',
-        type: file.type,
-        path: file.path,
-        gitUrl: file.gitUrl,
-        mtimeStr: file.mtimeStr,
-      }))
-
-      const oldCount = cached?.files.length || 0
-      if (oldCount > 0 && newFiles.length > oldCount) {
-        fileChangeCount.value[agentId] = (fileChangeCount.value[agentId] || 0) + (newFiles.length - oldCount)
-      }
-
-      if (agentId === 'xiaokai' && data.gitUrl && !newFiles.find(file => file.name === '代码仓库')) {
-        newFiles.push({
-          name: '代码仓库',
-          content: '代码已提交到仓库',
-          type: 'text',
-          gitUrl: data.gitUrl,
-        })
-      }
-
-      fileCache.value[cacheKey] = { files: newFiles, timestamp: Date.now() }
-    } else if (Array.isArray(data.files) && data.files.length === 0) {
-      fileCache.value[cacheKey] = { files: [], timestamp: Date.now() }
-    }
-  } catch (err) {
-    console.error('[TaskCenter2] Fetch files error:', err)
-  }
-}
-
-async function refreshAllAgentFiles() {
-  await Promise.all(Object.keys(AGENT_TO_ROLE_ID).map(id => refreshAgentFiles(id)))
-}
-
-function reviewFileKey(file?: AgentFile | null) {
-  if (!file) return ''
-  return file.path || file.gitUrl || file.name
-}
-
-function renderPreviewContent() {
-  return previewContent.value.type === 'markdown'
-    ? md.render(previewContent.value.content)
-    : previewContent.value.content
-}
-
-function escapeHtml(content: string) {
-  if (!content) return ''
-  return content
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
-}
-
-function getFileIcon(fileName: string) {
-  if (/\.(md|markdown)$/i.test(fileName)) return 'ri-file-code-line'
-  if (/\.txt$/i.test(fileName)) return 'ri-file-text-line'
-  if (/\.html?$/i.test(fileName)) return 'ri-html5-fill'
-  if (/\.docx?$/i.test(fileName)) return 'ri-file-word-line'
-  if (/\.pptx?$/i.test(fileName)) return 'ri-file-ppt-line'
-  if (/\.xlsx?$/i.test(fileName)) return 'ri-file-excel-line'
-  return 'ri-file-line'
-}
-
-function loadPreviewFile(file: AgentFile, openDialog = true) {
-  previewFileItem.value = file
-  previewLoading.value = true
-  previewError.value = null
-  previewContent.value = { type: '', content: '' }
-  showPreviewDialog.value = openDialog
-
-  if (file.path) {
-    fetch(`/api/files/content?path=${encodeURIComponent(file.path)}`)
-      .then(res => res.json())
-      .then(data => {
-        previewLoading.value = false
-        if (data.success) {
-          previewContent.value = {
-            type: file.type,
-            content: data.content,
-          }
-        } else {
-          previewError.value = data.error || '读取文件失败'
-        }
-      })
-      .catch(err => {
-        previewLoading.value = false
-        previewError.value = `读取文件失败：${err.message}`
-      })
-  } else {
-    previewLoading.value = false
-    previewContent.value = {
-      type: file.type,
-      content: file.content,
-    }
-  }
-}
-
-function previewFile(file: AgentFile) {
-  if (selectedAgent.value && selectedAgent.value !== 'claude') {
-    selectedReviewAgentId.value = selectedAgent.value
-    fileChangeCount.value[selectedAgent.value] = 0
-  }
-  loadPreviewFile(file, true)
-}
-
-function inspectReviewFile(agentId: string, file: AgentFile) {
-  selectedReviewAgentId.value = agentId
-  fileChangeCount.value[agentId] = 0
-  loadPreviewFile(file, false)
-}
-
-function downloadFile() {
-  if (!previewFileItem.value) return
-  const blob = new Blob([previewContent.value.content], { type: 'text/plain' })
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = previewFileItem.value.name
-  anchor.click()
-  URL.revokeObjectURL(url)
-  ElMessage.success('文件已开始下载')
-}
-
-async function sendToSelectedAgent() {
-  if (!taskInput.value.trim() || !selectedAgent.value) return
-  if (!selectedAgentConnected.value) {
-    ElMessage.warning(`${getAgentName(selectedAgent.value)} 未连接，请先点击全连按钮`)
-    return
-  }
-
-  taskStartTime.value = Date.now()
-  taskEndTime.value = 0
-  const content = taskInput.value.trim()
-
-  try {
-    multiAgentStore.sendMessage(selectedAgent.value, content)
-    ElMessage.success(`任务已派发给 ${getAgentName(selectedAgent.value)}`)
-    taskInput.value = ''
-  } catch (err) {
-    ElMessage.error(`派发失败：${err instanceof Error ? err.message : '未知错误'}`)
-  }
-}
-
 function handleConnectAll() {
   multiAgentStore.connectAll()
-  aiStatus.value = 'connected'
-  ElMessage.success('正在连接所有 Agent...')
+  ElMessage.success('正在连接所有 Agent')
 }
 
 function handleDisconnectAll() {
   multiAgentStore.disconnectAll()
-  aiStatus.value = 'disconnected'
-  ElMessage.warning('已断开所有 Agent 连接')
+  ElMessage.warning('已断开所有 Agent')
 }
 
-function handleReset() {
-  ElMessageBox.confirm('确定要清空所有 Agent 的会话内容吗？此操作不可恢复。', '确认重置', {
-    confirmButtonText: '确定',
-    cancelButtonText: '取消',
-    type: 'warning',
-  }).then(() => {
-    taskEndTime.value = Date.now()
-    Object.keys(AGENT_TO_ROLE_ID).forEach(agentId => {
-      multiAgentStore.clearMessages(agentId)
-      lastMessageTime.value[agentId] = 0
-      fileChangeCount.value[agentId] = 0
-    })
-    ElMessage.success('已清空所有会话内容')
-  }).catch(() => {})
-}
-
-async function fetchClaudeCodeSessions() {
-  try {
-    const response = await fetch('/api/claude-sessions')
-    const data = await response.json()
-    if (data.success && data.sessions) {
-      claudeCodeSessions.value = data.sessions
-      if (!selectedClaudeSession.value && data.sessions.length > 0) {
-        selectedClaudeSession.value = data.sessions[0]
-      }
-    }
-  } catch (err) {
-    console.error('[TaskCenter2] Failed to fetch ClaudeCode sessions:', err)
-  }
-}
-
-function getSessionDisplayName(session: any) {
-  if (!session.workingDir) return session.key || session.id
-  const parts = session.workingDir.split('/')
-  return parts[parts.length - 1] || session.key
-}
-
-async function selectClaudeSession(session: any) {
-  selectedClaudeSession.value = session
-  await fetchClaudeTranscript(session.id)
-}
-
-async function fetchClaudeTranscript(sessionId: string) {
-  claudeTranscriptLoading.value = true
-  claudeTranscript.value = []
-  try {
-    const response = await fetch(`/api/claude-sessions/${sessionId}/transcript?limit=50`)
-    const data = await response.json()
-    if (data.success && data.messages) {
-      claudeTranscript.value = data.messages
-    }
-  } catch (err) {
-    console.error('[TaskCenter2] Failed to fetch transcript:', err)
-  } finally {
-    claudeTranscriptLoading.value = false
-    nextTick(() => {
-      if (claudeMessagesRef.value) {
-        claudeMessagesRef.value.scrollTop = claudeMessagesRef.value.scrollHeight
-      }
-    })
-  }
-}
-
-async function refreshClaudeTranscript() {
-  if (selectedClaudeSession.value) {
-    await fetchClaudeTranscript(selectedClaudeSession.value.id)
-  }
-}
-
-async function sendClaudeMessage() {
-  if (!claudeInputMessage.value.trim() || !selectedClaudeSession.value || claudeSending.value) return
-  claudeSending.value = true
-  claudeSendError.value = ''
-
-  try {
-    const response = await fetch(`/api/claude-sessions/${selectedClaudeSession.value.id}/send`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: claudeInputMessage.value.trim() }),
-    })
-    const data = await response.json()
-    if (data.success) {
-      claudeInputMessage.value = ''
-      setTimeout(() => refreshClaudeTranscript(), 2000)
-    } else {
-      claudeSendError.value = data.error || '发送失败'
-    }
-  } catch {
-    claudeSendError.value = '发送失败，请稍后重试'
-  } finally {
-    claudeSending.value = false
-  }
-}
-
-Object.keys(AGENT_TO_ROLE_ID).forEach(agentId => {
-  watch(
-    () => agents.value[agentId]?.messages?.length,
-    () => {
-      const agent = agents.value[agentId]
-      if (agent?.messages?.length) {
-        lastMessageTime.value[agentId] = agent.messages[agent.messages.length - 1].timestamp
-      }
-    },
-    { immediate: true },
-  )
-})
-
-watch(
-  outputReviewGroups,
-  (groups) => {
-    if (groups.length === 0) {
-      selectedReviewAgentId.value = null
-      previewFileItem.value = null
-      previewContent.value = { type: '', content: '' }
-      return
-    }
-
-    const currentExists = groups.some(group =>
-      group.id === selectedReviewAgentId.value &&
-      group.files.some(file => reviewFileKey(file) === reviewSelectionKey.value),
-    )
-
-    if (!currentExists) {
-      inspectReviewFile(groups[0].id, groups[0].files[0])
-    }
-  },
-  { immediate: true, deep: true },
-)
-
-onMounted(() => {
+onMounted(async () => {
   authStore.restoreSession()
   multiAgentStore.loadMessages()
-  if (!selectedAgent.value) {
-    selectedAgent.value = 'xiaomu'
+  loadPendingTaskDispatches()
+  multiAgentStore.addEventListener(handleTaskGatewayEvent)
+  await handleRefresh()
+  if (typeof route.query.task === 'string') {
+    await selectTask(route.query.task)
   }
   clockTimer = setInterval(() => {
     currentTimeMs.value = Date.now()
   }, 1000)
-  fetchClaudeCodeSessions()
-  claudeCodePollInterval = setInterval(fetchClaudeCodeSessions, 5000)
-  refreshAllAgentFiles()
-  fileRefreshTimer = setInterval(refreshAllAgentFiles, 10000)
+  refreshTimer = setInterval(() => {
+    if (tasksStore.selectedTaskId) tasksStore.fetchTask(tasksStore.selectedTaskId).catch(() => {})
+  }, 10000)
 })
 
 onUnmounted(() => {
-  if (clockTimer) {
-    clearInterval(clockTimer)
-    clockTimer = null
-  }
-  if (claudeCodePollInterval) {
-    clearInterval(claudeCodePollInterval)
-    claudeCodePollInterval = null
-  }
-  if (fileRefreshTimer) {
-    clearInterval(fileRefreshTimer)
-    fileRefreshTimer = null
-  }
+  multiAgentStore.removeEventListener(handleTaskGatewayEvent)
+  if (clockTimer) clearInterval(clockTimer)
+  if (refreshTimer) clearInterval(refreshTimer)
 })
 </script>
 
 <style scoped>
-.task-center-2 {
+.task-command-page {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -1072,979 +977,770 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-/* 主体布局 */
-.main-container {
-  display: flex;
+.task-command-layout {
   flex: 1;
   min-height: 0;
-  padding: 24px;
-  gap: 24px;
-  background-image:
-    radial-gradient(circle at 50% 0%, rgba(var(--color-primary-rgb), 0.06) 0%, transparent 50%),
-    linear-gradient(rgba(var(--color-primary-rgb), 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(var(--color-primary-rgb), 0.02) 1px, transparent 1px);
-  background-size: auto, 28px 28px, 28px 28px;
-}
-
-/* 左侧面板 */
-.left-panel {
-  width: 25%;
-  min-width: 280px;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-/* 中间面板 */
-.middle-panel {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-/* 右侧面板 */
-.right-panel {
-  width: 25%;
-  min-width: 280px;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-/* 面板通用样式 */
-.panel {
-  background: rgba(18, 23, 33, 0.85);
-  border: 1px solid rgba(var(--color-primary-rgb), 0.2);
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(280px, 330px) minmax(420px, 1fr) minmax(300px, 360px);
+  gap: 20px;
+  padding: 20px;
   overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(10px);
-  position: relative;
+  background:
+    linear-gradient(135deg, rgba(38, 72, 110, 0.16), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent),
+    var(--bg-primary);
 }
 
-.panel::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 3px;
-  background: linear-gradient(90deg, var(--color-cyan), var(--color-primary));
-  opacity: 0.8;
-  z-index: 1;
-}
-
-.panel-header {
-  padding: 16px 20px;
-  border-bottom: 1px solid rgba(var(--color-primary-rgb), 0.12);
+.task-rail,
+.mission-stage,
+.task-inspector {
+  min-height: 0;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: rgba(255, 255, 255, 0.02);
+  flex-direction: column;
+  gap: 16px;
+  overflow: auto;
 }
 
-.panel-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.panel-title i {
-  color: var(--color-primary);
-  font-size: 18px;
-}
-
-.panel-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 34px;
-  height: 24px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background: rgba(var(--color-primary-rgb), 0.12);
-  color: var(--color-secondary);
-  font-size: 12px;
-  font-family: var(--font-mono);
-}
-
-.panel-content {
-  flex: 1;
-  overflow-y: auto;
+.surface {
+  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
   padding: 16px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.16);
 }
 
-.task-list-panel,
-.agent-list-panel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
+.task-create {
+  padding-bottom: 14px;
 }
 
-/* 列表项 */
-.list-item {
-  padding: 12px 16px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid transparent;
-  margin-bottom: 12px;
-  cursor: pointer;
-  transition: all 0.3s ease;
+.surface-heading {
   display: flex;
   align-items: center;
-  gap: 12px;
-}
-
-.list-item:last-child {
-  margin-bottom: 0;
-}
-
-.list-item:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-.list-item.active {
-  background: rgba(var(--color-primary-rgb), 0.1);
-  border-color: rgba(var(--color-primary-rgb), 0.2);
-  box-shadow: inset 4px 0 0 var(--color-primary);
-}
-
-.list-item__icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  background: rgba(var(--color-primary-rgb), 0.1);
-  color: var(--color-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  flex-shrink: 0;
-}
-
-.list-item__info {
-  flex: 1;
-  min-width: 0;
-}
-
-.list-item__name {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-  margin-bottom: 4px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.list-item__desc {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.list-item__status {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.list-item__status.running {
-  color: var(--color-primary);
-  background: rgba(var(--color-primary-rgb), 0.1);
-  border: 1px solid rgba(var(--color-primary-rgb), 0.3);
-}
-
-.list-item__status.standby {
-  color: var(--color-success);
-  background: rgba(46, 160, 67, 0.1);
-  border: 1px solid rgba(46, 160, 67, 0.3);
-}
-
-.list-item__status.queued {
-  color: var(--color-warning);
-  background: rgba(210, 153, 34, 0.1);
-  border: 1px solid rgba(210, 153, 34, 0.3);
-}
-
-.list-item__status.muted {
-  color: var(--text-tertiary);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-/* Agent 头像 */
-.agent-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: rgba(30, 41, 59, 0.8);
-  border: 2px solid rgba(var(--color-primary-rgb), 0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  flex-shrink: 0;
-  overflow: hidden;
-}
-
-.agent-avatar img {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.agent-avatar--sm {
-  width: 32px;
-  height: 32px;
-}
-
-.agent-avatar.claude-avatar {
-  background: rgba(163, 113, 247, 0.15);
-  border-color: rgba(163, 113, 247, 0.3);
-  color: var(--agent-claude);
-  font-size: 18px;
-}
-
-.agent-status-dot {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--color-success);
-  border: 2px solid rgba(18, 23, 33, 0.9);
-  box-shadow: 0 0 5px var(--color-success);
-}
-
-.agent-status-dot.busy {
-  background: var(--color-warning);
-  box-shadow: 0 0 5px var(--color-warning);
-}
-
-.agent-status-dot.offline {
-  background: var(--color-error);
-  box-shadow: 0 0 5px var(--color-error);
-}
-
-.agent-item.offline {
-  opacity: 0.5;
-}
-
-.claude-item {
-  border-color: rgba(163, 113, 247, 0.2);
-  background: rgba(163, 113, 247, 0.06);
-}
-
-.claude-item.is-active,
-.claude-item.active {
-  background: rgba(163, 113, 247, 0.12);
-  border-color: rgba(163, 113, 247, 0.3);
-  box-shadow: inset 4px 0 0 var(--agent-claude);
-}
-
-/* 中间对话区域 */
-.chat-header {
-  padding: 16px 24px;
-  border-bottom: 1px solid rgba(var(--color-primary-rgb), 0.12);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: rgba(var(--color-primary-rgb), 0.03);
-}
-
-.chat-header__agent {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.chat-header__name {
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: 15px;
-}
-
-.chat-header__status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--color-success);
-}
-
-.status-dot-sm {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-success);
-  box-shadow: 0 0 8px var(--color-success);
-}
-
-.status-dot-sm.busy {
-  background: var(--color-warning);
-  box-shadow: 0 0 8px var(--color-warning);
-}
-
-.status-dot-sm.offline {
-  background: var(--color-error);
-  box-shadow: 0 0 8px var(--color-error);
-}
-
-.chat-header__actions {
-  display: flex;
-  gap: 8px;
-}
-
-.header-action-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-size: 14px;
-  position: relative;
-}
-
-.header-action-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text-primary);
-}
-
-.header-action-btn.has-new {
-  border-color: rgba(210, 153, 34, 0.4);
-}
-
-.red-dot {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-warning);
-}
-
-.detail-content {
-  flex: 1;
-  min-height: 0;
-}
-
-/* 执行状态面板 */
-.execution-metrics {
-  display: grid;
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-.execution-metric {
-  display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 14px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.025);
-  color: var(--text-secondary);
-  font-size: 13px;
+  margin-bottom: 14px;
 }
 
-.execution-metric strong {
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-}
-
-/* 时间线 */
-.status-timeline {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  position: relative;
-  padding-left: 20px;
-}
-
-.status-timeline::before {
-  content: '';
-  position: absolute;
-  top: 10px;
-  bottom: 10px;
-  left: 5px;
-  width: 2px;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.timeline-item {
-  position: relative;
-  padding: 0 0 18px 16px;
-}
-
-.timeline-dot {
-  position: absolute;
-  left: -19px;
-  top: 5px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.06);
-  border: 2px solid rgba(255, 255, 255, 0.12);
-  z-index: 2;
-}
-
-.timeline-item.completed .timeline-dot {
-  border-color: var(--color-success);
-  background: var(--color-success);
-  box-shadow: 0 0 8px rgba(46, 160, 67, 0.4);
-}
-
-.timeline-item.active .timeline-dot {
-  border-color: var(--color-primary);
-  background: var(--color-primary);
-  box-shadow: 0 0 10px rgba(88, 166, 255, 0.45);
-}
-
-.timeline-item.active::before {
-  content: '';
-  position: absolute;
-  left: -23px;
-  top: 1px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: rgba(88, 166, 255, 0.16);
-  animation: pulse 2s infinite;
-  z-index: 1;
-}
-
-@keyframes pulse {
-  0% { transform: scale(0.8); opacity: 0.8; }
-  100% { transform: scale(1.6); opacity: 0; }
-}
-
-.timeline-time {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-  margin-bottom: 6px;
-}
-
-.timeline-content {
-  display: grid;
-  gap: 4px;
-  padding: 10px 12px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.025);
-}
-
-.timeline-content strong {
-  color: var(--text-primary);
-  font-size: 13px;
-}
-
-.timeline-content p {
+.surface-heading h2,
+.mission-hero h1,
+.subtask-card h3 {
   margin: 0;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.timeline-item.active .timeline-content {
-  border-color: rgba(var(--color-primary-rgb), 0.2);
-  background: rgba(var(--color-primary-rgb), 0.05);
-}
-
-/* 成果资产 */
-.review-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 100px;
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.review-group {
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.02);
-  margin-bottom: 12px;
-}
-
-.review-group:last-child {
-  margin-bottom: 0;
-}
-
-.review-group__header {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-}
-
-.review-group__header strong {
   color: var(--text-primary);
-  font-size: 13px;
+  letter-spacing: 0;
 }
 
-.review-group__header span {
-  color: var(--text-secondary);
-  font-size: 12px;
+.surface-heading h2 {
+  font-size: 16px;
 }
 
-.review-file {
+.eyebrow {
+  margin: 0 0 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-tertiary);
+}
+
+.field {
   width: 100%;
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
-  padding: 10px 12px;
-  border: 0;
+  border: 1px solid var(--border-default);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-card);
   color: var(--text-primary);
-  text-align: left;
+  padding: 10px 12px;
+  font: inherit;
+  outline: none;
+}
+
+.field + .field {
+  margin-top: 10px;
+}
+
+.field:focus {
+  border-color: var(--color-primary);
+}
+
+.field--textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.field--plan {
+  min-height: 220px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  resize: vertical;
+}
+
+.field--select {
+  min-width: 110px;
+}
+
+.create-launcher {
+  width: 100%;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.38);
+  border-radius: 8px;
+  min-height: 54px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-primary);
+  background: rgba(var(--color-primary-rgb), 0.09);
   cursor: pointer;
-  transition: background 0.2s;
-  font-size: 13px;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 
-.review-file:hover {
-  background: rgba(var(--color-primary-rgb), 0.08);
-}
-
-.review-file.is-active {
+.create-launcher:hover {
+  transform: translateY(-1px);
+  border-color: rgba(var(--color-primary-rgb), 0.7);
   background: rgba(var(--color-primary-rgb), 0.14);
 }
 
-.review-file small {
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-
-/* 文件预览 */
-.preview-content-area {
-  overflow: auto;
-}
-
-.preview-loading,
-.preview-error,
-.empty-state {
-  display: flex;
+.create-launcher span {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  min-height: 180px;
-  color: var(--text-secondary);
+  color: #08111f;
+  background: var(--color-primary);
+  flex: 0 0 auto;
 }
 
-.preview-error {
-  color: var(--color-error);
+.create-launcher strong {
+  font-size: 14px;
+  letter-spacing: 0;
 }
 
-.preview-content pre {
-  margin: 0;
-  padding: 18px;
-  border-radius: 8px;
-  background: rgba(7, 12, 20, 0.82);
-  color: var(--text-primary);
-  overflow: auto;
-  white-space: pre-wrap;
-  font-size: 13px;
-}
-
-.markdown-rendered {
-  color: var(--text-primary);
-  line-height: 1.8;
-}
-
-.markdown-rendered :deep(h1),
-.markdown-rendered :deep(h2),
-.markdown-rendered :deep(h3) {
-  margin-top: 0;
-  color: var(--text-primary);
-}
-
-.markdown-rendered :deep(code) {
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: rgba(148, 163, 184, 0.12);
-}
-
-.markdown-rendered :deep(pre) {
-  padding: 16px;
-  border-radius: 8px;
-  background: rgba(7, 12, 20, 0.82);
-  overflow: auto;
-}
-
-.preview-unsupported {
-  display: grid;
-  justify-items: center;
-  gap: 10px;
-  padding: 48px 24px;
-  color: var(--text-secondary);
-}
-
-.preview-unsupported .hint {
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-
-.preview-dialog-body {
-  min-height: 300px;
-  max-height: 70vh;
-  overflow: auto;
-}
-
-/* 文件下拉 */
-.file-dropdown {
-  display: grid;
-  gap: 6px;
-}
-
-.file-dropdown-item {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: center;
-  padding: 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.file-dropdown-item:hover {
-  background: rgba(var(--color-primary-rgb), 0.08);
-}
-
-.file-dropdown-name {
-  color: var(--text-primary);
-  font-size: 13px;
-}
-
-.file-dropdown-meta {
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-
-/* Claude 会话 */
-.claude-shell {
-  display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
-  gap: 16px;
-  height: 100%;
-  padding: 16px;
-}
-
-.claude-session-selector {
-  display: grid;
-  gap: 10px;
-  align-content: start;
-}
-
-.session-item {
-  display: grid;
-  gap: 6px;
-  padding: 12px;
-  border: 1px solid rgba(163, 113, 247, 0.14);
-  border-radius: 8px;
-  background: rgba(163, 113, 247, 0.06);
-  text-align: left;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.session-item.active {
-  background: rgba(163, 113, 247, 0.14);
-  border-color: rgba(163, 113, 247, 0.34);
-}
-
-.session-model-badge {
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-.session-name {
-  color: var(--text-primary);
-  font-weight: 600;
-  font-size: 13px;
-}
-
-.session-stats {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.claude-chat-container {
+.create-actions,
+.plan-actions,
+.review-actions,
+.subtask-actions {
   display: flex;
-  flex-direction: column;
-  min-height: 0;
-  border: 1px solid rgba(163, 113, 247, 0.16);
-  border-radius: 8px;
-  overflow: hidden;
-  background: rgba(10, 14, 21, 0.88);
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
 }
 
-.claude-messages-container {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 18px;
+.primary-btn,
+.ghost-btn,
+.icon-btn {
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  cursor: pointer;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.claude-message-stream {
+.primary-btn {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #08111f;
+  font-weight: 700;
+}
+
+.ghost-btn:hover,
+.icon-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.primary-btn:disabled,
+.ghost-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.dialog-create-form {
   display: grid;
   gap: 14px;
 }
 
-.chat-msg {
+.dialog-create-form__head {
   display: flex;
-  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 4px;
 }
 
-.chat-msg.user {
-  flex-direction: row-reverse;
+.dialog-create-form__head p {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
-.msg-avatar {
+.dialog-create-form label {
+  display: grid;
+  gap: 7px;
+}
+
+.dialog-create-form label > span {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+:deep(.task-create-dialog .el-dialog) {
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-panel);
+}
+
+:deep(.task-create-dialog .el-dialog__title) {
+  color: var(--text-primary);
+}
+
+:deep(.task-create-dialog .el-dialog__body) {
+  padding-top: 10px;
+}
+
+.ghost-btn--compact {
+  min-height: 30px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
+.icon-btn {
   width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  display: flex;
+  padding: 0;
+}
+
+.agent-pill,
+.agent-token,
+.status-chip {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(163, 113, 247, 0.12);
-  color: var(--text-primary);
-  flex-shrink: 0;
+  border-radius: 999px;
+  min-height: 24px;
+  padding: 0 10px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
-.msg-bubble {
-  max-width: 720px;
-  padding: 12px 14px;
+.agent-pill,
+.agent-token {
+  color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb), 0.12);
+}
+
+.task-row {
+  width: 100%;
+  display: block;
+  text-align: left;
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
+  background: transparent;
   color: var(--text-primary);
-  line-height: 1.6;
-  font-size: 13px;
-}
-
-.chat-msg.user .msg-bubble {
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
-  color: white;
-}
-
-.msg-thinking,
-.msg-tool {
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.claude-input-area {
-  display: flex;
-  gap: 12px;
-  padding: 16px;
-  border-top: 1px solid rgba(163, 113, 247, 0.14);
-}
-
-.claude-input {
-  flex: 1;
-  border: 1px solid rgba(163, 113, 247, 0.18);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-primary);
-  padding: 10px 14px;
-  font-size: 13px;
-}
-
-.claude-input::placeholder {
-  color: var(--text-muted);
-}
-
-.send-btn {
-  min-width: 80px;
-  border: 0;
-  border-radius: 6px;
-  background: linear-gradient(135deg, var(--agent-claude), #7c3aed);
-  color: white;
-  font-size: 13px;
+  padding: 12px;
   cursor: pointer;
-  transition: opacity 0.2s;
 }
 
-.send-btn:hover {
-  opacity: 0.9;
+.task-row + .task-row {
+  margin-top: 10px;
 }
 
-.send-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+.task-row.active {
+  background: rgba(var(--color-primary-rgb), 0.1);
+  border-color: rgba(var(--color-primary-rgb), 0.55);
 }
 
-.send-error {
-  padding: 0 16px 16px;
-  color: var(--color-error);
+.task-row__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.task-row__top strong {
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.task-row__meta,
+.subtask-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--text-tertiary);
   font-size: 12px;
 }
 
-/* Agent 提示卡片 */
-.agent-tip-card {
+.mini-progress,
+.subtask-progress {
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--bg-card);
+  margin-top: 10px;
+}
+
+.mini-progress span,
+.subtask-progress span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+}
+
+.status-chip {
+  color: var(--text-secondary);
+  background: var(--bg-card);
+}
+
+.status-chip--running,
+.status-chip--reviewing {
+  color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb), 0.12);
+}
+
+.status-chip--completed {
+  color: var(--color-success);
+  background: rgba(46, 160, 67, 0.14);
+}
+
+.status-chip--failed,
+.status-chip--blocked {
+  color: var(--color-error);
+  background: rgba(220, 38, 38, 0.12);
+}
+
+.status-chip--planning,
+.status-chip--dispatching,
+.status-chip--assigned {
+  color: var(--color-warning);
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.mission-hero {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: start;
+}
+
+.mission-hero h1 {
+  font-size: 26px;
+}
+
+.mission-hero p {
+  color: var(--text-secondary);
+  margin: 10px 0 0;
+  line-height: 1.65;
+}
+
+.mission-hero__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 88px);
+  gap: 10px;
+}
+
+.mission-hero__metrics div {
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--bg-card);
+}
+
+.mission-hero__metrics span {
+  display: block;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.mission-hero__metrics strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-primary);
+  font-size: 20px;
+}
+
+.team-live-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px;
 }
 
-.agent-tip-header {
+.member-card {
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--bg-card) 88%, var(--color-primary) 5%);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  min-height: 154px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.member-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(var(--color-primary-rgb), 0.62);
+  background: rgba(var(--color-primary-rgb), 0.1);
+}
+
+.member-card__top {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) auto;
-  gap: 12px;
+  grid-template-columns: 34px minmax(0, 1fr) 18px;
+  gap: 10px;
   align-items: center;
 }
 
-.agent-tip-avatar {
-  width: 44px;
-  height: 44px;
+.member-avatar {
+  width: 34px;
+  height: 34px;
   border-radius: 8px;
-  object-fit: cover;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #08111f;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  font-weight: 800;
+  flex: 0 0 auto;
 }
 
-.agent-tip-title {
-  min-width: 0;
+.member-card strong,
+.member-dialog__header h2 {
+  color: var(--text-primary);
+  letter-spacing: 0;
 }
 
-.agent-tip-name {
+.member-card small {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.member-card__activity {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.member-card p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.subtask-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.subtask-card {
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--bg-card);
+}
+
+.subtask-card__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.subtask-card h3 {
+  font-size: 15px;
+}
+
+.subtask-card p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.error-line {
+  color: var(--color-error) !important;
+}
+
+.event-list,
+.outputs-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.event-item {
+  display: grid;
+  grid-template-columns: 12px 1fr;
+  gap: 10px;
+}
+
+.event-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+
+.event-item strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.event-item p {
+  margin: 3px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.event-item small {
+  color: var(--text-tertiary);
+}
+
+.output-row {
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.output-row small {
+  color: var(--text-tertiary);
+}
+
+.summary-text {
+  margin: 12px 0 0;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.quiet-state,
+.empty-mission {
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.empty-mission {
+  margin: auto;
+  text-align: center;
+  max-width: 480px;
+}
+
+.empty-mission i {
+  font-size: 42px;
+  color: var(--color-primary);
+}
+
+.preview-state {
+  color: var(--text-secondary);
+  padding: 24px;
+}
+
+.preview-state--error {
+  color: var(--color-error);
+}
+
+.preview-content {
+  max-height: 70vh;
+  overflow: auto;
+}
+
+.preview-content pre {
+  white-space: pre-wrap;
+  color: var(--text-primary);
+}
+
+:deep(.member-dialog .el-dialog) {
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-panel);
+}
+
+.member-dialog__header {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding-right: 28px;
+}
+
+.member-dialog__header h2 {
+  margin: 2px 0 0;
+  font-size: 17px;
+}
+
+.member-chat-shell {
+  display: grid;
+  gap: 12px;
+}
+
+.member-task-context {
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(var(--color-primary-rgb), 0.08);
+}
+
+.member-task-context strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.member-task-context p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.member-chat-list {
+  min-height: 260px;
+  max-height: 46vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
+}
+
+.chat-bubble {
+  max-width: 86%;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+}
+
+.chat-bubble--user {
+  align-self: flex-end;
+  border-color: rgba(var(--color-primary-rgb), 0.45);
+  background: rgba(var(--color-primary-rgb), 0.12);
+}
+
+.chat-bubble--assistant {
+  align-self: flex-start;
+}
+
+.chat-bubble--system {
+  align-self: center;
+  max-width: 94%;
+  color: var(--text-tertiary);
+}
+
+.chat-bubble__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.chat-bubble__meta span {
   color: var(--text-primary);
   font-weight: 700;
 }
 
-.agent-tip-role {
+.chat-bubble p {
+  margin: 0;
   color: var(--text-secondary);
-  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
-.agent-tip-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.tag {
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: rgba(148, 163, 184, 0.14);
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-
-.agent-tip-desc {
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.agent-tip-stats {
-  display: flex;
-  gap: 16px;
-}
-
-.agent-tip-stat {
+.member-followup {
   display: grid;
-  gap: 4px;
-}
-
-.stat-label {
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.stat-value {
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-.status-badge-mini {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  background: rgba(46, 160, 67, 0.1);
-  color: var(--color-success);
-  border: 1px solid rgba(46, 160, 67, 0.2);
-}
-
-.status-badge-mini.busy {
-  color: var(--color-warning);
-  background: rgba(210, 153, 34, 0.1);
-  border-color: rgba(210, 153, 34, 0.2);
-}
-
-.status-badge-mini.offline {
-  color: var(--color-error);
-  background: rgba(220, 38, 38, 0.1);
-  border-color: rgba(220, 38, 38, 0.2);
-}
-
-.chat-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
-  min-height: 180px;
-  color: var(--text-secondary);
+  align-items: end;
 }
 
-.output-panel,
-.execution-panel,
-.preview-panel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
+.member-followup textarea {
+  min-height: 70px;
+  resize: vertical;
 }
 
-/* 滚动条 */
-.panel-content::-webkit-scrollbar,
-.claude-messages-container::-webkit-scrollbar,
-.preview-content-area::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+@media (max-width: 1180px) {
+  .task-command-layout {
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+
+  .task-inspector {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
-.panel-content::-webkit-scrollbar-track,
-.claude-messages-container::-webkit-scrollbar-track,
-.preview-content-area::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.02);
-}
+@media (max-width: 820px) {
+  .task-command-layout {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
 
-.panel-content::-webkit-scrollbar-thumb,
-.claude-messages-container::-webkit-scrollbar-thumb,
-.preview-content-area::-webkit-scrollbar-thumb {
-  background: rgba(var(--color-primary-rgb), 0.2);
-  border-radius: 3px;
-}
+  .task-rail,
+  .mission-stage,
+  .task-inspector {
+    overflow: visible;
+  }
 
-.panel-content::-webkit-scrollbar-thumb:hover,
-.claude-messages-container::-webkit-scrollbar-thumb:hover,
-.preview-content-area::-webkit-scrollbar-thumb:hover {
-  background: rgba(var(--color-primary-rgb), 0.4);
+  .task-inspector {
+    display: flex;
+  }
+
+  .mission-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .mission-hero__metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .member-followup {
+    grid-template-columns: 1fr;
+  }
+
+  .member-followup .primary-btn {
+    width: 100%;
+  }
 }
 </style>

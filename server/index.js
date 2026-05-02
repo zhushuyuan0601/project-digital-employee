@@ -12,11 +12,13 @@ import { dirname, join, resolve } from 'path'
 import http from 'http'
 import skillsRouter from './routes/skills.js'
 import agentChatRouter, { initAgentChatRoutes } from './routes/agent-chat.js'
+import taskRouter from './routes/tasks.js'
 import analysisRouter from './routes/analysis.js'
 import { createAutomationRouter } from './routes/automation.js'
 import { createOpsRouter } from './routes/ops.js'
 import { initializeSchema } from './db/index.js'
 import { initializeAgentChatSchema } from './db/agent-chat.js'
+import { initializeTaskSchema } from './db/tasks.js'
 import { initializeAnalysisSchema } from './db/analysis.js'
 import Database from 'better-sqlite3'
 
@@ -1523,6 +1525,7 @@ function getActivityStatus(type) {
 // ============ Agent Chat API ============
 // 初始化 Agent Chat 数据库表
 initializeAgentChatSchema()
+initializeTaskSchema()
 initializeAnalysisSchema()
 // 初始化默认 Agents
 initAgentChatRoutes()
@@ -1530,6 +1533,7 @@ initAgentChatRoutes()
 app.use('/api', createOpsRouter({ proxyToGateway }))
 app.use('/api', createAutomationRouter({ proxyToGateway }))
 app.use('/api', agentChatRouter)
+app.use('/api', taskRouter)
 app.use('/api/analysis', analysisRouter)
 
 // 启动服务器
