@@ -73,7 +73,7 @@
             <p class="workrail-section__label">会话管理</p>
             <span>{{ sessions.length }}</span>
           </div>
-          <button class="session-manager-card" type="button" @click="showSessionModal = true">
+          <button class="session-manager-card" type="button" @click="openSessionModal">
             <div>
               <strong>{{ currentSession?.title || '未选择会话' }}</strong>
               <span>{{ currentSession?.last_user_message || '查看、切换和删除历史会话' }}</span>
@@ -1386,6 +1386,10 @@ const exportSummary = computed(() => {
     codeCount: (assistantContent.match(/<Code>/g) || []).length,
   }
 })
+
+function openSessionModal() {
+  showSessionModal.value = true
+}
 
 function formatTimestamp(timestamp: number) {
   return new Date(timestamp).toLocaleTimeString('zh-CN', { hour12: false })
@@ -4247,6 +4251,19 @@ onMounted(async () => {
 
 /* ── Workbench Modals ────────────────────────────────── */
 .workbench-modal-overlay {
+  --analysis-bg: #0b0f19;
+  --analysis-card: rgba(21, 27, 43, 0.72);
+  --analysis-card-strong: rgba(30, 38, 56, 0.94);
+  --analysis-border: rgba(148, 163, 184, 0.18);
+  --analysis-soft: #94a3b8;
+  --analysis-main: #f8fafc;
+  --analysis-blue: #3b82f6;
+  --analysis-blue-strong: #2563eb;
+  --analysis-cyan: #22d3ee;
+  --analysis-green: #10b981;
+  --analysis-violet: #8b5cf6;
+  --analysis-amber: #f59e0b;
+  --analysis-danger: #fb7185;
   position: fixed;
   inset: 0;
   z-index: 9998;
