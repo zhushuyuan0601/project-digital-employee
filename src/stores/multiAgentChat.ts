@@ -86,7 +86,7 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
 
   // 设置 - 直接连接 Gateway，不走 Vite 代理
   // 这样 Gateway 能正确识别为本地连接，避免 scopes 被清空
-  const { settings, resolveSocketUrl, createChallengeResponse } = useGatewayConnection()
+  const { settings, resolveSocketUrl } = useGatewayConnection()
 
   console.log('[MultiAgentChat] 初始化 - wsUrl:', settings.value.wsUrl, 'hasToken:', !!settings.value.token)
 
@@ -138,23 +138,6 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
     return agentConfigs.some(config => agents.value[config.id]?.isConnected)
   })
 
-  async function handleConnectChallenge(agentId: string, payload: { nonce: string; ts: number }) {
-    const agent = agents.value[agentId]
-    if (!agent || !agent.ws || !settings.value.token) {
-      console.error(`[MultiAgentChat] [${agentId}] 挑战响应失败 - 缺少 ws 或 token`)
-      return
-    }
-
-    const responseMsg = await createChallengeResponse(payload)
-    if (!responseMsg) {
-      console.warn(`[MultiAgentChat] [${agentId}] crypto.subtle 不可用，跳过挑战响应`)
-      return
-    }
-
-    agent.ws.send(JSON.stringify(responseMsg))
-    console.log(`[MultiAgentChat] [${agentId}] 挑战响应已发送`)
-  }
-
   function addSystemMessage(agentId: string, content: string) {
     const agent = agents.value[agentId]
     if (!agent) return
@@ -188,7 +171,7 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
         error: msg.error,
       }, null, 2))
 
-      if (methodLabel === 'connect' || methodLabel === 'connect.challenge_response') {
+      if (methodLabel === 'connect') {
         const agent = agents.value[agentId]
         if (!msg.ok) {
           console.error(`[MultiAgentChat] [${agentId}] 连接握手失败! error=`, JSON.stringify(msg.error))
@@ -293,7 +276,7 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
     return null
   }
 
-  async function handleEvent(agentId: string, event: string, payload: any) {
+  function handleEvent(agentId: string, event: string, payload: any) {
     console.log(`[MultiAgentChat] [${agentId}] 处理事件:`, event, { stream: payload?.stream, state: payload?.state, runId: payload?.runId })
 
     // 通知事件监听器
@@ -305,17 +288,8 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
       }
     })
 
-    // 如果已连接成功，忽略 connect.challenge 事件
-    // Gateway 在 hello-ok 之后仍会发送 challenge，但此时无需响应
-    const agent = agents.value[agentId]
-    if (event === 'connect.challenge' && agent?.isConnected) {
-      console.log(`[MultiAgentChat] [${agentId}] 已连接成功，忽略 connect.challenge 事件`)
-      return
-    }
-
-    // 认证挑战（仅在未连接时处理）
     if (event === 'connect.challenge') {
-      await handleConnectChallenge(agentId, payload)
+      console.log(`[MultiAgentChat] [${agentId}] 收到 connect.challenge，已忽略；Gateway token 认证由 connect 请求完成`)
       return
     }
 
