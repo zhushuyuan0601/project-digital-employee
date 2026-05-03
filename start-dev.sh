@@ -15,15 +15,24 @@ fi
 
 echo "[1/4] 检查 Node.js 版本..."
 node --version
+NODE_BIN_DIR="$(dirname "$(command -v node)")"
+OPENCLAW_BIN_PATH="$(command -v openclaw 2>/dev/null || true)"
+if [ -n "$OPENCLAW_BIN_PATH" ]; then
+    export OPENCLAW_BIN="$OPENCLAW_BIN_PATH"
+fi
+export PATH="$NODE_BIN_DIR:$PATH"
 
 # 停止已有进程
 echo "[2/4] 停止已有服务..."
 pkill -f "node server/index.js" 2>/dev/null || true
+if command -v lsof &> /dev/null; then
+    lsof -tiTCP:18888 -sTCP:LISTEN 2>/dev/null | xargs kill 2>/dev/null || true
+fi
 
 # 启动后端服务器
 echo "[3/4] 启动后端服务器 (端口 18888)..."
 cd "$(dirname "$0")"
-node server/index.js > /tmp/unicom-server.log 2>&1 &
+nohup env PATH="$PATH" OPENCLAW_BIN="${OPENCLAW_BIN:-}" node server/index.js > /tmp/unicom-server.log 2>&1 < /dev/null &
 SERVER_PID=$!
 echo "     后端服务器 PID: $SERVER_PID"
 
@@ -65,6 +74,10 @@ echo "     Cron API: $CRON_TASKS 个任务"
 # Webhooks API
 WEBHOOKS_COUNT=$(curl -s http://localhost:18888/api/webhooks 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('webhooks', [])))" 2>/dev/null || echo "0")
 echo "     Webhooks API: $WEBHOOKS_COUNT 个 webhook"
+
+# Tasks API
+TASKS_COUNT=$(curl -s 'http://localhost:18888/api/tasks?limit=100' 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('tasks', [])))" 2>/dev/null || echo "0")
+echo "     Tasks API: $TASKS_COUNT 个任务"
 
 echo ""
 echo "╔════════════════════════════════════════════════════════╗"

@@ -12,8 +12,14 @@ import { dirname, join, resolve } from 'path'
 import http from 'http'
 import skillsRouter from './routes/skills.js'
 import agentChatRouter, { initAgentChatRoutes } from './routes/agent-chat.js'
+import taskRouter from './routes/tasks.js'
+import analysisRouter from './routes/analysis.js'
+import { createAutomationRouter } from './routes/automation.js'
+import { createOpsRouter } from './routes/ops.js'
 import { initializeSchema } from './db/index.js'
 import { initializeAgentChatSchema } from './db/agent-chat.js'
+import { initializeTaskSchema } from './db/tasks.js'
+import { initializeAnalysisSchema } from './db/analysis.js'
 import Database from 'better-sqlite3'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -27,8 +33,19 @@ const GATEWAY_HOST = process.env.GATEWAY_HOST || '127.0.0.1'
 const GATEWAY_PORT = process.env.GATEWAY_PORT || 18789
 
 // 中间件
-app.use(cors())
+const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173'
+app.use(cors({ origin: CORS_ORIGIN.split(',').map(s => s.trim()) }))
 app.use(express.json())
+
+// 认证中间件：若设置 API_AUTH_TOKEN 则对 /api/* 路由启用 Bearer token 校验
+const API_AUTH_TOKEN = process.env.API_AUTH_TOKEN || ''
+function requireAuth(req, res, next) {
+  if (!API_AUTH_TOKEN) return next()
+  const auth = req.headers.authorization || ''
+  if (auth === `Bearer ${API_AUTH_TOKEN}`) return next()
+  return res.status(401).json({ error: 'Unauthorized: invalid or missing token' })
+}
+app.use('/api', requireAuth)
 
 // 用户主目录
 const HOME_DIR = process.env.HOME || process.env.USERPROFILE || ''
@@ -76,6 +93,19 @@ function resolvePath(path) {
     return path
   }
   return resolve(path)
+}
+
+// 文件访问路径白名单
+const FILE_ROOTS = (process.env.FILE_ROOTS || '')
+  .split(',')
+  .map(p => p.trim())
+  .filter(Boolean)
+  .map(p => resolvePath(p))
+
+function isPathAllowed(resolvedPath) {
+  if (FILE_ROOTS.length === 0) return true
+  const normalized = resolve(resolvedPath)
+  return FILE_ROOTS.some(root => normalized.startsWith(root + '/') || normalized === root)
 }
 
 /**
@@ -304,6 +334,11 @@ app.get('/api/files/scan', async (req, res) => {
       })
     }
 
+    const resolved = resolvePath(path)
+    if (!isPathAllowed(resolved)) {
+      return res.status(403).json({ success: false, error: 'Access denied: path not in allowed roots' })
+    }
+
     console.log(`[API] Scan request: path=${path}, startTime=${startTime}, endTime=${endTime}`)
 
     const files = await scanDirectory(path,
@@ -343,6 +378,11 @@ app.get('/api/files/content', async (req, res) => {
       })
     }
 
+    const resolved = resolvePath(path)
+    if (!isPathAllowed(resolved)) {
+      return res.status(403).json({ success: false, error: 'Access denied: path not in allowed roots' })
+    }
+
     console.log(`[API] Read file request: path=${path}`)
 
     const result = await readFileContent(path)
@@ -371,6 +411,11 @@ app.get('/api/file', async (req, res) => {
         success: false,
         error: 'Missing required parameter: path'
       })
+    }
+
+    const resolved = resolvePath(path)
+    if (!isPathAllowed(resolved)) {
+      return res.status(403).json({ success: false, error: 'Access denied: path not in allowed roots' })
     }
 
     console.log(`[API] Read file request (legacy): path=${path}`)
@@ -815,694 +860,6 @@ function getProjectStats(projects) {
 // ============ Skills API (Mission Control Architecture) ============
 // 使用新的基于 SQLite 和双向同步的技能管理模块
 app.use('/api/skills', skillsRouter)
-
-// ============ Tokens API ============
-
-/**
- * 生成模拟 Token 数据
- */
-function generateTokenData() {
-  const now = new Date()
-  const trend = []
-  for (let i = 6; i >= 0; i--) {
-    const date = new Date(now)
-    date.setDate(date.getDate() - i)
-    trend.push({
-      date: date.toISOString().split('T')[0],
-      input: Math.floor(Math.random() * 50000) + 10000,
-      output: Math.floor(Math.random() * 30000) + 5000
-    })
-  }
-
-  const modelUsage = [
-    { model: 'claude-sonnet-4-6', tokens: 125000, cost: 0.625, percentage: 45 },
-    { model: 'claude-opus-4-6', tokens: 85000, cost: 1.275, percentage: 30 },
-    { model: 'gpt-4o', tokens: 45000, cost: 0.45, percentage: 15 },
-    { model: 'gemini-pro', tokens: 28000, cost: 0.14, percentage: 10 }
-  ]
-
-  const agentCosts = [
-    { agentId: 'xiaomu', agentName: '小呦', tokens: 95000, cost: 0.76, rank: 1 },
-    { agentId: 'xiaokai', agentName: '小开', tokens: 78000, cost: 0.62, rank: 2 },
-    { agentId: 'xiaochan', agentName: '小产', tokens: 52000, cost: 0.42, rank: 3 },
-    { agentId: 'xiaoyan', agentName: '小研', tokens: 35000, cost: 0.28, rank: 4 },
-    { agentId: 'xiaoce', agentName: '小测', tokens: 28000, cost: 0.22, rank: 5 }
-  ]
-
-  const recentUsage = []
-  for (let i = 0; i < 20; i++) {
-    recentUsage.push({
-      id: `usage-${i}`,
-      timestamp: new Date(Date.now() - i * 1000 * 60 * 15).toISOString(),
-      agentId: ['xiaomu', 'xiaokai', 'xiaochan', 'xiaoyan', 'xiaoce'][Math.floor(Math.random() * 5)],
-      agentName: '小呦',
-      model: ['claude-sonnet-4-6', 'claude-opus-4-6', 'gpt-4o'][Math.floor(Math.random() * 3)],
-      inputTokens: Math.floor(Math.random() * 5000) + 1000,
-      outputTokens: Math.floor(Math.random() * 3000) + 500,
-      totalTokens: 0,
-      cost: 0,
-      endpoint: '/api/v1/chat/completions',
-      duration: Math.floor(Math.random() * 2000) + 500
-    })
-  }
-  recentUsage.forEach(u => {
-    u.totalTokens = u.inputTokens + u.outputTokens
-    u.cost = parseFloat((u.totalTokens * 0.000005).toFixed(4))
-  })
-
-  const totalTokens = trend.reduce((sum, d) => sum + d.input + d.output, 0)
-  const inputTokens = trend.reduce((sum, d) => sum + d.input, 0)
-  const outputTokens = trend.reduce((sum, d) => sum + d.output, 0)
-
-  const stats = {
-    totalTokens: totalTokens,
-    totalCost: parseFloat((totalTokens * 0.000005).toFixed(2)),
-    inputTokens: inputTokens,
-    outputTokens: outputTokens,
-    apiCalls: recentUsage.length,
-    avgResponseTime: Math.floor(recentUsage.reduce((sum, u) => sum + u.duration, 0) / recentUsage.length)
-  }
-
-  return { stats, trend, modelUsage, agentCosts, recentUsage }
-}
-
-/**
- * Tokens API - 获取 Token 使用统计
- * GET /api/tokens/stats?range=today|week|month|all
- */
-app.get('/api/tokens/stats', async (req, res) => {
-  try {
-    console.log('[API] Tokens stats request')
-
-    // 尝试从 Gateway 获取数据
-    try {
-      const gatewayData = await proxyToGateway('/api/tokens/stats')
-      if (gatewayData && gatewayData.success) {
-        console.log('[API] Tokens data from Gateway')
-        return res.json(gatewayData)
-      }
-    } catch (e) {
-      // Gateway 不可用，使用模拟数据
-      console.log('[API] Tokens using mock data')
-    }
-
-    const data = generateTokenData()
-    res.json({
-      success: true,
-      ...data
-    })
-  } catch (err) {
-    console.error('[API] Tokens stats error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 导出 Token 报告
- * GET /api/tokens/export?range=xxx
- */
-app.get('/api/tokens/export', async (req, res) => {
-  try {
-    const data = generateTokenData()
-    // 生成 CSV 格式
-    let csv = 'Date,Input Tokens,Output Tokens,Total Tokens,Cost\n'
-    data.trend.forEach(d => {
-      csv += `${d.date},${d.input},${d.output},${d.input + d.output},${((d.input + d.output) * 0.000005).toFixed(4)}\n`
-    })
-
-    res.setHeader('Content-Type', 'text/csv')
-    res.setHeader('Content-Disposition', 'attachment; filename=token-report.csv')
-    res.send(csv)
-  } catch (err) {
-    console.error('[API] Export error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-// ============ Memory API ============
-
-/**
- * Memory API - 获取内存数据
- * GET /api/memory
- */
-app.get('/api/memory', async (req, res) => {
-  try {
-    console.log('[API] Memory request')
-
-    // 尝试从 Gateway 获取数据
-    try {
-      const gatewayData = await proxyToGateway('/api/memory')
-      if (gatewayData && gatewayData.success) {
-        console.log('[API] Memory data from Gateway')
-        return res.json(gatewayData)
-      }
-    } catch (e) {
-      // Gateway 不可用，使用模拟数据
-      console.log('[API] Memory using mock data')
-    }
-
-    const files = [
-      { id: 'f1', name: 'project-knowledge.md', path: '/knowledge/project-knowledge.md', type: 'file', size: 15420, mtime: new Date().toISOString() },
-      { id: 'f2', name: 'api-docs.md', path: '/knowledge/api-docs.md', type: 'file', size: 8920, mtime: new Date().toISOString() },
-      { id: 'f3', name: 'user-guide.md', path: '/knowledge/user-guide.md', type: 'file', size: 12340, mtime: new Date().toISOString() },
-      { id: 'f4', name: 'best-practices.md', path: '/guides/best-practices.md', type: 'file', size: 6780, mtime: new Date().toISOString() }
-    ]
-
-    const nodes = [
-      { id: 'n1', name: 'OpenClaw', type: 'entity', description: 'AI Agent 编排平台', connections: [{ targetId: 'n2', type: 'related', weight: 0.9 }, { targetId: 'n3', type: 'related', weight: 0.8 }] },
-      { id: 'n2', name: 'Mission Control', type: 'concept', description: '多 Agent 管理系统', connections: [{ targetId: 'n1', type: 'related', weight: 0.9 }] },
-      { id: 'n3', name: '数字员工', type: 'entity', description: '自动化办公 Agent', connections: [{ targetId: 'n1', type: 'related', weight: 0.8 }] },
-      { id: 'n4', name: 'API Gateway', type: 'concept', description: '统一 API 网关', connections: [{ targetId: 'n1', type: 'related', weight: 0.7 }] }
-    ]
-
-    const activities = [
-      { id: 'a1', type: 'create', nodeId: 'n4', nodeName: 'API Gateway', timestamp: new Date().toISOString(), description: '创建新节点' },
-      { id: 'a2', type: 'update', nodeId: 'n1', nodeName: 'OpenClaw', timestamp: new Date().toISOString(), description: '更新节点信息' },
-      { id: 'a3', type: 'connect', nodeId: 'n2', nodeName: 'Mission Control', timestamp: new Date().toISOString(), description: '建立关联' }
-    ]
-
-    res.json({
-      success: true,
-      stats: {
-        fileCount: files.length,
-        nodeCount: nodes.length,
-        storageUsed: files.reduce((sum, f) => sum + (f.size || 0), 0),
-        storageUsedFormatted: '42.5 KB'
-      },
-      files,
-      nodes,
-      activities
-    })
-  } catch (err) {
-    console.error('[API] Memory error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-// ============ Security API ============
-
-/**
- * Security API - 获取安全审计数据
- * GET /api/security/audit
- */
-app.get('/api/security/audit', async (req, res) => {
-  try {
-    console.log('[API] Security audit request')
-
-    // 尝试从 Gateway 获取数据
-    try {
-      const gatewayData = await proxyToGateway('/api/security/audit')
-      if (gatewayData && gatewayData.success) {
-        console.log('[API] Security data from Gateway')
-        return res.json(gatewayData)
-      }
-    } catch (e) {
-      // Gateway 不可用，使用模拟数据
-      console.log('[API] Security using mock data')
-    }
-
-    res.json({
-      success: true,
-      stats: {
-        score: 87,
-        secretsDetected: 2,
-        mcpConnections: 3,
-        injectionAttempts: 5,
-        passedChecks: 42,
-        totalChecks: 45
-      },
-      secrets: [
-        { id: 's1', type: 'api_key', location: '~/.openclaw/config.json', severity: 'medium', detectedAt: new Date().toISOString(), status: 'resolved' },
-        { id: 's2', type: 'token', location: '~/logs/agent.log', severity: 'low', detectedAt: new Date().toISOString(), status: 'pending' }
-      ],
-      mcpServers: [
-        { id: 'mcp1', name: 'Filesystem', url: 'file://~/', status: 'connected', lastConnected: new Date().toISOString(), permissions: ['read', 'write'] },
-        { id: 'mcp2', name: 'Memory', url: 'memory://default', status: 'connected', lastConnected: new Date().toISOString(), permissions: ['read', 'write', 'delete'] },
-        { id: 'mcp3', name: 'Time', url: 'time://utc', status: 'connected', lastConnected: new Date().toISOString(), permissions: ['read'] }
-      ],
-      injectionAttempts: [
-        { id: 'i1', type: 'prompt_injection', source: 'user:192.168.1.100', payload: 'Ignore previous instructions...', blocked: true, timestamp: new Date().toISOString() },
-        { id: 'i2', type: 'jailbreak', source: 'agent:xiaoyan', payload: 'You are now in developer mode...', blocked: true, timestamp: new Date().toISOString() }
-      ],
-      events: [
-        { id: 'e1', type: 'secret_detected', severity: 'medium', description: '发现 API 密钥泄露', timestamp: new Date().toISOString(), status: 'resolved' },
-        { id: 'e2', type: 'injection_blocked', severity: 'high', description: '阻止提示词注入攻击', timestamp: new Date().toISOString(), status: 'resolved' }
-      ],
-      trustFactors: [
-        { name: '代码审计', score: 95, maxScore: 100 },
-        { name: '密钥管理', score: 80, maxScore: 100 },
-        { name: '访问控制', score: 90, maxScore: 100 },
-        { name: '数据加密', score: 85, maxScore: 100 }
-      ]
-    })
-  } catch (err) {
-    console.error('[API] Security audit error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-// ============ Cron API ============
-
-const CRON_TASKS = [
-  {
-    id: 'cron1',
-    name: '每日数据备份',
-    cron: '0 2 * * *',
-    agentId: 'xiaokai',
-    agentName: '小开',
-    enabled: true,
-    lastRun: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString(),
-    nextRun: new Date(Date.now() + 1000 * 60 * 60 * 16).toISOString(),
-    successCount: 128,
-    failureCount: 3,
-    lastStatus: 'success'
-  },
-  {
-    id: 'cron2',
-    name: '周报生成',
-    cron: '0 9 * * 1',
-    agentId: 'xiaochan',
-    agentName: '小产',
-    enabled: true,
-    lastRun: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(),
-    nextRun: new Date(Date.now() + 1000 * 60 * 60 * 24 * 4).toISOString(),
-    successCount: 45,
-    failureCount: 1,
-    lastStatus: 'success'
-  },
-  {
-    id: 'cron3',
-    name: '日志清理',
-    cron: '0 0 * * 0',
-    agentId: 'xiaokai',
-    agentName: '小开',
-    enabled: false,
-    lastRun: new Date(Date.now() - 1000 * 60 * 60 * 24 * 7).toISOString(),
-    successCount: 24,
-    failureCount: 0,
-    lastStatus: 'success'
-  }
-]
-
-/**
- * Cron API - 获取定时任务列表
- * GET /api/cron/tasks
- */
-app.get('/api/cron/tasks', async (req, res) => {
-  try {
-    console.log('[API] Cron tasks request')
-
-    // 尝试从 Gateway 获取数据
-    try {
-      const gatewayData = await proxyToGateway('/api/cron/tasks')
-      if (gatewayData && gatewayData.success) {
-        console.log('[API] Cron data from Gateway')
-        return res.json(gatewayData)
-      }
-    } catch (e) {
-      // Gateway 不可用，使用模拟数据
-      console.log('[API] Cron using mock data')
-    }
-
-    const stats = {
-      totalTasks: CRON_TASKS.length,
-      enabledTasks: CRON_TASKS.filter(t => t.enabled).length,
-      disabledTasks: CRON_TASKS.filter(t => !t.enabled).length,
-      todayExecutions: 5
-    }
-
-    res.json({
-      success: true,
-      stats,
-      tasks: CRON_TASKS,
-      executions: []
-    })
-  } catch (err) {
-    console.error('[API] Cron tasks error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 创建定时任务
- * POST /api/cron/tasks
- */
-app.post('/api/cron/tasks', async (req, res) => {
-  try {
-    const { name, cron, agentId, enabled = true } = req.body
-    const newTask = {
-      id: `cron-${Date.now()}`,
-      name,
-      cron,
-      agentId,
-      agentName: '小开',
-      enabled,
-      successCount: 0,
-      failureCount: 0,
-      lastStatus: null
-    }
-    CRON_TASKS.push(newTask)
-    console.log('[API] Create cron task:', newTask)
-    res.json({ success: true, task: newTask })
-  } catch (err) {
-    console.error('[API] Create cron task error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 更新定时任务
- * PUT /api/cron/tasks/:id
- */
-app.put('/api/cron/tasks/:id', async (req, res) => {
-  try {
-    const { id } = req.params
-    const updates = req.body
-    const task = CRON_TASKS.find(t => t.id === id)
-    if (task) {
-      Object.assign(task, updates)
-    }
-    console.log('[API] Update cron task:', id, updates)
-    res.json({ success: true })
-  } catch (err) {
-    console.error('[API] Update cron task error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 删除定时任务
- * DELETE /api/cron/tasks/:id
- */
-app.delete('/api/cron/tasks/:id', async (req, res) => {
-  try {
-    const { id } = req.params
-    const index = CRON_TASKS.findIndex(t => t.id === id)
-    if (index > -1) {
-      CRON_TASKS.splice(index, 1)
-    }
-    console.log('[API] Delete cron task:', id)
-    res.json({ success: true })
-  } catch (err) {
-    console.error('[API] Delete cron task error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 切换任务状态
- * POST /api/cron/tasks/:id/toggle
- */
-app.post('/api/cron/tasks/:id/toggle', async (req, res) => {
-  try {
-    const { id } = req.params
-    const task = CRON_TASKS.find(t => t.id === id)
-    if (task) {
-      task.enabled = !task.enabled
-    }
-    console.log('[API] Toggle cron task:', id, task?.enabled)
-    res.json({ success: true, enabled: task?.enabled })
-  } catch (err) {
-    console.error('[API] Toggle cron task error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 立即执行任务
- * POST /api/cron/tasks/:id/execute
- */
-app.post('/api/cron/tasks/:id/execute', async (req, res) => {
-  try {
-    const { id } = req.params
-    console.log('[API] Execute cron task:', id)
-    // 模拟执行
-    res.json({ success: true, executionId: `exec-${Date.now()}` })
-  } catch (err) {
-    console.error('[API] Execute cron task error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-// ============ Webhooks API ============
-
-const WEBHOOKS_DB = [
-  {
-    id: 'wh1',
-    name: '生产环境告警',
-    url: 'https://api.example.com/webhooks/alerts',
-    description: '发送所有错误和告警事件到监控系统',
-    events: ['agent.error', 'log.error', 'security.alert'],
-    secret: 'whsec_xxxxxxxxxxxxxxxx',
-    algorithm: 'HMAC-SHA256',
-    retryPolicy: 'exponential',
-    maxRetries: 3,
-    timeout: 30,
-    enabled: true,
-    successCount: 1247,
-    failureCount: 12,
-    avgResponseTime: 156,
-    lastDelivery: new Date(Date.now() - 1000 * 60 * 5).toISOString()
-  },
-  {
-    id: 'wh2',
-    name: '任务状态同步',
-    url: 'https://hooks.slack.com/services/xxx/yyy/zzz',
-    description: '任务状态变更通知到 Slack 频道',
-    events: ['task.created', 'task.completed', 'task.failed'],
-    secret: '',
-    algorithm: 'HMAC-SHA256',
-    retryPolicy: 'fixed',
-    maxRetries: 2,
-    timeout: 15,
-    enabled: true,
-    successCount: 856,
-    failureCount: 3,
-    avgResponseTime: 234,
-    lastDelivery: new Date(Date.now() - 1000 * 60 * 30).toISOString()
-  }
-]
-
-/**
- * Webhooks API - 获取 Webhook 列表
- * GET /api/webhooks
- */
-app.get('/api/webhooks', async (req, res) => {
-  try {
-    console.log('[API] Webhooks request')
-
-    // 尝试从 Gateway 获取数据
-    try {
-      const gatewayData = await proxyToGateway('/api/webhooks')
-      if (gatewayData && gatewayData.success) {
-        console.log('[API] Webhooks data from Gateway')
-        return res.json(gatewayData)
-      }
-    } catch (e) {
-      // Gateway 不可用，使用模拟数据
-      console.log('[API] Webhooks using mock data')
-    }
-
-    const stats = {
-      totalWebhooks: WEBHOOKS_DB.length,
-      enabledWebhooks: WEBHOOKS_DB.filter(w => w.enabled).length,
-      disabledWebhooks: WEBHOOKS_DB.filter(w => !w.enabled).length,
-      todayDeliveries: WEBHOOKS_DB.reduce((sum, w) => sum + w.successCount + w.failureCount, 0)
-    }
-
-    res.json({
-      success: true,
-      stats,
-      webhooks: WEBHOOKS_DB,
-      deliveries: []
-    })
-  } catch (err) {
-    console.error('[API] Webhooks error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 创建 Webhook
- * POST /api/webhooks
- */
-app.post('/api/webhooks', async (req, res) => {
-  try {
-    const webhook = req.body
-    const newWebhook = {
-      id: `wh-${Date.now()}`,
-      ...webhook,
-      successCount: 0,
-      failureCount: 0,
-      avgResponseTime: 0,
-      lastDelivery: null
-    }
-    WEBHOOKS_DB.push(newWebhook)
-    console.log('[API] Create webhook:', newWebhook)
-    res.json({ success: true, webhook: newWebhook })
-  } catch (err) {
-    console.error('[API] Create webhook error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 更新 Webhook
- * PUT /api/webhooks/:id
- */
-app.put('/api/webhooks/:id', async (req, res) => {
-  try {
-    const { id } = req.params
-    const updates = req.body
-    const webhook = WEBHOOKS_DB.find(w => w.id === id)
-    if (webhook) {
-      Object.assign(webhook, updates)
-    }
-    console.log('[API] Update webhook:', id, updates)
-    res.json({ success: true })
-  } catch (err) {
-    console.error('[API] Update webhook error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 删除 Webhook
- * DELETE /api/webhooks/:id
- */
-app.delete('/api/webhooks/:id', async (req, res) => {
-  try {
-    const { id } = req.params
-    const index = WEBHOOKS_DB.findIndex(w => w.id === id)
-    if (index > -1) {
-      WEBHOOKS_DB.splice(index, 1)
-    }
-    console.log('[API] Delete webhook:', id)
-    res.json({ success: true })
-  } catch (err) {
-    console.error('[API] Delete webhook error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 切换 Webhook 状态
- * POST /api/webhooks/:id/toggle
- */
-app.post('/api/webhooks/:id/toggle', async (req, res) => {
-  try {
-    const { id } = req.params
-    const webhook = WEBHOOKS_DB.find(w => w.id === id)
-    if (webhook) {
-      webhook.enabled = !webhook.enabled
-    }
-    console.log('[API] Toggle webhook:', id, webhook?.enabled)
-    res.json({ success: true, enabled: webhook?.enabled })
-  } catch (err) {
-    console.error('[API] Toggle webhook error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 发送测试通知
- * POST /api/webhooks/:id/test
- */
-app.post('/api/webhooks/:id/test', async (req, res) => {
-  try {
-    const { id } = req.params
-    const { event } = req.body
-    console.log('[API] Test webhook:', id, event)
-    // 模拟发送测试
-    await new Promise(resolve => setTimeout(resolve, 1000))
-    res.json({ success: true })
-  } catch (err) {
-    console.error('[API] Test webhook error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
-
-/**
- * 获取投递日志
- * GET /api/webhooks/:id/deliveries?limit=xxx
- */
-app.get('/api/webhooks/:id/deliveries', async (req, res) => {
-  try {
-    const { id } = req.params
-    const { limit = 50 } = req.query
-    console.log('[API] Get webhook deliveries:', id)
-
-    const deliveries = []
-    for (let i = 0; i < Math.min(parseInt(limit), 50); i++) {
-      deliveries.push({
-        id: `del-${i}`,
-        webhookId: id,
-        event: ['task.created', 'task.completed', 'agent.error'][Math.floor(Math.random() * 3)],
-        timestamp: new Date(Date.now() - i * 1000 * 60 * 30).toISOString(),
-        status: Math.random() > 0.1 ? 'success' : 'failure',
-        httpMethod: 'POST',
-        httpStatus: Math.random() > 0.1 ? 200 : 500,
-        duration: Math.floor(Math.random() * 500) + 100
-      })
-    }
-
-    res.json({ success: true, deliveries })
-  } catch (err) {
-    console.error('[API] Get webhook deliveries error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
 
 // ============ ClaudeCode Sessions API ============
 
@@ -1964,6 +1321,7 @@ app.get('/api/dashboard', async (req, res) => {
 
     res.json({
       success: true,
+      dataSource: 'workspace',
       stats,
       projects,
       todayWork: [],
@@ -1973,6 +1331,7 @@ app.get('/api/dashboard', async (req, res) => {
     console.error('[API] Dashboard error:', err)
     res.json({
       success: true,
+      dataSource: 'mock',
       stats: { totalProjects: 0, inProgress: 0, notStarted: 0, todayCommits: 0 },
       projects: [],
       todayWork: [],
@@ -2036,10 +1395,13 @@ app.get('/api/activities', async (req, res) => {
       }))
     }
 
+    let dataSource = claudeDb && activities.length > 0 ? 'database' : 'mock'
+
     // 如果数据库数据不足，生成模拟数据补充
     if (activities.length < requestedLimit) {
       const mockActivities = generateMockActivities(requestedLimit - activities.length, sinceTimestamp)
       activities = [...activities, ...mockActivities]
+      dataSource = claudeDb && activities.length > mockActivities.length ? 'mixed' : 'mock'
     }
 
     // 按时间排序
@@ -2064,6 +1426,7 @@ app.get('/api/activities', async (req, res) => {
 
     res.json({
       success: true,
+      dataSource,
       activities: activities.slice(0, requestedLimit),
       total
     })
@@ -2073,6 +1436,7 @@ app.get('/api/activities', async (req, res) => {
     const mockActivities = generateMockActivities(parseInt(req.query.limit) || 50)
     res.json({
       success: true,
+      dataSource: 'mock',
       activities: mockActivities,
       total: mockActivities.length
     })
@@ -2161,13 +1525,19 @@ function getActivityStatus(type) {
 // ============ Agent Chat API ============
 // 初始化 Agent Chat 数据库表
 initializeAgentChatSchema()
+initializeTaskSchema()
+initializeAnalysisSchema()
 // 初始化默认 Agents
 initAgentChatRoutes()
 
+app.use('/api', createOpsRouter({ proxyToGateway }))
+app.use('/api', createAutomationRouter({ proxyToGateway }))
 app.use('/api', agentChatRouter)
+app.use('/api', taskRouter)
+app.use('/api/analysis', analysisRouter)
 
 // 启动服务器
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`
 ╔════════════════════════════════════════════════════════╗
 ║          Unicom File Scanner API Server                 ║
@@ -2205,3 +1575,20 @@ app.listen(PORT, () => {
 ╚════════════════════════════════════════════════════════╝
   `)
 })
+
+function gracefulShutdown(signal) {
+  console.log(`[Server] Received ${signal}, shutting down gracefully...`)
+  server.close(() => {
+    if (claudeDb) {
+      try { claudeDb.close() } catch {}
+    }
+    console.log('[Server] Closed.')
+    process.exit(0)
+  })
+  setTimeout(() => {
+    console.error('[Server] Forced shutdown after timeout')
+    process.exit(1)
+  }, 10000)
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
+process.on('SIGINT', () => gracefulShutdown('SIGINT'))

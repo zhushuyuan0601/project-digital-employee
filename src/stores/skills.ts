@@ -17,7 +17,11 @@ export const useSkillsStore = defineStore('skills', () => {
   // 按分类过滤
   const categories = computed(() => {
     const cats = new Set<string>()
-    skills.value.forEach(s => cats.add(s.category))
+    skills.value.forEach((s) => {
+      if (s.category) {
+        cats.add(s.category)
+      }
+    })
     return Array.from(cats)
   })
 
@@ -77,6 +81,19 @@ export const useSkillsStore = defineStore('skills', () => {
     }
   }
 
+  async function createSkill(skillData: { name: string; source: string; content: string }) {
+    try {
+      const result = await skillsApi.createSkill(skillData)
+      if (result.success) {
+        await fetchSkills()
+      }
+      return result
+    } catch (e: any) {
+      console.error('Failed to create skill:', e)
+      throw e
+    }
+  }
+
   return {
     // State
     skills,
@@ -93,5 +110,6 @@ export const useSkillsStore = defineStore('skills', () => {
     installSkill,
     updateSkill,
     uninstallSkill,
+    createSkill,
   }
 })

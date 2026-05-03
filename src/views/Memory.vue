@@ -116,7 +116,7 @@
             <button class="icon-btn" @click="refreshGraph" title="刷新图谱">⟳</button>
           </div>
         </div>
-        <div class="graph-container" ref="graphContainer">
+        <div class="graph-container">
           <!-- 模拟关系图谱可视化 -->
           <div class="graph-visualization">
             <div class="graph-node center" :style="{ transform: `translate(0px, 0px)` }">
@@ -214,7 +214,7 @@
                 v-for="related in selectedNode.related"
                 :key="related.id"
                 class="related-node"
-                @click="selectNode(related)"
+                @click="selectRelatedNode(related)"
               >
                 <span class="related-icon">{{ related.icon }}</span>
                 <span class="related-name">{{ related.name }}</span>
@@ -265,6 +265,21 @@ import { ref, computed, onMounted } from 'vue'
 import { useMemoryStore } from '@/stores/memory'
 import type { MemoryFile } from '@/api'
 
+type TreeMemoryFile = MemoryFile & {
+  expanded?: boolean
+  icon?: string
+  meta?: string
+}
+
+type SelectedMemoryNode = Omit<TreeMemoryFile, 'size' | 'connections' | 'related'> & {
+  createdAt: string
+  updatedAt: string
+  size: string | number
+  connections: number
+  preview: string
+  related: Array<{ id: string; name: string; icon?: string }>
+}
+
 // TreeNode 组件
 const TreeNode = {
   name: 'TreeNode',
@@ -301,27 +316,26 @@ const TreeNode = {
 }
 
 const memoryStore = useMemoryStore()
-const selectedNode = ref<any>(null)
+const selectedNode = ref<SelectedMemoryNode | null>(null)
 const graphLayout = ref('force')
 const showImportModal = ref(false)
 
 // 从 store 获取数据
 const stats = computed(() => memoryStore.stats)
-const fileTree = computed(() => memoryStore.fileTree)
+const fileTree = computed(() => memoryStore.fileTree as TreeMemoryFile[])
 const graphData = computed(() => memoryStore.graphData)
 const activities = computed(() => memoryStore.activities)
-const loading = computed(() => memoryStore.loading)
 
 // 计算存储概览数据
 const fileCount = computed(() => stats.value?.fileCount || 0)
 const nodeCount = computed(() => stats.value?.nodeCount || 0)
 const connectionsCount = computed(() => stats.value?.connectionCount || 0)
-const usedStorage = computed(() => stats.value?.usedStorage || '0 GB')
+const usedStorage = computed(() => stats.value?.usedStorage || stats.value?.storageUsedFormatted || '0 GB')
 const totalStorage = computed(() => stats.value?.totalStorage || '10 GB')
 const storagePercent = computed(() => {
   if (!stats.value) return 0
-  const used = parseFloat(stats.value.usedStorage) || 0
-  const total = parseFloat(stats.value.totalStorage) || 1
+  const used = parseFloat(usedStorage.value) || 0
+  const total = parseFloat(totalStorage.value) || 1
   return Math.round((used / total) * 100)
 })
 
@@ -337,9 +351,7 @@ const graphNodes = computed(() => {
 
 // 图谱连线（从 graphData 转换）
 const graphLinks = computed(() => {
-  return graphData.value.links.map((link: any, index: number) => {
-    const sourceNode = graphNodes.value.find((n: any) => n.id === link.source)
-    const targetNode = graphNodes.value.find((n: any) => n.id === link.target)
+  return graphData.value.links.map((link: any) => {
     const sourceIndex = graphNodes.value.findIndex((n: any) => n.id === link.source)
     const targetIndex = graphNodes.value.findIndex((n: any) => n.id === link.target)
 
@@ -359,8 +371,8 @@ const graphLinks = computed(() => {
 
 // 最近活动
 const recentActivities = computed(() => {
-  return activities.value.map((activity: any, index: number) => ({
-    id: index + 1,
+  return activities.value.map((activity: any) => ({
+    id: activity.id,
     type: activity.type || 'update',
     icon: getActivityIcon(activity.type),
     text: activity.description || activity.text,
@@ -427,39 +439,56 @@ const getNodePosition = (index: number, total: number) => {
   return { transform: `translate(${x}px, ${y}px)` }
 }
 
-const selectNode = (node: MemoryFile) => {
+const selectNode = (node: TreeMemoryFile) => {
   selectedNode.value = {
     ...node,
-    createdAt: (node as any).createdAt || new Date().toISOString(),
-    updatedAt: (node as any).updatedAt || new Date().toISOString(),
+    createdAt: node.createdAt || new Date().toISOString(),
+    updatedAt: node.updatedAt || new Date().toISOString(),
     size: node.size || '0 KB',
-    connections: (node as any).connections?.length || 0,
-    preview: (node as any).preview || '暂无预览内容',
-    related: (node as any).related || []
+    connections: node.connections?.length || 0,
+    preview: node.preview || '暂无预览内容',
+    related: node.related || []
   }
 }
 
-const toggleExpand = (node: MemoryFile) => {
+const selectRelatedNode = (node: { id: string; name: string; icon?: string }) => {
+  selectedNode.value = {
+    id: node.id,
+    name: node.name,
+    icon: node.icon,
+    path: '',
+    type: 'file',
+    mtime: new Date().toISOString(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    size: '0 KB',
+    connections: 0,
+    preview: '暂无预览内容',
+    related: []
+  }
+}
+
+const toggleExpand = (node: TreeMemoryFile) => {
   if (node.children) {
     node.expanded = !node.expanded
   }
 }
 
 const expandAll = () => {
-  const expandNode = (node: MemoryFile) => {
+  const expandNode = (node: TreeMemoryFile) => {
     if (node.children) {
       node.expanded = true
-      node.children.forEach(expandNode)
+      ;(node.children as TreeMemoryFile[]).forEach(expandNode)
     }
   }
   fileTree.value.forEach(expandNode)
 }
 
 const collapseAll = () => {
-  const collapseNode = (node: MemoryFile) => {
+  const collapseNode = (node: TreeMemoryFile) => {
     if (node.children) {
       node.expanded = false
-      node.children.forEach(collapseNode)
+      ;(node.children as TreeMemoryFile[]).forEach(collapseNode)
     }
   }
   fileTree.value.forEach(collapseNode)

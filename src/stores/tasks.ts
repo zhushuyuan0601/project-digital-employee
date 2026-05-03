@@ -1,157 +1,153 @@
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import type { Task, TaskStatus, TaskLog } from '@/types/task'
-
-// 生成唯一 ID
-function generateId(): string {
-  return `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-}
+import { taskApi } from '@/api/tasks'
+import type { CreateTaskRequest, Task, TaskOutput } from '@/types/task'
 
 export const useTasksStore = defineStore('tasks', () => {
-  // 状态
   const tasks = ref<Task[]>([])
-  const taskLogs = ref<TaskLog[]>([])
+  const selectedTaskId = ref<string>('')
+  const selectedTask = ref<Task | null>(null)
+  const outputs = ref<TaskOutput[]>([])
   const loading = ref(false)
-  const currentTaskId = ref<string | null>(null)
+  const error = ref<string | null>(null)
 
-  // 计算属性
-  const allTasks = computed(() => tasks.value)
-
-  const pendingTasks = computed(() =>
-    tasks.value.filter(task => task.status === 'pending')
+  const activeTasks = computed(() =>
+    tasks.value.filter(task => !['completed', 'cancelled'].includes(task.status))
   )
 
-  const inProgressTasks = computed(() =>
-    tasks.value.filter(task => task.status === 'in_progress')
-  )
-
-  const completedTasks = computed(() =>
-    tasks.value.filter(task => task.status === 'completed')
-  )
-
-  const failedTasks = computed(() =>
-    tasks.value.filter(task => task.status === 'failed')
-  )
-
-  const getCurrentTask = computed(() =>
-    tasks.value.find(task => task.id === currentTaskId.value)
-  )
-
-  const getTasksByAgent = computed(() => (agentId: string) =>
-    tasks.value.filter(task => task.assignedTo === agentId)
-  )
-
-  // 方法
-  function createTask(title: string, description: string): Task {
-    const newTask: Task = {
-      id: generateId(),
-      title,
-      description,
-      status: 'pending',
-      createdAt: Date.now(),
-      progress: 0
-    }
-    tasks.value.unshift(newTask)
-    return newTask
-  }
-
-  function updateTaskStatus(taskId: string, status: TaskStatus) {
-    const task = tasks.value.find(t => t.id === taskId)
-    if (task) {
-      task.status = status
-      if (status === 'in_progress') {
-        task.startedAt = Date.now()
-      } else if (status === 'completed') {
-        task.completedAt = Date.now()
-        task.progress = 100
-      } else if (status === 'failed') {
-        task.completedAt = Date.now()
+  async function fetchTasks() {
+    loading.value = true
+    error.value = null
+    try {
+      const response = await taskApi.listTasks({ limit: 100 })
+      tasks.value = response.tasks || []
+      if (!selectedTaskId.value && tasks.value.length > 0) {
+        selectedTaskId.value = tasks.value[0].id
       }
+      if (selectedTaskId.value) {
+        await fetchTask(selectedTaskId.value)
+      }
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : '加载任务失败'
+    } finally {
+      loading.value = false
     }
   }
 
-  function assignTask(taskId: string, agentId: string) {
-    const task = tasks.value.find(t => t.id === taskId)
-    if (task) {
-      task.assignedTo = agentId
-      addLog(taskId, agentId, 'assign', `任务分配给 ${agentId}`)
+  async function fetchTask(taskId: string) {
+    selectedTaskId.value = taskId
+    const response = await taskApi.getTask(taskId)
+    selectedTask.value = response.task
+    upsertTask(response.task)
+    return response.task
+  }
+
+  async function createTask(payload: CreateTaskRequest) {
+    const response = await taskApi.createTask(payload)
+    upsertTask(response.task)
+    selectedTaskId.value = response.task.id
+    selectedTask.value = response.task
+    return response
+  }
+
+  async function applyPlan(taskId: string, content: string | Record<string, unknown>) {
+    const response = await taskApi.applyPlan(taskId, content)
+    upsertTask(response.task)
+    selectedTask.value = response.task
+    return response
+  }
+
+  async function retrySubtask(subtaskId: string) {
+    const response = await taskApi.retrySubtask(subtaskId)
+    upsertTask(response.task)
+    selectedTask.value = response.task
+    return response
+  }
+
+  async function recordTaskDispatchResult(taskId: string, payload: { phase?: 'plan' | 'summary'; ok: boolean; error?: string; payload?: Record<string, unknown> }) {
+    const response = await taskApi.recordTaskDispatchResult(taskId, payload)
+    upsertTask(response.task)
+    if (selectedTaskId.value === response.task.id) selectedTask.value = response.task
+    return response.task
+  }
+
+  async function recordSubtaskDispatchResult(subtaskId: string, payload: { ok: boolean; error?: string; payload?: Record<string, unknown> }) {
+    const response = await taskApi.recordSubtaskDispatchResult(subtaskId, payload)
+    upsertTask(response.task)
+    if (selectedTaskId.value === response.task.id) selectedTask.value = response.task
+    return response.task
+  }
+
+  async function recordSubtaskAgentEvent(subtaskId: string, payload: { eventType: 'start' | 'assistant' | 'final' | 'done' | 'error'; message?: string; payload?: Record<string, unknown> }) {
+    const response = await taskApi.recordSubtaskAgentEvent(subtaskId, payload)
+    upsertTask(response.task)
+    if (selectedTaskId.value === response.task.id) selectedTask.value = response.task
+    return response.task
+  }
+
+  async function completeSubtask(subtaskId: string, resultSummary = '') {
+    const response = await taskApi.completeSubtask(subtaskId, resultSummary)
+    upsertTask(response.task)
+    selectedTask.value = response.task
+    return response.task
+  }
+
+  async function finalizeTask(taskId: string) {
+    const response = await taskApi.finalizeTask(taskId)
+    upsertTask(response.task)
+    selectedTask.value = response.task
+    return response
+  }
+
+  async function completeTask(taskId: string, summary = '') {
+    const response = await taskApi.completeTask(taskId, summary)
+    upsertTask(response.task)
+    selectedTask.value = response.task
+    return response
+  }
+
+  async function scanOutputs(taskId: string) {
+    const response = await taskApi.scanOutputs(taskId)
+    upsertTask(response.task)
+    selectedTask.value = response.task
+    return response.task
+  }
+
+  async function fetchOutputs(params: { taskId?: string; agentId?: string; status?: string } = {}) {
+    const response = await taskApi.listOutputs(params)
+    outputs.value = response.outputs || []
+    return outputs.value
+  }
+
+  function upsertTask(task: Task) {
+    const index = tasks.value.findIndex(item => item.id === task.id)
+    if (index >= 0) {
+      tasks.value[index] = { ...tasks.value[index], ...task }
+    } else {
+      tasks.value.unshift(task)
     }
-  }
-
-  function updateTaskProgress(taskId: string, progress: number) {
-    const task = tasks.value.find(t => t.id === taskId)
-    if (task) {
-      task.progress = Math.min(100, Math.max(0, progress))
-    }
-  }
-
-  function setTaskResult(taskId: string, result: string) {
-    const task = tasks.value.find(t => t.id === taskId)
-    if (task) {
-      task.result = result
-    }
-  }
-
-  function addLog(
-    taskId: string,
-    agentId: string,
-    action: 'assign' | 'start' | 'complete' | 'fail',
-    message: string
-  ) {
-    const log: TaskLog = {
-      id: generateId(),
-      taskId,
-      agentId,
-      action,
-      message,
-      timestamp: Date.now()
-    }
-    taskLogs.value.unshift(log)
-  }
-
-  function getTaskLogs(taskId: string) {
-    return taskLogs.value.filter(log => log.taskId === taskId)
-  }
-
-  function setCurrentTask(taskId: string | null) {
-    currentTaskId.value = taskId
-  }
-
-  function removeTask(taskId: string) {
-    const index = tasks.value.findIndex(t => t.id === taskId)
-    if (index !== -1) {
-      tasks.value.splice(index, 1)
-    }
-  }
-
-  function clearCompletedTasks() {
-    tasks.value = tasks.value.filter(task => task.status !== 'completed')
   }
 
   return {
-    // State
     tasks,
-    taskLogs,
+    activeTasks,
+    selectedTaskId,
+    selectedTask,
+    outputs,
     loading,
-    currentTaskId,
-    // Getters
-    allTasks,
-    pendingTasks,
-    inProgressTasks,
-    completedTasks,
-    failedTasks,
-    getCurrentTask,
-    getTasksByAgent,
-    // Actions
+    error,
+    fetchTasks,
+    fetchTask,
     createTask,
-    updateTaskStatus,
-    assignTask,
-    updateTaskProgress,
-    setTaskResult,
-    addLog,
-    getTaskLogs,
-    setCurrentTask,
-    removeTask,
-    clearCompletedTasks
+    applyPlan,
+    retrySubtask,
+    recordTaskDispatchResult,
+    recordSubtaskDispatchResult,
+    recordSubtaskAgentEvent,
+    completeSubtask,
+    finalizeTask,
+    completeTask,
+    scanOutputs,
+    fetchOutputs,
   }
 })

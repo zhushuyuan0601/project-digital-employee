@@ -254,17 +254,25 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useTokensStore } from '@/stores/tokens'
+import type { AgentCost } from '@/api'
+import { useNotification } from '@/composables/useNotification'
 
 const tokensStore = useTokensStore()
+const notification = useNotification()
 
 const timeRange = ref('week')
-const loading = computed(() => tokensStore.loading)
 
 // 使用 store 中的数据
 const stats = computed(() => tokensStore.stats)
 const chartData = computed(() => tokensStore.trend)
 const modelUsage = computed(() => tokensStore.modelUsage)
-const agentRanking = computed(() => tokensStore.agentCosts)
+const agentRanking = computed(() => {
+  const totalTokens = tokensStore.agentCosts.reduce((sum, agent) => sum + agent.tokens, 0) || 1
+  return tokensStore.agentCosts.map((agent): AgentCost & { percentage: number } => ({
+    ...agent,
+    percentage: Math.round((agent.tokens / totalTokens) * 100)
+  }))
+})
 const recentUsage = computed(() => tokensStore.recentUsage)
 
 // 格式化数字
@@ -330,7 +338,7 @@ const exportReport = async () => {
   try {
     await tokensStore.exportReport(timeRange.value)
   } catch (e: any) {
-    alert('导出失败：' + e.message)
+    notification.error('导出失败：' + e.message)
   }
 }
 

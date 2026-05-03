@@ -1,599 +1,352 @@
 <template>
-  <div class="task-center-2">
-    <!-- 顶部标题 -->
-    <div class="task-center__header">
-      <div class="task-center__title">
-        <h1>任务指挥中心 II</h1>
-        <p>多 Agent 实时协作平台 - Gateway 直连模式</p>
-      </div>
-      <div class="header-actions">
-        <div class="ai-status" :class="`status--${aiStatus}`">
-          <span class="status-dot"></span>
-          <span class="status-label">
-            {{ aiStatusText }}
-          </span>
-        </div>
-        <button type="button" class="btn btn-success btn-sm" @click="handleConnectAll" :disabled="allConnected">
-          <span class="btn-icon"><i class="fas fa-plug"></i></span>
-          全连
-        </button>
-        <button type="button" class="btn btn-danger btn-sm" @click="handleDisconnectAll" :disabled="!anyConnected">
-          <span class="btn-icon"><i class="fas fa-power-off"></i></span>
-          全断
-        </button>
-        <button type="button" class="btn btn-secondary btn-sm" @click="handleReset">
-          <span class="btn-icon"><i class="fas fa-trash-alt"></i></span>
-          重置
-        </button>
-      </div>
-    </div>
+  <div class="task-command-page">
+    <TaskControlBar
+      :ai-status="aiStatus"
+      :ai-status-text="aiStatusText"
+      :all-connected="allConnected"
+      :any-connected="anyConnected"
+      :is-light="isLight"
+      :timestamp-text="timestampText"
+      :current-user="currentUserLabel"
+      @toggle-theme="toggleTheme"
+      @connect-all="handleConnectAll"
+      @disconnect-all="handleDisconnectAll"
+      @reset="handleRefresh"
+    />
 
-    <!-- 主体内容：左右布局 -->
-    <div class="task-center__main">
-      <!-- 左侧：任务下达 -->
-      <div class="task-center__left">
-        <div class="task-input-section">
-          <div class="section-title">
-            <span class="title-icon"><i class="fas fa-edit"></i></span>
-            <span>下达任务</span>
+    <div class="task-command-layout">
+      <aside class="task-rail">
+        <section class="surface task-create">
+          <div class="surface-heading">
+            <div>
+              <p class="eyebrow">任务入口</p>
+              <h2>小呦任务分发</h2>
+            </div>
+            <span class="agent-pill">ceo</span>
           </div>
-
-          <div class="task-input-row">
-            <el-input
-              v-model="taskInput"
-              placeholder="输入任务内容，直接下发给小呦..."
-              type="textarea"
-              :rows="4"
-              class="task-input"
-              @keydown.ctrl.enter="sendTask"
-            />
-          </div>
-
-          <div class="send-btn-row">
-            <button
-              type="button"
-              class="btn btn-primary btn-lg send-btn-task"
-              @click="sendTask"
-              :disabled="!taskInput.trim() || !xiaomuConnected"
-            >
-              <span class="btn-icon"><i class="fas fa-paper-plane"></i></span>
-              下发任务
-            </button>
-            <span class="connection-hint" :class="{ connected: xiaomuConnected }">
-              <span class="hint-dot"></span>
-              {{ xiaomuConnected ? '小呦已连接' : '小呦未连接' }}
+          <button class="create-launcher" type="button" @click="createDialog = true">
+            <span>
+              <i class="ri-add-line"></i>
             </span>
-          </div>
-        </div>
+            <strong>新增协作任务</strong>
+          </button>
+        </section>
 
-        <!-- 系统提示 -->
-        <div class="info-panel">
-          <div class="info-title"><i class="fas fa-lightbulb"></i> 使用说明</div>
-          <div class="info-content">
-            <p>1. 在上方输入框中输入任务内容</p>
-            <p>2. 点击「下发任务」发送给小呦（项目统筹）</p>
-            <p>3. 小呦会协调其他 Agent 执行任务</p>
-            <p>4. 各 Agent 的输出和产出文件显示在右侧</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- 右侧：Agent 状态 + 执行日志 -->
-      <div class="task-center__right">
-        <div class="agents-list">
-          <!-- 小呦 -->
-          <div class="agent-card" :class="[`agent-card--xiaomu`, { 'is-busy': isAgentBusy('xiaomu') }]" @click="showAgentDetail('xiaomu')">
-            <div class="agent-card-top-accent"></div>
-            <div class="agent-card-content">
-              <div class="agent-card-header">
-                <div class="agent-profile">
-                  <div class="agent-avatar">
-                    <img :src="AGENT_CONFIG['xiaomu'].icon" alt="小呦" />
-                    <span class="avatar-status" :class="{ connected: agents['xiaomu']?.isConnected }"></span>
-                  </div>
-                  <div class="agent-info">
-                    <h3 class="agent-name">小呦</h3>
-                    <span class="agent-role-tag">项目统筹</span>
-                  </div>
-                </div>
-                <div class="status-badge" :class="`status--${getAgentStatus('xiaomu')}`">
-                  <i class="status-icon" :class="getAgentStatus('xiaomu') === 'busy' ? 'ri-loader-4-line ri-spin' : 'ri-checkbox-circle-line'"></i>
-                  <span class="status-text">{{ getAgentStatus('xiaomu') === 'busy' ? '工作中' : '空闲' }}</span>
-                </div>
-              </div>
-
-              <div class="agent-card-body">
-                <div class="info-section">
-                  <div class="section-title"><i class="ri-terminal-box-line"></i> 实时输出</div>
-                  <div class="terminal-log" :ref="(el) => logBoxRefs['xiaomu'] = el">
-                    <div v-if="agents['xiaomu']?.messages.length === 0" class="log-empty">
-                      <span class="empty-hint">暂无输出</span>
-                    </div>
-                    <div v-for="msg in agents['xiaomu']?.messages" :key="msg.id" class="terminal-line" :class="`type-${msg.role}`">
-                      <span class="prompt">&gt;</span>
-                      <span class="log-role">{{ msg.role === 'user' ? '用户' : msg.role === 'assistant' ? '小呦' : '系统' }}</span>
-                      <span class="log-content" v-html="renderMarkdown(msg.content)"></span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="agent-card-footer">
-                <div class="footer-metrics">
-                  <div class="footer-metric">
-                    <i class="ri-file-list-line"></i>
-                    <span class="metric-label">产出文件</span>
-                    <span class="metric-value">{{ getAgentFiles('xiaomu').length }}</span>
-                  </div>
-                  <div class="footer-metric">
-                    <i class="ri-message-3-line"></i>
-                    <span class="metric-label">消息数</span>
-                    <span class="metric-value">{{ agents['xiaomu']?.messages.length || 0 }}</span>
-                  </div>
-                </div>
-                <div class="action-btns">
-                  <button type="button" class="btn-icon-action" aria-label="查看详情" @click.stop="showAgentDetail('xiaomu')">
-                    <i class="ri-eye-line"></i>
-                  </button>
-                </div>
-              </div>
+        <section class="surface task-list">
+          <div class="surface-heading">
+            <div>
+              <p class="eyebrow">任务队列</p>
+              <h2>活跃任务</h2>
             </div>
+            <button class="icon-btn" type="button" title="刷新任务" @click="handleRefresh">
+              <i class="ri-refresh-line"></i>
+            </button>
           </div>
 
-          <!-- 研究员 -->
-          <div class="agent-card" :class="[`agent-card--xiaoyan`, { 'is-busy': isAgentBusy('xiaoyan') }]" @click="showAgentDetail('xiaoyan')">
-            <div class="agent-card-top-accent agent-card-top-accent--xiaoyan"></div>
-            <div class="agent-card-content">
-              <div class="agent-card-header">
-                <div class="agent-profile">
-                  <div class="agent-avatar">
-                    <img :src="AGENT_CONFIG['xiaoyan'].icon" alt="研究员" />
-                    <span class="avatar-status" :class="{ connected: agents['xiaoyan']?.isConnected }"></span>
-                  </div>
-                  <div class="agent-info">
-                    <h3 class="agent-name">研究员</h3>
-                    <span class="agent-role-tag">调研分析</span>
-                  </div>
-                </div>
-                <div class="status-badge" :class="`status--${getAgentStatus('xiaoyan')}`">
-                  <i class="status-icon" :class="getAgentStatus('xiaoyan') === 'busy' ? 'ri-loader-4-line ri-spin' : 'ri-checkbox-circle-line'"></i>
-                  <span class="status-text">{{ getAgentStatus('xiaoyan') === 'busy' ? '工作中' : '空闲' }}</span>
-                </div>
+          <div v-if="tasksStore.loading" class="quiet-state">任务加载中...</div>
+          <div v-else-if="tasks.length === 0" class="quiet-state">暂无任务，先创建一个协作目标。</div>
+          <template v-else>
+            <button
+              v-for="task in tasks"
+              :key="task.id"
+              type="button"
+              class="task-row"
+              :class="{ active: selectedTask?.id === task.id }"
+              @click="selectTask(task.id)"
+            >
+              <div class="task-row__top">
+                <strong>{{ task.title }}</strong>
+                <span class="status-chip" :class="`status-chip--${task.status}`">{{ statusText(task.status) }}</span>
               </div>
+              <div class="task-row__meta">
+                <span>{{ task.progress || 0 }}%</span>
+                <span>{{ task.completed_subtask_count || completedCount(task) }}/{{ task.subtask_count || task.subtasks?.length || 0 }} 子任务</span>
+                <span>{{ formatTime(task.updated_at) }}</span>
+              </div>
+              <div class="mini-progress">
+                <span :style="{ width: `${task.progress || 0}%` }"></span>
+              </div>
+            </button>
+          </template>
+        </section>
+      </aside>
 
-              <div class="agent-card-body">
-                <div class="info-section">
-                  <div class="section-title"><i class="ri-terminal-box-line"></i> 实时输出</div>
-                  <div class="terminal-log" :ref="(el) => logBoxRefs['xiaoyan'] = el">
-                    <div v-if="agents['xiaoyan']?.messages.length === 0" class="log-empty">
-                      <span class="empty-hint">暂无输出</span>
-                    </div>
-                    <div v-for="msg in agents['xiaoyan']?.messages" :key="msg.id" class="terminal-line" :class="`type-${msg.role}`">
-                      <span class="prompt">&gt;</span>
-                      <span class="log-role">{{ msg.role === 'user' ? '用户' : msg.role === 'assistant' ? '研究员' : '系统' }}</span>
-                      <span class="log-content" v-html="renderMarkdown(msg.content)"></span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="agent-card-footer">
-                <div class="footer-metrics">
-                  <div class="footer-metric">
-                    <i class="ri-file-list-line"></i>
-                    <span class="metric-label">产出文件</span>
-                    <span class="metric-value">{{ getAgentFiles('xiaoyan').length }}</span>
-                  </div>
-                  <div class="footer-metric">
-                    <i class="ri-message-3-line"></i>
-                    <span class="metric-label">消息数</span>
-                    <span class="metric-value">{{ agents['xiaoyan']?.messages.length || 0 }}</span>
-                  </div>
-                </div>
-                <div class="action-btns">
-                  <button type="button" class="btn-icon-action" aria-label="查看详情" @click.stop="showAgentDetail('xiaoyan')">
-                    <i class="ri-eye-line"></i>
-                  </button>
-                </div>
-              </div>
+      <main class="mission-stage">
+        <section v-if="selectedTask" class="surface mission-hero">
+          <div class="mission-hero__copy">
+            <p class="eyebrow">当前任务</p>
+            <h1>{{ selectedTask.title }}</h1>
+            <p>{{ selectedTask.description }}</p>
+          </div>
+          <div class="mission-hero__metrics">
+            <div>
+              <span>进度</span>
+              <strong>{{ selectedTask.progress || 0 }}%</strong>
+            </div>
+            <div>
+              <span>子任务</span>
+              <strong>{{ completedCount(selectedTask) }}/{{ selectedTask.subtasks.length }}</strong>
+            </div>
+            <div>
+              <span>成果</span>
+              <strong>{{ selectedTask.outputs.length }}</strong>
             </div>
           </div>
+        </section>
 
-          <!-- 产品经理 -->
-          <div class="agent-card" :class="[`agent-card--xiaochan`, { 'is-busy': isAgentBusy('xiaochan') }]" @click="showAgentDetail('xiaochan')">
-            <div class="agent-card-top-accent agent-card-top-accent--xiaochan"></div>
-            <div class="agent-card-content">
-              <div class="agent-card-header">
-                <div class="agent-profile">
-                  <div class="agent-avatar">
-                    <img :src="AGENT_CONFIG['xiaochan'].icon" alt="产品经理" />
-                    <span class="avatar-status" :class="{ connected: agents['xiaochan']?.isConnected }"></span>
-                  </div>
-                  <div class="agent-info">
-                    <h3 class="agent-name">产品经理</h3>
-                    <span class="agent-role-tag">产品设计</span>
-                  </div>
-                </div>
-                <div class="status-badge" :class="`status--${getAgentStatus('xiaochan')}`">
-                  <i class="status-icon" :class="getAgentStatus('xiaochan') === 'busy' ? 'ri-loader-4-line ri-spin' : 'ri-checkbox-circle-line'"></i>
-                  <span class="status-text">{{ getAgentStatus('xiaochan') === 'busy' ? '工作中' : '空闲' }}</span>
-                </div>
-              </div>
-
-              <div class="agent-card-body">
-                <div class="info-section">
-                  <div class="section-title"><i class="ri-terminal-box-line"></i> 实时输出</div>
-                  <div class="terminal-log" :ref="(el) => logBoxRefs['xiaochan'] = el">
-                    <div v-if="agents['xiaochan']?.messages.length === 0" class="log-empty">
-                      <span class="empty-hint">暂无输出</span>
-                    </div>
-                    <div v-for="msg in agents['xiaochan']?.messages" :key="msg.id" class="terminal-line" :class="`type-${msg.role}`">
-                      <span class="prompt">&gt;</span>
-                      <span class="log-role">{{ msg.role === 'user' ? '用户' : msg.role === 'assistant' ? '产品经理' : '系统' }}</span>
-                      <span class="log-content" v-html="renderMarkdown(msg.content)"></span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="agent-card-footer">
-                <div class="footer-metrics">
-                  <div class="footer-metric">
-                    <i class="ri-file-list-line"></i>
-                    <span class="metric-label">产出文件</span>
-                    <span class="metric-value">{{ getAgentFiles('xiaochan').length }}</span>
-                  </div>
-                  <div class="footer-metric">
-                    <i class="ri-message-3-line"></i>
-                    <span class="metric-label">消息数</span>
-                    <span class="metric-value">{{ agents['xiaochan']?.messages.length || 0 }}</span>
-                  </div>
-                </div>
-                <div class="action-btns">
-                  <button type="button" class="btn-icon-action" aria-label="查看详情" @click.stop="showAgentDetail('xiaochan')">
-                    <i class="ri-eye-line"></i>
-                  </button>
-                </div>
-              </div>
+        <section v-if="selectedTask?.subtasks.length" class="surface team-live">
+          <div class="surface-heading">
+            <div>
+              <p class="eyebrow">协作现场</p>
+              <h2>团队成员正在处理什么</h2>
             </div>
+            <span class="status-chip status-chip--running">{{ selectedTask.subtasks.length }} 名成员</span>
+          </div>
+          <div class="team-live-grid">
+            <button
+              v-for="subtask in selectedTask.subtasks"
+              :key="subtask.id"
+              class="member-card"
+              type="button"
+              @click="openMemberConversation(subtask)"
+            >
+              <div class="member-card__top">
+                <span class="member-avatar">{{ agentInitial(subtask.assigned_agent_id) }}</span>
+                <div>
+                  <strong>{{ agentName(subtask.assigned_agent_id) }}</strong>
+                  <small>{{ subtask.title }}</small>
+                </div>
+                <i class="ri-message-3-line"></i>
+              </div>
+              <div class="member-card__activity">
+                <span class="status-chip" :class="`status-chip--${subtask.status}`">{{ subtaskStatusText(subtask.status) }}</span>
+                <span>{{ subtask.progress || 0 }}%</span>
+              </div>
+              <p>{{ latestAgentMessage(subtask.assigned_agent_id) || subtask.description }}</p>
+            </button>
+          </div>
+        </section>
+
+        <section v-if="selectedTask && needsPlan(selectedTask)" class="surface plan-console">
+          <div class="surface-heading">
+            <div>
+              <p class="eyebrow">拆解计划</p>
+              <h2>应用小呦返回的 JSON</h2>
+            </div>
+            <button class="ghost-btn" type="button" @click="fillFromCoordinator">
+              <i class="ri-robot-line"></i>
+              使用小呦最新回复
+            </button>
+          </div>
+          <textarea
+            v-model="planDraft"
+            class="field field--plan"
+            placeholder="粘贴小呦返回的结构化 JSON，平台会校验并自动派发子任务。"
+          ></textarea>
+          <div class="plan-actions">
+            <span>状态：{{ statusText(selectedTask.status) }}</span>
+            <button class="primary-btn" type="button" :disabled="applyingPlan || !planDraft.trim()" @click="applyPlan">
+              <i class="ri-node-tree"></i>
+              {{ applyingPlan ? '应用中' : '校验并派发' }}
+            </button>
+          </div>
+        </section>
+
+        <section v-if="selectedTask" class="surface subtask-board">
+          <div class="surface-heading">
+            <div>
+              <p class="eyebrow">执行板</p>
+              <h2>子任务和负责人</h2>
+            </div>
+            <button class="scan-btn" type="button" :disabled="scanningOutputs" @click="scanOutputs">
+              <i class="ri-folder-search-line"></i>
+              {{ scanningOutputs ? '扫描中' : '扫描成果' }}
+            </button>
           </div>
 
-          <!-- 研发工程师 -->
-          <div class="agent-card" :class="[`agent-card--xiaokai`, { 'is-busy': isAgentBusy('xiaokai') }]" @click="showAgentDetail('xiaokai')">
-            <div class="agent-card-top-accent agent-card-top-accent--xiaokai"></div>
-            <div class="agent-card-content">
-              <div class="agent-card-header">
-                <div class="agent-profile">
-                  <div class="agent-avatar">
-                    <img :src="AGENT_CONFIG['xiaokai'].icon" alt="研发工程师" />
-                    <span class="avatar-status" :class="{ connected: agents['xiaokai']?.isConnected }"></span>
-                  </div>
-                  <div class="agent-info">
-                    <h3 class="agent-name">研发工程师</h3>
-                    <span class="agent-role-tag">技术开发</span>
-                  </div>
-                </div>
-                <div class="status-badge" :class="`status--${getAgentStatus('xiaokai')}`">
-                  <i class="status-icon" :class="getAgentStatus('xiaokai') === 'busy' ? 'ri-loader-4-line ri-spin' : 'ri-checkbox-circle-line'"></i>
-                  <span class="status-text">{{ getAgentStatus('xiaokai') === 'busy' ? '工作中' : '空闲' }}</span>
-                </div>
+          <div v-if="selectedTask.subtasks.length === 0" class="quiet-state">等待小呦拆解计划。</div>
+          <div v-else class="subtask-grid">
+            <article v-for="subtask in selectedTask.subtasks" :key="subtask.id" class="subtask-card">
+              <div class="subtask-card__head">
+                <span class="agent-token">{{ agentName(subtask.assigned_agent_id) }}</span>
+                <span class="status-chip" :class="`status-chip--${subtask.status}`">{{ subtaskStatusText(subtask.status) }}</span>
               </div>
-
-              <div class="agent-card-body">
-                <div class="info-section">
-                  <div class="section-title"><i class="ri-terminal-box-line"></i> 实时输出</div>
-                  <div class="terminal-log" :ref="(el) => logBoxRefs['xiaokai'] = el">
-                    <div v-if="agents['xiaokai']?.messages.length === 0" class="log-empty">
-                      <span class="empty-hint">暂无输出</span>
-                    </div>
-                    <div v-for="msg in agents['xiaokai']?.messages" :key="msg.id" class="terminal-line" :class="`type-${msg.role}`">
-                      <span class="prompt">&gt;</span>
-                      <span class="log-role">{{ msg.role === 'user' ? '用户' : msg.role === 'assistant' ? '研发工程师' : '系统' }}</span>
-                      <span class="log-content" v-html="renderMarkdown(msg.content)"></span>
-                    </div>
-                  </div>
-                </div>
+              <h3>{{ subtask.title }}</h3>
+              <p>{{ subtask.description }}</p>
+              <div class="subtask-progress">
+                <span :style="{ width: `${subtask.progress || 0}%` }"></span>
               </div>
-
-              <div class="agent-card-footer">
-                <div class="footer-metrics">
-                  <div class="footer-metric">
-                    <i class="ri-file-list-line"></i>
-                    <span class="metric-label">产出文件</span>
-                    <span class="metric-value">{{ getAgentFiles('xiaokai').length }}</span>
-                  </div>
-                  <div class="footer-metric">
-                    <i class="ri-message-3-line"></i>
-                    <span class="metric-label">消息数</span>
-                    <span class="metric-value">{{ agents['xiaokai']?.messages.length || 0 }}</span>
-                  </div>
-                </div>
-                <div class="action-btns">
-                  <button type="button" class="btn-icon-action" aria-label="查看详情" @click.stop="showAgentDetail('xiaokai')">
-                    <i class="ri-eye-line"></i>
-                  </button>
-                </div>
+              <div class="subtask-meta">
+                <span>{{ subtask.progress || 0 }}%</span>
+                <span>{{ subtask.session_key }}</span>
               </div>
-            </div>
-          </div>
-
-          <!-- 测试员 -->
-          <div class="agent-card" :class="[`agent-card--xiaoce`, { 'is-busy': isAgentBusy('xiaoce') }]" @click="showAgentDetail('xiaoce')">
-            <div class="agent-card-top-accent agent-card-top-accent--xiaoce"></div>
-            <div class="agent-card-content">
-              <div class="agent-card-header">
-                <div class="agent-profile">
-                  <div class="agent-avatar">
-                    <img :src="AGENT_CONFIG['xiaoce'].icon" alt="测试员" />
-                    <span class="avatar-status" :class="{ connected: agents['xiaoce']?.isConnected }"></span>
-                  </div>
-                  <div class="agent-info">
-                    <h3 class="agent-name">测试员</h3>
-                    <span class="agent-role-tag">质量检查</span>
-                  </div>
-                </div>
-                <div class="status-badge" :class="`status--${getAgentStatus('xiaoce')}`">
-                  <i class="status-icon" :class="getAgentStatus('xiaoce') === 'busy' ? 'ri-loader-4-line ri-spin' : 'ri-checkbox-circle-line'"></i>
-                  <span class="status-text">{{ getAgentStatus('xiaoce') === 'busy' ? '工作中' : '空闲' }}</span>
-                </div>
-              </div>
-
-              <div class="agent-card-body">
-                <div class="info-section">
-                  <div class="section-title"><i class="ri-terminal-box-line"></i> 实时输出</div>
-                  <div class="terminal-log" :ref="(el) => logBoxRefs['xiaoce'] = el">
-                    <div v-if="agents['xiaoce']?.messages.length === 0" class="log-empty">
-                      <span class="empty-hint">暂无输出</span>
-                    </div>
-                    <div v-for="msg in agents['xiaoce']?.messages" :key="msg.id" class="terminal-line" :class="`type-${msg.role}`">
-                      <span class="prompt">&gt;</span>
-                      <span class="log-role">{{ msg.role === 'user' ? '用户' : msg.role === 'assistant' ? '测试员' : '系统' }}</span>
-                      <span class="log-content" v-html="renderMarkdown(msg.content)"></span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div class="agent-card-footer">
-                <div class="footer-metrics">
-                  <div class="footer-metric">
-                    <i class="ri-file-list-line"></i>
-                    <span class="metric-label">产出文件</span>
-                    <span class="metric-value">{{ getAgentFiles('xiaoce').length }}</span>
-                  </div>
-                  <div class="footer-metric">
-                    <i class="ri-message-3-line"></i>
-                    <span class="metric-label">消息数</span>
-                    <span class="metric-value">{{ agents['xiaoce']?.messages.length || 0 }}</span>
-                  </div>
-                </div>
-                <div class="action-btns">
-                  <button type="button" class="btn-icon-action" aria-label="查看详情" @click.stop="showAgentDetail('xiaoce')">
-                    <i class="ri-eye-line"></i>
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- ClaudeCode 动态角色 -->
-          <div v-if="claudeCodeSessions.length > 0" class="agent-panel agent-panel--claudecode" :class="{ 'is-busy': claudeCodeSessions.some(s => s.active), 'is-expanded': expandedClaudeSession }">
-            <div class="agent-panel-header" @click="toggleClaudePanel">
-              <div class="agent-info-large">
-                <div class="agent-avatar-large">
-                  <div class="claude-avatar"><i class="fas fa-robot"></i></div>
-                  <span class="connection-dot connected"></span>
-                </div>
-                <div class="agent-details">
-                  <div class="agent-name-large">ClaudeCode</div>
-                  <div class="agent-role-large">代码执行者 · {{ claudeCodeSessions.length }} 个活跃会话</div>
-                </div>
-              </div>
-              <div class="status-badge status--busy">
-                <span class="status-dot"></span>
-                <span class="status-text">执行中</span>
-              </div>
-              <button type="button" aria-label="展开/收起 Claude 会话" class="expand-btn" @click.stop="toggleClaudePanel">
-                <span :class="{ 'expanded': expandedClaudeSession }">▼</span>
-              </button>
-            </div>
-
-            <!-- 会话选择器 -->
-            <div v-if="!expandedClaudeSession" class="claude-session-list">
-              <div v-for="session in claudeCodeSessions" :key="session.id"
-                   class="claude-session-item-mini"
-                   @click="selectClaudeSession(session)">
-                <div class="session-mini-header">
-                  <span class="session-model-badge">{{ session.model }}</span>
-                  <span class="session-name-mini">{{ getSessionDisplayName(session) }}</span>
-                </div>
-                <div class="session-mini-stats">
-                  <span><i class="fas fa-chart-bar"></i> {{ session.tokens }}</span>
-                  <span><i class="fas fa-comments"></i> {{ session.userMessages }}/{{ session.assistantMessages }}</span>
-                  <span><i class="fas fa-tools"></i> {{ session.toolUses }}</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- 展开的会话详情 -->
-            <div v-if="expandedClaudeSession && selectedClaudeSession" class="claude-session-expanded">
-              <!-- 会话信息栏 -->
-              <div class="session-info-bar">
-                <div class="session-info-left">
-                  <button type="button" aria-label="返回会话列表" class="back-btn" @click="expandedClaudeSession = false"><i class="fas fa-arrow-left"></i> 返回</button>
-                  <span class="session-model-badge">{{ selectedClaudeSession.model }}</span>
-                  <span class="session-path-mini">{{ selectedClaudeSession.workingDir }}</span>
-                </div>
-                <div class="session-info-right">
-                  <span class="token-stat">Token: {{ selectedClaudeSession.tokens }}</span>
-                  <span class="refresh-btn" @click="refreshClaudeTranscript"><i class="fas fa-sync-alt"></i></span>
-                </div>
-              </div>
-
-              <!-- 消息列表 -->
-              <div class="claude-messages-container" ref="claudeMessagesRef">
-                <div v-if="claudeTranscriptLoading" class="transcript-loading">
-                  <span>加载消息中...</span>
-                </div>
-                <div v-else-if="claudeTranscript.length === 0" class="transcript-empty">
-                  <span>暂无消息记录</span>
-                </div>
-                <div v-else class="transcript-messages">
-                  <div v-for="(msg, idx) in claudeTranscript" :key="idx"
-                       class="transcript-msg"
-                       :class="`msg-${msg.role}`">
-                    <div class="msg-role-badge">{{ getMessageRoleLabel(msg.role) }}</div>
-                    <div class="msg-content">
-                      <template v-for="(part, pidx) in msg.parts" :key="pidx">
-                        <div v-if="part.type === 'text'" class="msg-text">{{ part.text }}</div>
-                        <div v-else-if="part.type === 'thinking'" class="msg-thinking"><i class="fas fa-brain"></i> {{ part.thinking }}</div>
-                        <div v-else-if="part.type === 'tool_use'" class="msg-tool">
-                          <span class="tool-name"><i class="fas fa-tools"></i> {{ part.name }}</span>
-                          <pre class="tool-input">{{ part.input }}</pre>
-                        </div>
-                        <div v-else-if="part.type === 'tool_result'" class="msg-tool-result" :class="{ 'is-error': part.isError }">
-                          <pre>{{ part.content }}</pre>
-                        </div>
-                      </template>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- 发送消息输入框 -->
-              <div class="claude-input-area">
-                <input
-                  v-model="claudeInputMessage"
-                  type="text"
-                  placeholder="输入消息发送到 ClaudeCode..."
-                  class="claude-input"
-                  @keydown.enter="sendClaudeMessage"
-                  :disabled="claudeSending"
-                />
-                <button
-                  class="send-btn"
-                  @click="sendClaudeMessage"
-                  :disabled="!claudeInputMessage.trim() || claudeSending"
-                >
-                  {{ claudeSending ? '...' : '发送' }}
+              <p v-if="subtask.error" class="error-line">{{ subtask.error }}</p>
+              <div class="subtask-actions">
+                <button class="ghost-btn ghost-btn--compact" type="button" @click="retrySubtask(subtask.id)">
+                  <i class="ri-restart-line"></i>
+                  重试
+                </button>
+                <button class="ghost-btn ghost-btn--compact" type="button" :disabled="subtask.status === 'completed'" @click="completeSubtask(subtask.id)">
+                  <i class="ri-check-line"></i>
+                  标记完成
                 </button>
               </div>
-              <div v-if="claudeSendError" class="send-error">{{ claudeSendError }}</div>
-            </div>
+            </article>
+          </div>
+        </section>
 
-            <div v-if="!expandedClaudeSession" class="agent-panel-footer">
-              <span class="footer-label">活跃会话</span>
-              <span class="footer-value">{{ claudeCodeSessions.length }} 个 · 点击展开查看详情</span>
+        <section v-if="!selectedTask" class="surface empty-mission">
+          <i class="ri-route-line"></i>
+          <h2>选择或创建一个任务</h2>
+          <p>平台会把任务交给小呦拆解，再由系统派发给研究、产品、研发和测试 Agent。</p>
+        </section>
+      </main>
+
+      <aside class="task-inspector">
+        <section class="surface">
+          <div class="surface-heading">
+            <div>
+              <p class="eyebrow">事件流</p>
+              <h2>真实进度</h2>
             </div>
           </div>
-        </div>
-      </div>
+          <div v-if="!selectedTask?.events?.length" class="quiet-state">暂无事件。</div>
+          <div v-else ref="eventListRef" class="event-list">
+            <div v-for="event in selectedTask.events" :key="event.id" class="event-item">
+              <span class="event-dot"></span>
+              <div>
+                <strong>{{ event.type }}</strong>
+                <p>{{ event.message }}</p>
+                <small>{{ formatTime(event.created_at) }} · {{ event.agent_id || 'system' }}</small>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="surface outputs-panel">
+          <div class="surface-heading">
+            <div>
+              <p class="eyebrow">成果资产</p>
+              <h2>任务归属</h2>
+            </div>
+          </div>
+          <div v-if="!selectedTask?.outputs?.length" class="quiet-state">暂无绑定成果。</div>
+          <button
+            v-for="output in selectedTask?.outputs || []"
+            :key="output.id"
+            type="button"
+            class="output-row"
+            @click="previewOutput(output)"
+          >
+            <i :class="fileIcon(output.name)"></i>
+            <span>{{ output.name }}</span>
+            <small>{{ agentName(output.agent_id || '') }}</small>
+          </button>
+        </section>
+
+        <section v-if="selectedTask" class="surface review-panel">
+          <div class="surface-heading">
+            <div>
+              <p class="eyebrow">汇总验收</p>
+              <h2>小呦收口</h2>
+            </div>
+          </div>
+          <textarea v-model="summaryDraft" class="field field--textarea" placeholder="最终验收备注，可留空。"></textarea>
+          <div class="review-actions">
+            <button class="ghost-btn" type="button" :disabled="!canFinalize" @click="finalizeTask">
+              <i class="ri-file-list-3-line"></i>
+              请求汇总
+            </button>
+            <button class="primary-btn" type="button" :disabled="selectedTask.status === 'completed'" @click="completeTask">
+              <i class="ri-archive-line"></i>
+              验收归档
+            </button>
+          </div>
+          <p v-if="selectedTask.summary" class="summary-text">{{ selectedTask.summary }}</p>
+        </section>
+      </aside>
     </div>
 
-    <!-- Agent 详情对话框 -->
-    <el-dialog
-      v-model="showDetailDialog"
-      :title="selectedAgent ? getAgentName(selectedAgent) + ' - 工作详情' : ''"
-      width="800px"
-      :close-on-click-modal="true"
-      @close="handleDialogClose"
-    >
-      <div v-if="selectedAgent" class="agent-detail-dialog">
-        <!-- Agent 信息 -->
-        <div class="agent-info-header">
-          <div class="agent-avatar-large">
-            <img :src="getAgentIcon(selectedAgent)" :alt="getAgentName(selectedAgent)" />
-          </div>
-          <div class="agent-info-text">
-            <h4>{{ getAgentName(selectedAgent) }}</h4>
-            <p>{{ getAgentRole(selectedAgent) }}</p>
-          </div>
-          <div class="status-badge" :class="`status--${getAgentStatus(selectedAgent)}`">
-            <span class="status-dot"></span>
-            <span class="status-text">{{ getAgentStatus(selectedAgent) === 'busy' ? '工作中' : '空闲' }}</span>
-          </div>
-        </div>
-
-        <!-- 产出文件 -->
-        <div class="detail-section">
-          <div class="section-header-with-action">
-            <h5><i class="fas fa-folder-open"></i> 产出文件</h5>
-            <el-button size="small" type="primary" plain @click="refreshFiles" :loading="refreshing">
-              <el-icon><Refresh /></el-icon>
-            </el-button>
-          </div>
-          <div class="agent-files-list">
-            <div
-              v-for="file in getAgentFiles(selectedAgent)"
-              :key="file.name"
-              class="agent-file-item"
-            >
-              <span class="file-icon" :class="getFileIconClass(file.name)">{{ getFileIcon(file.name) }}</span>
-              <span class="file-name">{{ file.name }}</span>
-              <a v-if="file.gitUrl" :href="file.gitUrl" target="_blank" class="git-link" title="查看代码仓库">
-                <svg class="github-icon" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-                </svg>
-              </a>
-              <el-button size="small" type="primary" plain @click="previewFile(file)">预览</el-button>
-            </div>
-            <div v-if="getAgentFiles(selectedAgent).length === 0" class="empty-tip">
-              暂无产出文件
-            </div>
-          </div>
-        </div>
-
-        <!-- 执行日志 -->
-        <div class="detail-section">
-          <h5><i class="fas fa-scroll"></i> 执行日志</h5>
-          <div class="agent-logs-list">
-            <div
-              v-for="msg in agents[selectedAgent]?.messages"
-              :key="msg.id"
-              class="agent-log-item"
-              :class="`agent-log-item--${msg.role}`"
-            >
-              <span class="log-time">{{ formatTime(msg.timestamp) }}</span>
-              <span class="log-message">{{ msg.content }}</span>
-            </div>
-            <div v-if="!agents[selectedAgent]?.messages || agents[selectedAgent]?.messages.length === 0" class="empty-tip">
-              暂无执行日志
-            </div>
-          </div>
-        </div>
+    <el-dialog v-model="previewDialog" :title="previewFileItem?.name || '成果预览'" width="880px">
+      <div v-if="previewLoading" class="preview-state">加载中...</div>
+      <div v-else-if="previewError" class="preview-state preview-state--error">{{ previewError }}</div>
+      <div v-else-if="previewFileItem" class="preview-content">
+        <div v-if="previewType === 'markdown'" class="markdown-rendered" v-html="renderPreview()"></div>
+        <pre v-else>{{ previewContent }}</pre>
       </div>
     </el-dialog>
 
-    <!-- 文件预览对话框 -->
-    <el-dialog
-      v-model="showPreviewDialog"
-      :title="previewFileItem?.name || '文件预览'"
-      width="900px"
-      :close-on-click-modal="true"
-    >
-      <div class="file-preview-container">
-        <div v-if="previewLoading" class="preview-loading">
-          <el-icon class="is-loading"><Loading /></el-icon>
-          <span>加载文件中...</span>
+    <el-dialog v-model="createDialog" title="新增协作任务" width="560px" class="task-create-dialog">
+      <div class="dialog-create-form">
+        <div class="dialog-create-form__head">
+          <span class="agent-pill">ceo</span>
+          <p>任务会先交给小呦拆解，再由平台通过 WebSocket 派发给执行 Agent。</p>
         </div>
-        <div v-else-if="previewError" class="preview-error">
-          <el-icon><Warning /></el-icon>
-          <span>{{ previewError }}</span>
+        <label>
+          <span>任务标题</span>
+          <input v-model="createForm.title" class="field" placeholder="例如：东南亚智能客服上线方案" />
+        </label>
+        <label>
+          <span>任务描述</span>
+          <textarea v-model="createForm.description" class="field field--textarea" placeholder="描述目标、背景和期望交付物"></textarea>
+        </label>
+        <label>
+          <span>优先级</span>
+          <select v-model="createForm.priority" class="field field--select" aria-label="任务优先级">
+            <option value="normal">普通</option>
+            <option value="high">高优先级</option>
+            <option value="urgent">紧急</option>
+          </select>
+        </label>
+      </div>
+      <template #footer>
+        <div class="dialog-actions">
+          <button class="ghost-btn" type="button" :disabled="creating" @click="createDialog = false">取消</button>
+          <button class="primary-btn" type="button" :disabled="creating || !canCreateTask" @click="createTask">
+            <i class="ri-send-plane-line"></i>
+            {{ creating ? '创建中' : '创建任务' }}
+          </button>
         </div>
-        <div v-else class="preview-content">
-          <!-- Markdown 文件 -->
-          <div v-if="previewContent.type === 'markdown'" class="markdown-rendered" v-html="renderPreviewContent()"></div>
-          <!-- 文本文件 -->
-          <pre v-else-if="previewContent.type === 'text'" v-html="escapeHtml(previewContent.content)"></pre>
-          <!-- HTML 文件 -->
-          <div v-else-if="previewContent.type === 'html'" v-html="previewContent.content"></div>
-          <!-- 其他文件显示提示 -->
-          <div v-else class="preview-unsupported">
-            <el-icon><Document /></el-icon>
-            <p>该文件类型暂不支持在线预览</p>
-            <p class="hint">{{ previewFileItem?.name }}</p>
-            <el-button type="primary" @click="downloadFile">下载文件</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="memberDialog" width="760px" class="member-dialog">
+      <template #header>
+        <div class="member-dialog__header" v-if="activeMemberSubtask">
+          <span class="member-avatar">{{ agentInitial(activeMemberSubtask.assigned_agent_id) }}</span>
+          <div>
+            <p class="eyebrow">成员对话</p>
+            <h2>{{ agentName(activeMemberSubtask.assigned_agent_id) }} · {{ activeMemberSubtask.title }}</h2>
           </div>
+          <span class="status-chip" :class="`status-chip--${activeMemberSubtask.status}`">{{ subtaskStatusText(activeMemberSubtask.status) }}</span>
+        </div>
+      </template>
+      <div v-if="activeMemberSubtask" class="member-chat-shell">
+        <div class="member-task-context">
+          <strong>负责内容</strong>
+          <p>{{ activeMemberSubtask.description }}</p>
+        </div>
+        <div ref="memberChatListRef" class="member-chat-list">
+          <div v-if="activeMemberMessages.length === 0" class="quiet-state">暂无对话。派发任务后，这里会显示平台与 OpenClaw 的问答。</div>
+          <div
+            v-for="message in activeMemberMessages"
+            :key="message.id"
+            class="chat-bubble"
+            :class="`chat-bubble--${message.role}`"
+          >
+            <div class="chat-bubble__meta">
+              <span>{{ message.role === 'user' ? '平台' : message.role === 'assistant' ? agentName(activeMemberSubtask.assigned_agent_id) : '系统' }}</span>
+              <small>{{ formatMsTime(message.timestamp) }}</small>
+            </div>
+            <p>{{ message.content }}</p>
+          </div>
+        </div>
+        <div class="member-followup">
+          <textarea v-model="memberFollowupDraft" class="field" placeholder="继续追问这个成员，例如：请补充风险和文件路径"></textarea>
+          <button class="primary-btn" type="button" :disabled="sendingMemberFollowup || !memberFollowupDraft.trim()" @click="sendMemberFollowup">
+            <i class="ri-send-plane-line"></i>
+            {{ sendingMemberFollowup ? '发送中' : '发送追问' }}
+          </button>
         </div>
       </div>
     </el-dialog>
@@ -601,2681 +354,1587 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Loading, Warning, Document, Refresh } from '@element-plus/icons-vue'
-import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
-import { AGENT_CONFIG } from '@/simulation'
 import MarkdownIt from 'markdown-it'
+import TaskControlBar from '@/components/task-center/TaskControlBar.vue'
+import { useAuthStore } from '@/stores/auth'
+import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
+import { useTasksStore } from '@/stores/tasks'
+import { useThemeStore } from '@/stores/theme'
+import { extractChatText, extractText } from '@/utils/gateway-protocol'
+import type { Subtask, Task, TaskDispatch, TaskOutput, TaskStatus, SubtaskStatus } from '@/types/task'
 
+const tasksStore = useTasksStore()
 const multiAgentStore = useMultiAgentChatStore()
-const md = new MarkdownIt({
-  html: false, // 禁用HTML，防止XSS攻击
-  linkify: true,
-  typographer: true
+const themeStore = useThemeStore()
+const authStore = useAuthStore()
+const route = useRoute()
+const md = new MarkdownIt({ html: false, linkify: true, typographer: true })
+
+const createForm = reactive({
+  title: '',
+  description: '',
+  priority: 'normal',
 })
-
-// 连接状态
-const aiStatus = ref<'connected' | 'disconnected' | 'error'>('connected')
-const aiStatusText = computed(() => {
-  if (allConnected.value) return '所有 Agent 已连接'
-  if (anyConnected.value) return '部分 Agent 已连接'
-  return '未连接 Gateway'
-})
-
-// 连接状态计算
-const allConnected = computed(() => multiAgentStore.allConnected)
-const anyConnected = computed(() => multiAgentStore.anyConnected)
-
-// 任务输入
-const taskInput = ref('')
-const isSending = ref(false)
-
-// Agent 状态
-const agents = computed(() => multiAgentStore.agents)
-
-// 小呦状态
-const xiaomuConnected = computed(() => multiAgentStore.agents['xiaomu']?.isConnected || false)
-
-// 详情对话框
-const showDetailDialog = ref(false)
-const selectedAgent = ref<string | null>(null)
-
-// 文件预览对话框
-const showPreviewDialog = ref(false)
-const previewFileItem = ref<{ name: string; content: string; type: string } | null>(null)
+const createDialog = ref(false)
+const creating = ref(false)
+const applyingPlan = ref(false)
+const scanningOutputs = ref(false)
+const planDraft = ref('')
+const summaryDraft = ref('')
+const currentTimeMs = ref(Date.now())
+const previewDialog = ref(false)
+const previewFileItem = ref<TaskOutput | null>(null)
+const previewContent = ref('')
+const previewType = ref('')
 const previewLoading = ref(false)
 const previewError = ref<string | null>(null)
-const previewContent = ref<{ type: string; content: string }>({ type: '', content: '' })
+const memberDialog = ref(false)
+const activeMemberSubtaskId = ref('')
+const memberFollowupDraft = ref('')
+const sendingMemberFollowup = ref(false)
+const eventListRef = ref<HTMLElement | null>(null)
+const memberChatListRef = ref<HTMLElement | null>(null)
+let clockTimer: ReturnType<typeof setInterval> | null = null
+let refreshTimer: ReturnType<typeof setInterval> | null = null
+type PendingTaskDispatch = { taskId: string; subtaskId: string; agentId: string; sessionKey: string; sentAt: number }
+type GatewayTaskEventType = 'start' | 'assistant' | 'final' | 'done' | 'error'
+const pendingTaskDispatches = ref<Record<string, PendingTaskDispatch>>({})
+const recordedGatewayEvents = new Set<string>()
 
-// 日志引用 - 每个 Agent 一个
-const logBoxRefs = ref<Record<string, HTMLElement | null>>({
-  xiaomu: null,
-  xiaoyan: null,
-  xiaochan: null,
-  xiaokai: null,
-  xiaoce: null
+const tasks = computed(() => tasksStore.tasks)
+const selectedTask = computed(() => tasksStore.selectedTask)
+const isLight = computed(() => themeStore.isLight)
+const allConnected = computed(() => multiAgentStore.allConnected)
+const anyConnected = computed(() => multiAgentStore.anyConnected)
+const aiStatus = computed<'connected' | 'disconnected' | 'error'>(() => allConnected.value ? 'connected' : anyConnected.value ? 'error' : 'disconnected')
+const aiStatusText = computed(() => allConnected.value ? '全部 Agent 在线' : anyConnected.value ? '部分 Agent 在线' : 'Gateway 未连接')
+const timestampText = computed(() => new Date(currentTimeMs.value).toLocaleString('zh-CN', { hour12: false }))
+const currentUserLabel = computed(() => authStore.user?.username || 'Admin')
+const canCreateTask = computed(() => createForm.title.trim().length > 0 && createForm.description.trim().length > 0)
+const canFinalize = computed(() => !!selectedTask.value?.subtasks.length && selectedTask.value.subtasks.every(subtask => subtask.status === 'completed'))
+const activeMemberSubtask = computed(() => selectedTask.value?.subtasks.find(subtask => subtask.id === activeMemberSubtaskId.value) || null)
+const activeMemberMessages = computed(() => {
+  const agentId = activeMemberSubtask.value?.assigned_agent_id
+  if (!agentId) return []
+  return multiAgentStore.agents[agentId]?.messages || []
 })
 
-// 跟踪每个 Agent 日志框用户是否手动向上滚动过（true = 用户手动向上滚动了，false = 一直在底部）
-const userScrolledUp = ref<Record<string, boolean>>({
-  xiaomu: false,
-  xiaoyan: false,
-  xiaochan: false,
-  xiaokai: false,
-  xiaoce: false
-})
+const agentLabels: Record<string, string> = {
+  xiaomu: '小呦',
+  xiaoyan: '研究员',
+  xiaochan: '产品经理',
+  xiaokai: '研发工程师',
+  xiaoce: '测试员',
+}
 
-// 任务时间追踪
-const taskStartTime = ref<number>(0)
-const taskEndTime = ref<number>(0)
+const taskStatusLabels: Record<TaskStatus, string> = {
+  draft: '草稿',
+  planning: '拆解中',
+  dispatching: '派发中',
+  running: '执行中',
+  reviewing: '待验收',
+  completed: '已完成',
+  failed: '异常',
+  cancelled: '已取消',
+}
 
-// ClaudeCode 会话数据
-const claudeCodeSessions = ref<any[]>([])
-let claudeCodePollInterval: ReturnType<typeof setInterval> | null = null
+const subtaskStatusLabels: Record<SubtaskStatus, string> = {
+  pending: '待派发',
+  assigned: '已分配',
+  running: '执行中',
+  blocked: '阻塞',
+  completed: '完成',
+  failed: '失败',
+}
 
-// ClaudeCode 展开状态
-const expandedClaudeSession = ref(false)
-const selectedClaudeSession = ref<any>(null)
-const claudeTranscript = ref<any[]>([])
-const claudeTranscriptLoading = ref(false)
-const claudeInputMessage = ref('')
-const claudeSending = ref(false)
-const claudeSendError = ref('')
-const claudeMessagesRef = ref<HTMLElement | null>(null)
+async function handleRefresh() {
+  await tasksStore.fetchTasks()
+  if (tasksStore.error) ElMessage.error(tasksStore.error)
+}
 
-// 获取 ClaudeCode 会话
-const fetchClaudeCodeSessions = async () => {
+async function selectTask(taskId: string) {
   try {
-    const response = await fetch('/api/claude-sessions')
-    const data = await response.json()
-    if (data.success && data.sessions) {
-      claudeCodeSessions.value = data.sessions
-    }
+    await tasksStore.fetchTask(taskId)
+    planDraft.value = ''
+    summaryDraft.value = selectedTask.value?.summary || ''
   } catch (err) {
-    console.error('[TaskCenter2] Failed to fetch ClaudeCode sessions:', err)
+    ElMessage.error(err instanceof Error ? err.message : '加载任务失败')
   }
 }
 
-// 截断文本
-const truncateText = (text: string, maxLength: number) => {
-  if (!text) return ''
-  if (text.length <= maxLength) return text
-  return text.slice(0, maxLength) + '...'
-}
-
-// 获取会话显示名称
-const getSessionDisplayName = (session: any) => {
-  if (!session.workingDir) return session.key || session.id
-  const parts = session.workingDir.split('/')
-  return parts[parts.length - 1] || session.key
-}
-
-// 切换 ClaudeCode 面板展开状态
-const toggleClaudePanel = () => {
-  expandedClaudeSession.value = !expandedClaudeSession.value
-  if (!expandedClaudeSession.value) {
-    selectedClaudeSession.value = null
-    claudeTranscript.value = []
-  }
-}
-
-// 选择 ClaudeCode 会话
-const selectClaudeSession = async (session: any) => {
-  selectedClaudeSession.value = session
-  expandedClaudeSession.value = true
-  await fetchClaudeTranscript(session.id)
-}
-
-// 获取 ClaudeCode 会话消息记录
-const fetchClaudeTranscript = async (sessionId: string) => {
-  claudeTranscriptLoading.value = true
-  claudeTranscript.value = []
+async function createTask() {
+  if (!canCreateTask.value || creating.value) return
+  creating.value = true
   try {
-    const response = await fetch(`/api/claude-sessions/${sessionId}/transcript?limit=50`)
-    const data = await response.json()
-    if (data.success && data.messages) {
-      claudeTranscript.value = data.messages
-    }
-  } catch (err) {
-    console.error('[TaskCenter2] Failed to fetch transcript:', err)
-  } finally {
-    claudeTranscriptLoading.value = false
-  }
-}
-
-// 刷新消息记录
-const refreshClaudeTranscript = async () => {
-  if (selectedClaudeSession.value) {
-    await fetchClaudeTranscript(selectedClaudeSession.value.id)
-    // 滚动到底部
-    nextTick(() => {
-      if (claudeMessagesRef.value) {
-        claudeMessagesRef.value.scrollTop = claudeMessagesRef.value.scrollHeight
-      }
+    const response = await tasksStore.createTask({
+      title: createForm.title.trim(),
+      description: createForm.description.trim(),
+      priority: createForm.priority,
     })
-  }
-}
-
-// 发送消息到 ClaudeCode 会话
-const sendClaudeMessage = async () => {
-  if (!claudeInputMessage.value.trim() || !selectedClaudeSession.value || claudeSending.value) return
-
-  claudeSending.value = true
-  claudeSendError.value = ''
-
-  try {
-    const response = await fetch(`/api/claude-sessions/${selectedClaudeSession.value.id}/send`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: claudeInputMessage.value.trim() })
-    })
-
-    const data = await response.json()
-    if (data.success) {
-      claudeInputMessage.value = ''
-      // 延迟刷新消息记录
-      setTimeout(() => refreshClaudeTranscript(), 2000)
+    createForm.title = ''
+    createForm.description = ''
+    createDialog.value = false
+    const sent = await sendCoordinatorDispatch(response.dispatch, 'plan')
+    if (sent) {
+      ElMessage.success('任务已创建，并已通过 WebSocket 请求小呦拆解')
     } else {
-      claudeSendError.value = data.error || '发送失败'
+      ElMessage.warning('任务已创建，但 WebSocket 派发失败，请先全连 Agent 后重试')
     }
   } catch (err) {
-    claudeSendError.value = '发送失败，请稍后重试'
+    ElMessage.error(err instanceof Error ? err.message : '创建任务失败')
   } finally {
-    claudeSending.value = false
+    creating.value = false
   }
 }
 
-// 获取消息角色标签
-const getMessageRoleLabel = (role: string) => {
-  switch (role) {
-    case 'user': return '<i class="fas fa-user"></i> 用户'
-    case 'assistant': return '<i class="fas fa-robot"></i> Claude'
-    case 'system': return '<i class="fas fa-cog"></i> 系统'
-    default: return role
+function fillFromCoordinator() {
+  const coordinator = multiAgentStore.agents.xiaomu
+  const latest = [...(coordinator?.messages || [])].reverse().find(message => message.role === 'assistant' && message.content.includes('{'))
+  if (!latest) {
+    ElMessage.warning('没有找到小呦最近的 JSON 回复')
+    return
+  }
+  planDraft.value = latest.content
+}
+
+async function applyPlan() {
+  if (!selectedTask.value || !planDraft.value.trim()) return
+  applyingPlan.value = true
+  try {
+    const response = await tasksStore.applyPlan(selectedTask.value.id, planDraft.value)
+    planDraft.value = ''
+    const result = await sendSubtaskDispatches(response.dispatches || [])
+    if (result.failed > 0) {
+      ElMessage.warning(`计划已校验，${result.sent} 个子任务已派发，${result.failed} 个失败：${result.firstError}`)
+    } else {
+      ElMessage.success(`计划已校验，${result.sent} 个子任务已通过 WebSocket 派发`)
+    }
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '计划应用失败')
+    await tasksStore.fetchTask(selectedTask.value.id)
+  } finally {
+    applyingPlan.value = false
   }
 }
 
-// Agent 到角色 ID 的映射
-const AGENT_TO_ROLE_ID: Record<string, string> = {
-  xiaomu: 'ceo',
-  xiaoyan: 'researcher',
-  xiaochan: 'pm',
-  xiaokai: 'tech-lead',
-  xiaoce: 'team-qa'
-}
-
-// 渲染 Markdown
-const renderMarkdown = (content: string) => {
-  if (!content) return ''
-  return md.render(content)
-}
-
-// 渲染预览内容
-const renderPreviewContent = () => {
-  if (previewContent.value.type === 'markdown') {
-    return md.render(previewContent.value.content)
+async function retrySubtask(subtaskId: string) {
+  try {
+    const response = await tasksStore.retrySubtask(subtaskId)
+    const result = response.dispatch ? await sendSubtaskDispatch(response.dispatch) : { ok: false, error: '缺少派发指令' }
+    if (result.ok) {
+      ElMessage.success('子任务已通过 WebSocket 重新派发')
+    } else {
+      ElMessage.warning(`已生成重试指令，但 WebSocket 派发失败：${result.error}`)
+    }
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '重试失败')
   }
-  return previewContent.value.content
 }
 
-// 转义 HTML（用于纯文本显示）
-const escapeHtml = (content: string) => {
-  if (!content) return ''
-  return content
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
+async function completeSubtask(subtaskId: string) {
+  try {
+    await tasksStore.completeSubtask(subtaskId, '由操作员在任务指挥中心确认完成')
+    ElMessage.success('子任务已标记完成')
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '更新失败')
+  }
 }
 
-// 记录每个 Agent 最后收到消息的时间
-const lastMessageTime = ref<Record<string, number>>({
-  xiaomu: 0,
-  xiaoyan: 0,
-  xiaochan: 0,
-  xiaokai: 0,
-  xiaoce: 0
-})
-
-// 判断 Agent 是否忙碌（正在输出内容）
-const isAgentBusy = (agentId: string) => {
-  const agent = agents.value[agentId]
-  if (!agent) return false
-
-  // 检查是否在最近 2 秒内收到过消息
-  const lastTime = lastMessageTime.value[agentId] || 0
-  const now = Date.now()
-  if (now - lastTime < 2000) return true
-
-  return false
+async function scanOutputs() {
+  if (!selectedTask.value || scanningOutputs.value) return
+  scanningOutputs.value = true
+  try {
+    await tasksStore.scanOutputs(selectedTask.value.id)
+    ElMessage.success('成果扫描完成')
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '成果扫描失败')
+  } finally {
+    scanningOutputs.value = false
+  }
 }
 
-// 监听消息变化，更新最后消息时间
-watch(
-  () => agents.value,
-  () => {
-    const agentIds = ['xiaomu', 'xiaoyan', 'xiaochan', 'xiaokai', 'xiaoce']
-    agentIds.forEach(agentId => {
-      const agent = agents.value[agentId]
-      if (agent && agent.messages.length > 0) {
-        const lastMsg = agent.messages[agent.messages.length - 1]
-        lastMessageTime.value[agentId] = lastMsg.timestamp
-      }
+async function finalizeTask() {
+  if (!selectedTask.value) return
+  try {
+    const response = await tasksStore.finalizeTask(selectedTask.value.id)
+    const sent = await sendCoordinatorDispatch(response.dispatch, 'summary')
+    if (sent) {
+      ElMessage.success('已通过 WebSocket 请求小呦生成最终汇总')
+    } else {
+      ElMessage.warning('已生成汇总请求，但 WebSocket 派发失败，请先连接小呦后重试')
+    }
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '汇总请求失败')
+  }
+}
+
+async function completeTask() {
+  if (!selectedTask.value) return
+  const confirmed = await ElMessageBox.confirm('确认将该任务标记为验收完成并归档？', '验收归档', {
+    confirmButtonText: '归档',
+    cancelButtonText: '取消',
+    type: 'success',
+  }).catch(() => false)
+  if (!confirmed) return
+  try {
+    await tasksStore.completeTask(selectedTask.value.id, summaryDraft.value.trim())
+    ElMessage.success('任务已归档')
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '归档失败')
+  }
+}
+
+async function previewOutput(output: TaskOutput) {
+  previewFileItem.value = output
+  previewDialog.value = true
+  previewContent.value = ''
+  previewType.value = output.type
+  previewError.value = null
+  if (!output.path) {
+    previewContent.value = output.git_url || '该成果没有可预览路径'
+    return
+  }
+  previewLoading.value = true
+  try {
+    const data = await fetch(`/api/files/content?path=${encodeURIComponent(output.path)}`).then(res => res.json())
+    if (!data.success) throw new Error(data.error || '读取失败')
+    previewContent.value = data.content || ''
+  } catch (err) {
+    previewError.value = err instanceof Error ? err.message : '读取失败'
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+function renderPreview() {
+  return md.render(previewContent.value)
+}
+
+function completedCount(task: Task) {
+  return task.subtasks?.filter(subtask => subtask.status === 'completed').length || 0
+}
+
+function needsPlan(task: Task) {
+  return ['planning', 'dispatching', 'failed'].includes(task.status) && !task.subtasks.length
+}
+
+function statusText(status: TaskStatus) {
+  return taskStatusLabels[status] || status
+}
+
+function subtaskStatusText(status: SubtaskStatus) {
+  return subtaskStatusLabels[status] || status
+}
+
+function agentName(agentId: string) {
+  return agentLabels[agentId] || agentId || '未归属'
+}
+
+function agentInitial(agentId: string) {
+  return agentName(agentId).slice(0, 1)
+}
+
+function latestAgentMessage(agentId: string) {
+  const messages = multiAgentStore.agents[agentId]?.messages || []
+  return [...messages].reverse().find(message => message.role === 'assistant')?.content || ''
+}
+
+function openMemberConversation(subtask: Subtask) {
+  activeMemberSubtaskId.value = subtask.id
+  memberFollowupDraft.value = ''
+  memberDialog.value = true
+  multiAgentStore.selectAgent(subtask.assigned_agent_id)
+  scrollMemberChatToBottom()
+}
+
+async function sendMemberFollowup() {
+  const subtask = activeMemberSubtask.value
+  const task = selectedTask.value
+  if (!subtask || !task || !memberFollowupDraft.value.trim()) return
+  sendingMemberFollowup.value = true
+  const message = `[OpenClaw Task Follow-up]
+taskId: ${task.id}
+subTaskId: ${subtask.id}
+主任务: ${task.title}
+子任务: ${subtask.title}
+
+用户补充/追问:
+${memberFollowupDraft.value.trim()}
+
+请基于当前子任务上下文继续回答；如果产生文件，请继续写入任务目录。`
+  try {
+    multiAgentStore.sendMessage(subtask.assigned_agent_id, message)
+    rememberSubtaskDispatch({
+      taskId: task.id,
+      subtaskId: subtask.id,
+      agentId: subtask.assigned_agent_id,
+      sessionKey: subtask.session_key,
+      message,
     })
-  },
-  { deep: true, immediate: true }
-)
-
-// 获取 Agent 状态
-const getAgentStatus = (agentId: string) => {
-  const agent = agents.value[agentId]
-  if (!agent?.isConnected) return 'offline'
-  if (isAgentBusy(agentId)) return 'busy'
-  return 'idle'
-}
-
-// 从指定路径扫描产出文件（调用后端 API）
-const getAgentFiles = (agentId: string) => {
-  const roleId = AGENT_TO_ROLE_ID[agentId]
-  if (!roleId) return []
-
-  const now = new Date()
-  const dateStr = now.toISOString().split('T')[0]
-
-  // 使用缓存避免重复请求
-  const cacheKey = `files_${agentId}_${dateStr}`
-  const cached = fileCache.value[cacheKey]
-  if (cached && Date.now() - cached.timestamp < 5000) {
-    return cached.files
-  }
-
-  // 如果是首次请求，触发 API 调用并强制刷新
-  const agent = agents.value[agentId]
-  if (!agent || !agent.messages) return []
-
-  // 调用后端 API 获取文件列表 - 不传时间范围，避免过滤掉文件
-  const endTime = taskEndTime.value > 0 ? taskEndTime.value : Date.now()
-
-  fetch(`/api/files/role?roleId=${roleId}&date=${dateStr}`)
-    .then(res => res.json())
-    .then(data => {
-      if (data.success && data.files) {
-        // 更新缓存
-        fileCache.value[cacheKey] = {
-          files: data.files.map((f: any) => ({
-            name: f.name,
-            content: '',
-            type: f.type,
-            path: f.path,
-            icon: f.icon,
-            mtime: f.mtime,
-            mtimeStr: f.mtimeStr
-          })),
-          timestamp: Date.now()
-        }
-
-        // 如果是 tech-lead，添加 git URL
-        if (agentId === 'xiaokai' && data.gitUrl) {
-          const gitFile = fileCache.value[cacheKey].files.find((f: any) => f.name === '代码仓库')
-          if (!gitFile) {
-            fileCache.value[cacheKey].files.push({
-              name: '代码仓库',
-              content: '代码已提交到仓库',
-              type: 'code',
-              gitUrl: data.gitUrl
-            })
-          }
-        }
-
-        // 强制触发 Vue 响应式更新
-        forceRefresh.value++
-      } else if (data.files && data.files.length === 0) {
-        // 空文件列表也缓存
-        fileCache.value[cacheKey] = {
-          files: [],
-          timestamp: Date.now()
-        }
-        forceRefresh.value++
-      }
+    await tasksStore.recordSubtaskDispatchResult(subtask.id, {
+      ok: true,
+      payload: {
+        mode: 'member-followup',
+        agentId: subtask.assigned_agent_id,
+        sessionKey: subtask.session_key,
+      },
     })
-    .catch(err => {
-      console.error('[TaskCenter2] Fetch files error:', err)
-    })
-
-  // 返回缓存或空数组
-  return fileCache.value[cacheKey]?.files || []
-}
-
-// 文件缓存
-const fileCache = ref<Record<string, { files: any[]; timestamp: number }>>({})
-
-// 强制刷新计数器（用于触发 Vue 响应式更新）
-const forceRefresh = ref(0)
-
-// 刷新状态
-const refreshing = ref(false)
-
-// 刷新文件列表
-const refreshFiles = () => {
-  if (!selectedAgent.value) return
-
-  const roleId = AGENT_TO_ROLE_ID[selectedAgent.value]
-  if (!roleId) return
-
-  const dateStr = new Date().toISOString().split('T')[0]
-  const cacheKey = `files_${selectedAgent.value}_${dateStr}`
-
-  // 清除缓存
-  if (fileCache.value[cacheKey]) {
-    delete fileCache.value[cacheKey]
+    memberFollowupDraft.value = ''
+    ElMessage.success('已发送给成员')
+  } catch (err) {
+    ElMessage.error(toErrorMessage(err))
+  } finally {
+    sendingMemberFollowup.value = false
   }
-
-  refreshing.value = true
-
-  // 重新获取文件
-  fetch(`/api/files/role?roleId=${roleId}&date=${dateStr}`)
-    .then(res => res.json())
-    .then(data => {
-      refreshing.value = false
-      if (data.success && data.files) {
-        fileCache.value[cacheKey] = {
-          files: data.files.map((f: any) => ({
-            name: f.name,
-            content: '',
-            type: f.type,
-            path: f.path,
-            icon: f.icon,
-            mtime: f.mtime,
-            mtimeStr: f.mtimeStr
-          })),
-          timestamp: Date.now()
-        }
-        forceRefresh.value++
-        ElMessage.success(`已刷新 ${data.files.length} 个文件`)
-      }
-    })
-    .catch(err => {
-      refreshing.value = false
-      console.error('[TaskCenter2] Refresh files error:', err)
-      ElMessage.error('刷新失败：' + err.message)
-    })
 }
 
-// 获取 Agent 名称
-const getAgentName = (agentId: string) => {
-  const names: Record<string, string> = {
-    xiaomu: '小呦',
-    xiaoyan: '研究员',
-    xiaochan: '产品经理',
-    xiaokai: '研发工程师',
-    xiaoce: '测试员'
+function loadPendingTaskDispatches() {
+  try {
+    pendingTaskDispatches.value = JSON.parse(localStorage.getItem('task_center_pending_dispatches') || '{}')
+  } catch {
+    pendingTaskDispatches.value = {}
   }
-  return names[agentId] || agentId
 }
 
-// 获取 Agent 角色
-const getAgentRole = (agentId: string) => {
-  const roles: Record<string, string> = {
-    xiaomu: '项目统筹 · agent:ceo:main',
-    xiaoyan: '调研分析 · agent:researcher:main',
-    xiaochan: '产品设计 · agent:pm:main',
-    xiaokai: '技术开发 · agent:tech-lead:main',
-    xiaoce: '质量检查 · agent:team-qa:main'
+function persistPendingTaskDispatches() {
+  localStorage.setItem('task_center_pending_dispatches', JSON.stringify(pendingTaskDispatches.value))
+}
+
+function rememberSubtaskDispatch(dispatch: TaskDispatch) {
+  if (!dispatch.subtaskId) return
+  pendingTaskDispatches.value[dispatch.agentId] = {
+    taskId: dispatch.taskId,
+    subtaskId: dispatch.subtaskId,
+    agentId: dispatch.agentId,
+    sessionKey: dispatch.sessionKey,
+    sentAt: Date.now(),
   }
-  return roles[agentId] || ''
+  persistPendingTaskDispatches()
 }
 
-// 获取 Agent 图标
-const getAgentIcon = (agentId: string) => {
-  return AGENT_CONFIG[agentId]?.icon || ''
+function clearSubtaskDispatch(agentId: string, subtaskId: string) {
+  if (pendingTaskDispatches.value[agentId]?.subtaskId === subtaskId) {
+    delete pendingTaskDispatches.value[agentId]
+    persistPendingTaskDispatches()
+  }
 }
 
-// 获取文件图标
-const getFileIcon = (fileName: string) => {
-  if (/\.(md|markdown)$/i.test(fileName)) return '<i class="fas fa-file-code"></i>'
-  if (/\.txt$/i.test(fileName)) return '<i class="fas fa-file-alt"></i>'
-  if (/\.html?$/i.test(fileName)) return '<i class="fas fa-globe"></i>'
-  if (/\.docx?$/i.test(fileName)) return '<i class="fas fa-file-word"></i>'
-  if (/\.pptx?$/i.test(fileName)) return '<i class="fas fa-file-powerpoint"></i>'
-  if (/\.xlsx?$/i.test(fileName)) return '<i class="fas fa-file-excel"></i>'
-  return '<i class="fas fa-file"></i>'
+function loadedTasks() {
+  const map = new Map<string, Task>()
+  tasks.value.forEach(task => map.set(task.id, task))
+  if (selectedTask.value) map.set(selectedTask.value.id, selectedTask.value)
+  return [...map.values()]
 }
 
-// 获取文件图标样式类
-const getFileIconClass = (fileName: string) => {
-  if (/\.(md|markdown)$/i.test(fileName)) return 'icon-markdown'
-  if (/\.txt$/i.test(fileName)) return 'icon-text'
-  if (/\.html?$/i.test(fileName)) return 'icon-html'
-  if (/\.docx?$/i.test(fileName)) return 'icon-word'
-  if (/\.pptx?$/i.test(fileName)) return 'icon-ppt'
+function findSubtaskIdFromText(text: string) {
+  if (!text) return ''
+  const explicit = text.match(/subTaskId\s*[:：]\s*([a-zA-Z0-9_-]+)/i) || text.match(/subtaskId\s*[:：]\s*([a-zA-Z0-9_-]+)/i)
+  if (explicit?.[1]) return explicit[1]
+  for (const task of loadedTasks()) {
+    const match = task.subtasks?.find(subtask => text.includes(subtask.id))
+    if (match) return match.id
+  }
   return ''
 }
 
-// 显示 Agent 详情
-const showAgentDetail = (agentId: string) => {
-  selectedAgent.value = agentId
-  showDetailDialog.value = true
-}
-
-// 关闭对话框
-const handleDialogClose = () => {
-  selectedAgent.value = null
-}
-
-// 预览文件
-const previewFile = (file: { name: string; content: string; type: string; path?: string }) => {
-  previewFileItem.value = file
-  previewLoading.value = true
-  previewError.value = null
-  showPreviewDialog.value = true
-
-  // 如果有路径，从后端 API 获取文件内容
-  if (file.path) {
-    fetch(`/api/files/content?path=${encodeURIComponent(file.path)}`)
-      .then(res => res.json())
-      .then(data => {
-        previewLoading.value = false
-        if (data.success) {
-          previewContent.value = {
-            type: file.type,
-            content: data.content
-          }
-        } else {
-          previewError.value = data.error || '读取文件失败'
-        }
-      })
-      .catch(err => {
-        previewLoading.value = false
-        previewError.value = '读取文件失败：' + err.message
-      })
-  } else {
-    // 使用本地内容
-    previewLoading.value = false
-    previewContent.value = {
-      type: file.type,
-      content: file.content
+function findSubtaskForGatewayEvent(agentId: string, text: string) {
+  const textSubtaskId = findSubtaskIdFromText(text)
+  if (textSubtaskId) {
+    for (const task of loadedTasks()) {
+      const subtask = task.subtasks?.find(item => item.id === textSubtaskId)
+      if (subtask) return { task, subtaskId: subtask.id }
     }
   }
-}
 
-// 下载文件
-const downloadFile = () => {
-  if (!previewFileItem.value) return
-  const blob = new Blob([previewFileItem.value.content], { type: 'text/plain' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = previewFileItem.value.name
-  a.click()
-  URL.revokeObjectURL(url)
-  ElMessage.success('文件已开始下载')
-}
-
-// 发送任务给小呦
-const sendTask = async () => {
-  if (!taskInput.value.trim()) return
-  if (!xiaomuConnected.value) {
-    ElMessage.warning('小呦未连接，请先点击全连按钮')
-    return
+  const pending = pendingTaskDispatches.value[agentId]
+  if (pending) {
+    const task = loadedTasks().find(item => item.id === pending.taskId)
+    if (task?.subtasks?.some(subtask => subtask.id === pending.subtaskId)) {
+      return { task, subtaskId: pending.subtaskId }
+    }
+    return { task: selectedTask.value || undefined, subtaskId: pending.subtaskId }
   }
 
-  isSending.value = true
-  taskStartTime.value = Date.now()
-  taskEndTime.value = 0
+  const task = selectedTask.value
+  const active = task?.subtasks?.find(subtask =>
+    subtask.assigned_agent_id === agentId && ['assigned', 'running', 'blocked'].includes(subtask.status)
+  )
+  return active ? { task, subtaskId: active.id } : null
+}
 
-  const content = taskInput.value.trim()
+function gatewayEventKind(event: string, payload: any): GatewayTaskEventType | null {
+  if (event === 'chat') {
+    if (payload?.state === 'start') return 'start'
+    if (payload?.state === 'final' || payload?.state === 'committed') return 'final'
+    if (payload?.state === 'error') return 'error'
+    if (payload?.state === 'delta') return 'assistant'
+  }
+  if (event === 'agent') {
+    const stream = payload?.stream
+    const state = payload?.data?.state || payload?.phase
+    if (stream === 'assistant') return 'assistant'
+    if (stream === 'lifecycle' && state === 'start') return 'start'
+    if (stream === 'lifecycle' && (state === 'done' || state === 'final')) return 'done'
+    if (stream === 'lifecycle' && (state === 'error' || payload?.phase === 'error')) return 'error'
+  }
+  return null
+}
+
+function gatewayEventText(event: string, payload: any) {
+  if (event === 'chat') return extractChatText(payload) || payload?.errorMessage || ''
+  if (event === 'agent') return extractText(payload) || payload?.data?.error || payload?.error || ''
+  return ''
+}
+
+async function handleTaskGatewayEvent(agentId: string, event: string, payload: any) {
+  const eventType = gatewayEventKind(event, payload)
+  if (!eventType) return
+
+  const message = gatewayEventText(event, payload)
+  const match = findSubtaskForGatewayEvent(agentId, message)
+  if (!match?.subtaskId) return
+
+  const runId = payload?.runId || payload?.data?.runId || 'default'
+  const eventKey = `${match.subtaskId}:${eventType}:${runId}`
+  if (recordedGatewayEvents.has(eventKey)) return
+  recordedGatewayEvents.add(eventKey)
 
   try {
-    // 通过 WebSocket 发送消息（复用 multiAgentChat 连接）
-    multiAgentStore.sendMessage('xiaomu', content)
-
-    ElMessage.success('任务已发送给小呦')
-    taskInput.value = ''
+    await tasksStore.recordSubtaskAgentEvent(match.subtaskId, {
+      eventType,
+      message,
+      payload: {
+        gatewayEvent: event,
+        agentId,
+        runId,
+        state: payload?.state,
+        stream: payload?.stream,
+        phase: payload?.phase,
+      },
+    })
+    if (eventType === 'final' || eventType === 'done') {
+      clearSubtaskDispatch(agentId, match.subtaskId)
+      if (match.task?.id) {
+        tasksStore.scanOutputs(match.task.id).catch(() => {})
+        window.setTimeout(() => tasksStore.scanOutputs(match.task!.id).catch(() => {}), 2500)
+      }
+    }
   } catch (err) {
-    console.error('[TaskCenter2] Send message error:', err)
-    ElMessage.error('发送失败：' + (err instanceof Error ? err.message : '未知错误'))
-  } finally {
-    isSending.value = false
+    console.error('[TaskCenter2] 写入 Agent 任务事件失败:', err)
   }
 }
 
-// 全连
-const handleConnectAll = () => {
-  multiAgentStore.connectAll()
-  aiStatus.value = 'connected'
-  ElMessage.success('正在连接所有 Agent...')
+function toErrorMessage(err: unknown) {
+  return err instanceof Error ? err.message : String(err || 'WebSocket 派发失败')
 }
 
-// 全断
-const handleDisconnectAll = () => {
-  multiAgentStore.disconnectAll()
-  aiStatus.value = 'disconnected'
-  ElMessage.warning('已断开所有 Agent 连接')
-}
-
-// 重置 - 清空所有会话内容
-const handleReset = () => {
-  ElMessageBox.confirm('确定要清空所有 Agent 的会话内容吗？此操作不可恢复。', '确认重置', {
-    confirmButtonText: '确定',
-    cancelButtonText: '取消',
-    type: 'warning'
-  }).then(() => {
-    // 记录任务结束时间
-    taskEndTime.value = Date.now()
-
-    // 清空每个 Agent 的消息
-    const agentIds = ['xiaomu', 'xiaoyan', 'xiaochan', 'xiaokai', 'xiaoce']
-    agentIds.forEach(agentId => {
-      multiAgentStore.clearMessages(agentId)
-      lastMessageTime.value[agentId] = 0
+async function sendCoordinatorDispatch(dispatch: TaskDispatch | undefined, phase: 'plan' | 'summary') {
+  if (!dispatch) return false
+  try {
+    multiAgentStore.sendMessage(dispatch.agentId, dispatch.message)
+    await tasksStore.recordTaskDispatchResult(dispatch.taskId, {
+      phase,
+      ok: true,
+      payload: {
+        agentId: dispatch.agentId,
+        sessionKey: dispatch.sessionKey,
+        mode: 'frontend-websocket',
+      },
     })
-    ElMessage.success('已清空所有会话内容')
-  }).catch(() => {
-    // 用户取消
-  })
+    return true
+  } catch (err) {
+    const error = toErrorMessage(err)
+    try {
+      await tasksStore.recordTaskDispatchResult(dispatch.taskId, {
+        phase,
+        ok: false,
+        error,
+        payload: {
+          agentId: dispatch.agentId,
+          sessionKey: dispatch.sessionKey,
+          mode: 'frontend-websocket',
+        },
+      })
+    } catch (recordErr) {
+      console.error('[TaskCenter2] 记录任务派发失败:', recordErr)
+    }
+    return false
+  }
 }
 
-// 格式化时间
-const formatTime = (timestamp: number) => {
-  const date = new Date(timestamp)
-  return date.toLocaleTimeString('zh-CN', {
-    hour12: false,
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  })
+async function sendSubtaskDispatch(dispatch: TaskDispatch) {
+  try {
+    if (!dispatch.subtaskId) throw new Error('缺少子任务 ID')
+    multiAgentStore.sendMessage(dispatch.agentId, dispatch.message)
+    rememberSubtaskDispatch(dispatch)
+    await tasksStore.recordSubtaskDispatchResult(dispatch.subtaskId, {
+      ok: true,
+      payload: {
+        agentId: dispatch.agentId,
+        sessionKey: dispatch.sessionKey,
+        mode: 'frontend-websocket',
+      },
+    })
+    return { ok: true, error: '' }
+  } catch (err) {
+    const error = toErrorMessage(err)
+    if (dispatch.subtaskId) {
+      try {
+        await tasksStore.recordSubtaskDispatchResult(dispatch.subtaskId, {
+          ok: false,
+          error,
+          payload: {
+            agentId: dispatch.agentId,
+            sessionKey: dispatch.sessionKey,
+            mode: 'frontend-websocket',
+          },
+        })
+      } catch (recordErr) {
+        console.error('[TaskCenter2] 记录子任务派发失败:', recordErr)
+      }
+    }
+    return { ok: false, error }
+  }
 }
 
-// 监听消息变化，自动滚动日志（仅当用户没有向上滚动时才滚动）
+async function sendSubtaskDispatches(dispatches: TaskDispatch[] = []) {
+  let sent = 0
+  let failed = 0
+  let firstError = ''
+  for (const dispatch of dispatches) {
+    const result = await sendSubtaskDispatch(dispatch)
+    if (result.ok) {
+      sent += 1
+    } else {
+      failed += 1
+      if (!firstError) firstError = result.error
+    }
+  }
+  return { sent, failed, firstError }
+}
+
+function formatTime(value?: number | null) {
+  if (!value) return '--'
+  return new Date(value * 1000).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+function formatMsTime(value?: number | null) {
+  if (!value) return '--'
+  return new Date(value).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
+async function scrollToBottom(target: { value: HTMLElement | null }) {
+  await nextTick()
+  if (!target.value) return
+  target.value.scrollTop = target.value.scrollHeight
+}
+
+function scrollEventListToBottom() {
+  scrollToBottom(eventListRef)
+}
+
+function scrollMemberChatToBottom() {
+  scrollToBottom(memberChatListRef)
+}
+
+function fileIcon(name: string) {
+  if (/\.(md|markdown)$/i.test(name)) return 'ri-markdown-line'
+  if (/\.(js|ts|vue|py|json|sh)$/i.test(name)) return 'ri-code-s-slash-line'
+  if (/\.(docx?|txt)$/i.test(name)) return 'ri-file-text-line'
+  return 'ri-file-line'
+}
+
+function toggleTheme() {
+  themeStore.toggle()
+}
+
+function handleConnectAll() {
+  multiAgentStore.connectAll()
+  ElMessage.success('正在连接所有 Agent')
+}
+
+function handleDisconnectAll() {
+  multiAgentStore.disconnectAll()
+  ElMessage.warning('已断开所有 Agent')
+}
+
+onMounted(async () => {
+  authStore.restoreSession()
+  multiAgentStore.loadMessages()
+  loadPendingTaskDispatches()
+  multiAgentStore.addEventListener(handleTaskGatewayEvent)
+  await handleRefresh()
+  if (typeof route.query.task === 'string') {
+    await selectTask(route.query.task)
+  }
+  scrollEventListToBottom()
+  clockTimer = setInterval(() => {
+    currentTimeMs.value = Date.now()
+  }, 1000)
+  refreshTimer = setInterval(() => {
+    if (tasksStore.selectedTaskId) tasksStore.fetchTask(tasksStore.selectedTaskId).catch(() => {})
+  }, 10000)
+})
+
+onUnmounted(() => {
+  multiAgentStore.removeEventListener(handleTaskGatewayEvent)
+  if (clockTimer) clearInterval(clockTimer)
+  if (refreshTimer) clearInterval(refreshTimer)
+})
+
 watch(
   () => [
-    agents.value['xiaomu']?.messages.length,
-    agents.value['xiaoyan']?.messages.length,
-    agents.value['xiaochan']?.messages.length,
-    agents.value['xiaokai']?.messages.length
+    selectedTask.value?.id,
+    selectedTask.value?.events?.length,
+    selectedTask.value?.events?.at(-1)?.message,
   ],
-  () => {
-    nextTick(() => {
-      nextTick(() => {
-        // 滚动每个 Agent 的日志框到底部显示最新消息（仅当用户没有手动向上滚动时）
-        const agentIds = ['xiaomu', 'xiaoyan', 'xiaochan', 'xiaokai', 'xiaoce']
-        agentIds.forEach(agentId => {
-          const logBox = logBoxRefs.value[agentId]
-          if (logBox && !userScrolledUp.value[agentId]) {
-            logBox.scrollTop = logBox.scrollHeight // 滚动到底部
-          }
-        })
-      })
-    })
-  }
+  () => scrollEventListToBottom(),
+  { flush: 'post' }
 )
 
-// 监听每个 Agent 日志框的滚动事件，检测用户是否手动向上滚动
-onMounted(() => {
-  multiAgentStore.loadMessages()
-
-  // 初始化滚动到底部
-  nextTick(() => {
-    nextTick(() => {
-      const agentIds = ['xiaomu', 'xiaoyan', 'xiaochan', 'xiaokai', 'xiaoce']
-      agentIds.forEach(agentId => {
-        const logBox = logBoxRefs.value[agentId]
-        if (logBox) {
-          logBox.scrollTop = logBox.scrollHeight
-        }
-      })
-    })
-  })
-
-  // 添加滚动事件监听器
-  nextTick(() => {
-    const agentIds = ['xiaomu', 'xiaoyan', 'xiaochan', 'xiaokai', 'xiaoce']
-    agentIds.forEach(agentId => {
-      const logBox = logBoxRefs.value[agentId]
-      if (logBox) {
-        logBox.addEventListener('scroll', () => {
-          // 检测用户是否手动向上滚动（距离顶部有一定距离，且不在底部）
-          const threshold = 50
-          const isAtBottom = logBox.scrollHeight - logBox.scrollTop - logBox.clientHeight <= threshold
-          // 如果不在底部，说明用户向上滚动了
-          userScrolledUp.value[agentId] = !isAtBottom
-        })
-      }
-    })
-  })
-
-  // 初始获取 ClaudeCode 会话
-  fetchClaudeCodeSessions()
-
-  // 每 5 秒轮询一次 ClaudeCode 会话
-  claudeCodePollInterval = setInterval(fetchClaudeCodeSessions, 5000)
-})
-
-// 组件卸载时清理轮询
-onUnmounted(() => {
-  if (claudeCodePollInterval) {
-    clearInterval(claudeCodePollInterval)
-    claudeCodePollInterval = null
-  }
-})
+watch(
+  () => [
+    memberDialog.value,
+    activeMemberSubtaskId.value,
+    activeMemberMessages.value.length,
+    activeMemberMessages.value.at(-1)?.content,
+  ],
+  () => {
+    if (memberDialog.value) scrollMemberChatToBottom()
+  },
+  { flush: 'post' }
+)
 </script>
 
 <style scoped>
-.task-center-2 {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding-bottom: 40px;
-}
-
-.task-center__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--grid-line);
-}
-
-.task-center__title h1 {
-  font-size: 26px;
-  font-weight: 700;
-  color: var(--color-primary);
-  text-shadow: var(--text-shadow-primary);
-  letter-spacing: 0.1em;
-  margin: 0;
-}
-
-.task-center__title p {
-  font-size: 12px;
-  color: var(--color-secondary);
-  margin: 4px 0 0 0;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.ai-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border-radius: 4px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.ai-status.status--connected {
-  background: var(--badge-bg-idle);
-  border-color: var(--color-success);
-  color: var(--color-success);
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text-muted);
-}
-
-.ai-status.status--connected .status-dot {
-  background: var(--color-success);
-  box-shadow: 0 0 6px var(--color-success-glow);
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-.status-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.ai-status.status--connected .status-label {
-  color: var(--color-success);
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.6; transform: scale(0.95); }
-}
-
-.task-center__main {
+.task-command-page {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-}
-
-.task-center__left {
-  display: flex;
-  flex-direction: row;
-  gap: 20px;
-  align-items: flex-start;
-}
-
-.task-center__right {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-width: 0;
-}
-
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-  position: relative;
-  padding-left: 12px;
-}
-
-.section-title::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 4px;
-  height: 18px;
-  border-radius: 2px;
-  background: linear-gradient(180deg, var(--color-primary), var(--color-secondary));
-}
-
-.section-title .title-icon {
-  font-size: 20px;
-}
-
-.section-title span:last-child {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-primary);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-
-/* 任务输入区域 */
-.task-input-section {
-  flex: 1;
-  background: var(--bg-panel);
-  border: none;
-  border-radius: var(--radius-md);
-  padding: 12px 16px;
-  box-shadow: var(--shadow-sm);
-}
-
-.task-input-row {
-  margin-bottom: 10px;
-}
-
-.task-input :deep(.el-textarea__inner) {
-  background: var(--gray-900);
-  border: 1px solid var(--border-default);
-  color: var(--text-primary);
-  font-size: 13px;
-  line-height: 1.6;
-  resize: none;
-}
-
-.task-input :deep(.el-textarea__inner):focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px var(--color-primary-bg);
-}
-
-.send-btn-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.send-btn-task {
-  flex: 1;
-}
-
-.connection-hint {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-
-.connection-hint.connected {
-  color: var(--color-success);
-}
-
-.connection-hint .hint-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text-tertiary);
-}
-
-.connection-hint.connected .hint-dot {
-  background: var(--color-success);
-  box-shadow: 0 0 6px var(--color-success-glow);
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-/* 信息面板 */
-.info-panel {
-  width: min(280px, 100%);
-  flex-shrink: 0;
-  background: var(--bg-panel);
-  border: none;
-  border-radius: var(--radius-md);
-  padding: 12px 16px;
-  box-shadow: var(--shadow-sm);
-}
-
-.info-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 12px;
-}
-
-.info-content {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.info-content p {
-  margin: 0;
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-/* Agent 卡片 - 央视风格 */
-.agents-list {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
-}
-
-.agent-card {
-  position: relative;
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 24px;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(20px);
-  transition: all 0.3s ease;
-  cursor: pointer;
 }
 
-.agent-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.3);
-  border-color: rgba(52, 211, 153, 0.4);
+.task-command-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(280px, 330px) minmax(420px, 1fr) minmax(300px, 360px);
+  gap: 20px;
+  padding: 20px;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(38, 72, 110, 0.16), transparent 36%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent),
+    var(--bg-primary);
 }
 
-.agent-card.is-busy {
-  border-color: rgba(251, 146, 60, 0.4);
-  box-shadow: 0 0 30px rgba(251, 146, 60, 0.15);
-}
-
-/* 顶部装饰条 */
-.agent-card-top-accent {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 3px;
-  background: linear-gradient(90deg, var(--color-success), var(--color-cyan));
-  opacity: 0.6;
-}
-
-.agent-card-top-accent--xiaoyan {
-  background: linear-gradient(90deg, var(--agent-xiaoyan), var(--agent-xiaochan));
-}
-
-.agent-card-top-accent--xiaochan {
-  background: linear-gradient(90deg, var(--agent-xiaochan), var(--agent-xiaokai));
-}
-
-.agent-card-top-accent--xiaokai {
-  background: linear-gradient(90deg, var(--agent-xiaokai), var(--color-primary));
-}
-
-.agent-card-top-accent--xiaoce {
-  background: linear-gradient(90deg, var(--agent-xiaoce), var(--agent-xiaoyan));
-}
-
-.agent-card-content {
-  padding: 28px;
+.task-rail,
+.mission-stage,
+.task-inspector {
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  height: 100%;
-}
-
-/* 卡片头部 */
-.agent-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 20px;
-}
-
-.agent-profile {
-  display: flex;
   gap: 16px;
-  align-items: center;
+  overflow: auto;
 }
 
-.agent-avatar {
-  width: 64px;
-  height: 64px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 2px solid rgba(255, 255, 255, 0.1);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  position: relative;
-  flex-shrink: 0;
-}
-
-.agent-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 14px;
-}
-
-.avatar-status {
-  position: absolute;
-  bottom: -4px;
-  right: -4px;
-  width: 16px;
-  height: 16px;
-  background: var(--text-tertiary);
-  border: 3px solid var(--bg-panel);
-  border-radius: 50%;
-  transition: all 0.3s ease;
-}
-
-.avatar-status.connected {
-  background: var(--color-success);
-  box-shadow: 0 0 10px var(--color-success-glow);
-  animation: pulse-avatar 2s infinite;
-}
-
-@keyframes pulse-avatar {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.1); opacity: 0.8; }
-}
-
-.agent-info {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.agent-name {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0;
-  letter-spacing: 0.5px;
-}
-
-.agent-role-tag {
-  font-size: 12px;
-  color: var(--color-cyan);
-  font-weight: 500;
-  background: rgba(34, 211, 238, 0.1);
-  padding: 4px 10px;
+.surface {
+  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
-  display: inline-block;
-  width: fit-content;
+  padding: 16px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.16);
 }
 
-/* 状态徽章 */
-.status-badge {
+.task-create {
+  padding-bottom: 14px;
+}
+
+.surface-heading {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-radius: 12px;
-  font-size: 13px;
-  font-weight: 500;
-  transition: all 0.2s ease;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
-.status-badge.status--idle {
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--text-secondary);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+.surface-heading h2,
+.mission-hero h1,
+.subtask-card h3 {
+  margin: 0;
+  color: var(--text-primary);
+  letter-spacing: 0;
 }
 
-.status-badge.status--busy {
-  background: var(--badge-bg-busy);
-  color: var(--color-accent);
-  border: 1px solid rgba(251, 146, 60, 0.3);
-}
-
-.status-icon {
+.surface-heading h2 {
   font-size: 16px;
 }
 
-.status-badge.status--idle .status-icon {
-  color: var(--color-success);
+.eyebrow {
+  margin: 0 0 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-tertiary);
 }
 
-.status-badge.status--busy .status-icon {
-  color: var(--color-accent);
+.field {
+  width: 100%;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  padding: 10px 12px;
+  font: inherit;
+  outline: none;
 }
 
-.status-text {
+.field + .field {
+  margin-top: 10px;
+}
+
+.field:focus {
+  border-color: var(--color-primary);
+}
+
+.field--textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.field--plan {
+  min-height: 220px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  resize: vertical;
+}
+
+.field--select {
+  min-width: 110px;
+}
+
+.create-launcher {
+  width: 100%;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.38);
+  border-radius: 8px;
+  min-height: 54px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-primary);
+  background: rgba(var(--color-primary-rgb), 0.09);
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.create-launcher:hover {
+  transform: translateY(-1px);
+  border-color: rgba(var(--color-primary-rgb), 0.7);
+  background: rgba(var(--color-primary-rgb), 0.14);
+}
+
+.create-launcher span {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #08111f;
+  background: var(--color-primary);
+  flex: 0 0 auto;
+}
+
+.create-launcher strong {
+  font-size: 14px;
+  letter-spacing: 0;
+}
+
+.create-actions,
+.plan-actions,
+.review-actions,
+.subtask-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.primary-btn,
+.ghost-btn,
+.scan-btn,
+.icon-btn {
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  min-height: 34px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  cursor: pointer;
+  color: var(--text-primary);
+  background: var(--bg-card);
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.primary-btn {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #08111f;
+  font-weight: 700;
+}
+
+.scan-btn {
+  min-height: 38px;
+  padding: 0 15px;
+  border-color: rgba(var(--color-primary-rgb), 0.76);
+  background:
+    linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.28), rgba(var(--color-primary-rgb), 0.12)),
+    var(--bg-card);
+  color: var(--color-primary);
+  font-weight: 800;
+  box-shadow: 0 0 0 1px rgba(var(--color-primary-rgb), 0.18), 0 10px 24px rgba(var(--color-primary-rgb), 0.16);
+}
+
+.scan-btn:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #08111f;
+}
+
+.scan-btn i {
+  font-size: 17px;
+}
+
+.ghost-btn:hover,
+.icon-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.primary-btn:disabled,
+.ghost-btn:disabled,
+.scan-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.dialog-create-form {
+  display: grid;
+  gap: 14px;
+}
+
+.dialog-create-form__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 4px;
+}
+
+.dialog-create-form__head p {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.dialog-create-form label {
+  display: grid;
+  gap: 7px;
+}
+
+.dialog-create-form label > span {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+:deep(.task-create-dialog .el-dialog) {
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-panel);
+}
+
+:deep(.task-create-dialog .el-dialog__title) {
+  color: var(--text-primary);
+}
+
+:deep(.task-create-dialog .el-dialog__body) {
+  padding-top: 10px;
+}
+
+.ghost-btn--compact {
+  min-height: 30px;
+  padding: 0 9px;
+  font-size: 12px;
+}
+
+.icon-btn {
+  width: 34px;
+  padding: 0;
+}
+
+.agent-pill,
+.agent-token,
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  min-height: 24px;
+  padding: 0 10px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
-/* 卡片主体 */
-.agent-card-body {
-  flex: 1;
-  min-height: 0;
-  margin-bottom: 16px;
+.agent-pill,
+.agent-token {
+  color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb), 0.12);
 }
 
-.info-section {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 16px;
-  padding: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.03);
-  display: flex;
-  flex-direction: column;
-  height: 100%;
+.task-row {
+  width: 100%;
+  display: block;
+  text-align: left;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  padding: 12px;
+  cursor: pointer;
 }
 
-.section-title {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-bottom: 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
+.task-row + .task-row {
+  margin-top: 10px;
 }
 
-.section-title i {
-  color: var(--color-cyan);
-  font-size: 14px;
+.task-row.active {
+  background: rgba(var(--color-primary-rgb), 0.1);
+  border-color: rgba(var(--color-primary-rgb), 0.55);
 }
 
-.terminal-log {
-  flex: 1;
-  max-height: 140px;
-  overflow-y: auto;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.8;
-}
-
-.terminal-log::-webkit-scrollbar {
-  width: 4px;
-}
-
-.terminal-log::-webkit-scrollbar-thumb {
-  background: var(--gray-700);
-  border-radius: 2px;
-}
-
-.terminal-line {
+.task-row__top {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 8px;
-  color: var(--text-secondary);
-}
-
-.terminal-line:last-child {
-  margin-bottom: 0;
-}
-
-.terminal-line.type-user {
-  color: var(--color-blue);
-}
-
-.terminal-line.type-assistant {
-  color: var(--text-primary);
-}
-
-.prompt {
-  color: var(--color-success);
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.log-role {
-  font-weight: 600;
-  flex-shrink: 0;
-  min-width: 50px;
-  opacity: 0.8;
-}
-
-.log-content {
-  flex: 1;
-  word-break: break-word;
-  line-height: 1.6;
-}
-
-.log-empty {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 60px;
-  color: var(--text-tertiary);
-  font-size: 13px;
-}
-
-/* 卡片底部 */
-.agent-card-footer {
-  display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.footer-metrics {
-  display: flex;
-  gap: 20px;
-}
-
-.footer-metric {
-  display: flex;
-  align-items: center;
   gap: 8px;
-  font-size: 12px;
-  color: var(--text-secondary);
 }
 
-.footer-metric i {
-  color: var(--color-cyan);
+.task-row__top strong {
   font-size: 14px;
+  line-height: 1.35;
 }
 
-.metric-label {
-  font-size: 11px;
-  opacity: 0.7;
-}
-
-.metric-value {
-  font-size: 16px;
-  font-weight: 700;
-  font-family: var(--font-mono);
-  color: var(--text-primary);
-}
-
-.action-btns {
+.task-row__meta,
+.subtask-meta {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-}
-
-.btn-icon-action {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  color: var(--text-primary);
-  font-size: 18px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-icon-action:hover {
-  background: rgba(34, 211, 238, 0.15);
-  border-color: var(--color-cyan);
-  color: var(--color-cyan);
-}
-
-/* Agent 列表 */
-.agents-list {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-}
-
-/* 超大屏幕 */
-@media (min-width: 1280px) {
-  .agents-list {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-/* 大屏幕 */
-@media (max-width: 1024px) {
-  .agents-list {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-/* 中等屏幕 */
-@media (max-width: 768px) {
-  .task-center__header {
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .task-center__left {
-    flex-direction: column;
-  }
-
-  .info-panel {
-    width: 100%;
-  }
-
-  .task-center__title h1 {
-    font-size: 22px;
-  }
-}
-
-/* 小屏幕 */
-@media (max-width: 640px) {
-  .task-center__title h1 {
-    font-size: 20px;
-  }
-
-  .agent-log-box {
-    height: 120px;
-  }
-
-  .agents-list {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* 触摸设备优化 */
-@media (hover: none) and (pointer: coarse) {
-  .agent-card {
-    border-radius: 28px;
-  }
-
-  .btn {
-    min-height: 44px;
-  }
-}
-
-/* 超大屏幕 */
-@media (min-width: 1280px) {
-  .agents-list {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-.log-content {
-  word-break: break-word;
-}
-
-.log-content :deep(p) {
-  margin: 4px 0;
-}
-
-.log-content :deep(pre) {
-  background: var(--gray-900);
-  border: none;
-  padding: 8px 12px;
-  border-radius: 6px;
-  overflow-x: auto;
-  margin: 6px 0;
-}
-
-.log-content :deep(code) {
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-
-.log-content :deep(strong) {
-  color: var(--color-primary);
-}
-
-/* 正在输入指示器 */
-.log-item.typing-indicator {
-  border-left-color: var(--color-primary);
-  background: var(--color-primary-bg);
-}
-
-.typing-content {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.typing-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-primary);
-  animation: typing-bounce 1.4s ease-in-out infinite;
-}
-
-.typing-dot:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.typing-dot:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-.typing-text {
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin-left: 8px;
-}
-
-@keyframes typing-bounce {
-  0%, 40%, 100% {
-    transform: translateY(0);
-    opacity: 0.5;
-  }
-  20% {
-    transform: translateY(-4px);
-    opacity: 1;
-  }
-}
-
-/* Agent 面板底部 */
-.agent-panel-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 16px;
-  background: var(--bg-surface);
-  border-top: 1px solid var(--border-subtle);
-  font-size: 11px;
-}
-
-.footer-label {
+  margin-top: 8px;
   color: var(--text-tertiary);
-}
-
-.footer-value {
-  color: var(--color-primary);
-  font-weight: 600;
-  font-family: var(--font-mono);
-}
-
-/* Agent 详情对话框 */
-.agent-detail-dialog {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.section-header-with-action {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.section-header-with-action h5 {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.section-header-with-action .el-button {
-  padding: 4px 8px;
-}
-
-.agent-info-header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 16px;
-  background: var(--bg-surface);
-  border-radius: var(--radius-md);
-  border: none;
-  box-shadow: var(--shadow-sm);
-}
-
-.agent-info-header .agent-avatar-large {
-  width: 60px;
-  height: 60px;
-}
-
-.agent-info-header .agent-avatar-large img {
-  border-radius: 50%;
-}
-
-.agent-info-text {
-  flex: 1;
-}
-
-.agent-info-text h4 {
-  margin: 0 0 4px 0;
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.agent-info-text p {
-  margin: 0;
   font-size: 12px;
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
 }
 
-.detail-section {
-  display: flex;
-  flex-direction: column;
+.mini-progress,
+.subtask-progress {
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--bg-card);
+  margin-top: 10px;
+}
+
+.mini-progress span,
+.subtask-progress span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+}
+
+.status-chip {
+  color: var(--text-secondary);
+  background: var(--bg-card);
+}
+
+.status-chip--running,
+.status-chip--reviewing {
+  color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb), 0.12);
+}
+
+.status-chip--completed {
+  color: var(--color-success);
+  background: rgba(46, 160, 67, 0.14);
+}
+
+.status-chip--failed,
+.status-chip--blocked {
+  color: var(--color-error);
+  background: rgba(220, 38, 38, 0.12);
+}
+
+.status-chip--planning,
+.status-chip--dispatching,
+.status-chip--assigned {
+  color: var(--color-warning);
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.mission-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: start;
+}
+
+.mission-hero h1 {
+  font-size: 26px;
+}
+
+.mission-hero p {
+  color: var(--text-secondary);
+  margin: 10px 0 0;
+  line-height: 1.65;
+}
+
+.mission-hero__metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 88px);
+  gap: 10px;
+}
+
+.mission-hero__metrics div {
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--bg-card);
+}
+
+.mission-hero__metrics span {
+  display: block;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.mission-hero__metrics strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-primary);
+  font-size: 20px;
+}
+
+.team-live-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 12px;
 }
 
-.detail-section h5 {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
+.member-card {
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--bg-card) 88%, var(--color-primary) 5%);
   color: var(--text-primary);
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.agent-files-list {
+  text-align: left;
+  cursor: pointer;
+  min-height: 154px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.agent-file-item {
-  display: flex;
-  align-items: center;
   gap: 10px;
-  padding: 10px 12px;
-  background: var(--bg-surface);
-  border: none;
-  border-radius: 6px;  /* Linear 精准几何 */
-  box-shadow: var(--shadow-sm);
-  transition: all 0.2s;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
 }
 
-.agent-file-item:hover {
-  box-shadow: var(--shadow-md), 0 0 0 1px var(--color-primary-light);
+.member-card:hover {
   transform: translateY(-1px);
+  border-color: rgba(var(--color-primary-rgb), 0.62);
+  background: rgba(var(--color-primary-rgb), 0.1);
 }
 
-.file-icon {
-  font-size: 20px;
-  flex-shrink: 0;
+.member-card__top {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 18px;
+  gap: 10px;
+  align-items: center;
 }
 
-.file-icon.icon-markdown { color: var(--color-primary); }
-.file-icon.icon-text { color: var(--text-secondary); }
-.file-icon.icon-html { color: var(--color-warning); }
-.file-icon.icon-word { color: var(--agent-xiaochan); }
-.file-icon.icon-ppt { color: var(--agent-xiaoyan); }
-
-.git-link {
-  display: flex;
+.member-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  color: #08111f;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  font-weight: 800;
+  flex: 0 0 auto;
+}
+
+.member-card strong,
+.member-dialog__header h2 {
   color: var(--text-primary);
-  transition: all 0.2s;
+  letter-spacing: 0;
 }
 
-.git-link:hover {
-  color: var(--color-primary);
-}
-
-.github-icon {
-  width: 18px;
-  height: 18px;
-}
-
-.file-name {
-  flex: 1;
-  font-size: 13px;
-  color: var(--text-primary);
-  font-family: var(--font-mono);
+.member-card small {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.agent-logs-list {
+.member-card__activity {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.agent-log-item {
-  display: flex;
-  gap: 10px;
-  padding: 8px 10px;
-  background: var(--gray-900);
-  border-radius: 6px;
-  font-size: 12px;
-  border: none;
-}
-
-.agent-log-item--user {
-  background: var(--color-primary-bg);
-}
-
-.agent-log-item--assistant {
-  background: var(--gray-900);
-}
-
-.agent-log-item--system {
-  background: var(--gray-800);
-}
-
-.log-time {
-  font-size: 10px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  flex-shrink: 0;
-}
-
-.log-message {
-  color: var(--text-primary);
-  line-height: 1.5;
-}
-
-.empty-tip {
-  text-align: center;
-  padding: 20px;
-  color: var(--text-muted);
-  font-size: 12px;
-}
-
-/* 文件预览 */
-.file-preview-container {
-  min-height: 400px;
-}
-
-.preview-loading,
-.preview-error {
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.member-card p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.subtask-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
-  padding: 60px 20px;
+}
+
+.subtask-card {
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--bg-card);
+}
+
+.subtask-card__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.subtask-card h3 {
+  font-size: 15px;
+}
+
+.subtask-card p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.error-line {
+  color: var(--color-error) !important;
+}
+
+.event-list,
+.outputs-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.event-list {
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 4px;
+  scroll-behavior: smooth;
+}
+
+.event-item {
+  display: grid;
+  grid-template-columns: 12px 1fr;
+  gap: 10px;
+}
+
+.event-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+
+.event-item strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.event-item p {
+  margin: 3px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.event-item small {
   color: var(--text-tertiary);
 }
 
-.preview-error {
+.output-row {
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  display: grid;
+  grid-template-columns: 20px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.output-row small {
+  color: var(--text-tertiary);
+}
+
+.summary-text {
+  margin: 12px 0 0;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.quiet-state,
+.empty-mission {
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.empty-mission {
+  margin: auto;
+  text-align: center;
+  max-width: 480px;
+}
+
+.empty-mission i {
+  font-size: 42px;
+  color: var(--color-primary);
+}
+
+.preview-state {
+  color: var(--text-secondary);
+  padding: 24px;
+}
+
+.preview-state--error {
   color: var(--color-error);
+}
+
+.preview-content {
+  max-height: 70vh;
+  overflow: auto;
+  color: var(--text-primary);
 }
 
 .preview-content pre {
-  background: var(--gray-950);
-  border: none;
-  padding: 16px;
-  border-radius: 6px;
-  overflow-x: auto;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--text-primary);
-  max-height: 500px;
-  overflow-y: auto;
-}
-
-/* Markdown 渲染样式 */
-.preview-content .markdown-rendered {
-  font-size: 13px;
-  line-height: 1.7;
+  white-space: pre-wrap;
   color: var(--text-primary);
 }
 
-.preview-content .markdown-rendered :deep(h1),
-.preview-content .markdown-rendered :deep(h2),
-.preview-content .markdown-rendered :deep(h3),
-.preview-content .markdown-rendered :deep(h4),
-.preview-content .markdown-rendered :deep(h5),
-.preview-content .markdown-rendered :deep(h6) {
-  margin-top: 24px;
-  margin-bottom: 16px;
-  font-weight: 600;
-  line-height: 1.25;
-  color: var(--color-primary);
+.markdown-rendered {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.75;
 }
 
-.preview-content .markdown-rendered :deep(h1) {
+.markdown-rendered :deep(h1),
+.markdown-rendered :deep(h2),
+.markdown-rendered :deep(h3),
+.markdown-rendered :deep(h4) {
+  color: var(--text-primary);
+  letter-spacing: 0;
+  line-height: 1.3;
+  margin: 22px 0 10px;
+}
+
+.markdown-rendered :deep(h1) {
   font-size: 24px;
-  padding-bottom: 0.3em;
-  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-default);
 }
 
-.preview-content .markdown-rendered :deep(h2) {
+.markdown-rendered :deep(h2) {
   font-size: 20px;
-  padding-bottom: 0.25em;
-  border-bottom: 1px solid var(--border-subtle);
 }
 
-.preview-content .markdown-rendered :deep(h3) {
-  font-size: 16px;
+.markdown-rendered :deep(h3) {
+  font-size: 17px;
 }
 
-.preview-content .markdown-rendered :deep(p) {
-  margin-top: 0;
-  margin-bottom: 16px;
+.markdown-rendered :deep(p) {
+  margin: 10px 0;
 }
 
-.preview-content .markdown-rendered :deep(a) {
+.markdown-rendered :deep(ul),
+.markdown-rendered :deep(ol) {
+  margin: 10px 0;
+  padding-left: 24px;
+}
+
+.markdown-rendered :deep(li + li) {
+  margin-top: 5px;
+}
+
+.markdown-rendered :deep(strong) {
+  color: var(--text-primary);
+}
+
+.markdown-rendered :deep(a) {
   color: var(--color-primary);
-  text-decoration: none;
 }
 
-.preview-content .markdown-rendered :deep(a):hover {
-  text-decoration: underline;
-}
-
-.preview-content .markdown-rendered :deep(code) {
-  padding: 0.2em 0.4em;
-  margin: 0;
-  font-size: 85%;
-  font-family: var(--font-mono);
-  background: rgba(110, 118, 129, 0.2);
-  border-radius: 6px;
-}
-
-.preview-content .markdown-rendered :deep(pre) {
-  padding: 16px;
-  overflow: auto;
-  font-size: 85%;
-  line-height: 1.45;
-  background-color: var(--gray-950);
-  border-radius: 6px;
-  border: none;
-}
-
-.preview-content .markdown-rendered :deep(pre code) {
-  padding: 0;
-  margin: 0;
-  font-size: 100%;
-  word-break: normal;
-  white-space: pre;
-  background: transparent;
-  border-radius: 0;
-}
-
-.preview-content .markdown-rendered :deep(blockquote) {
-  padding: 0 1em;
+.markdown-rendered :deep(blockquote) {
+  margin: 14px 0;
+  padding: 10px 14px;
+  border-left: 3px solid var(--color-primary);
+  background: rgba(var(--color-primary-rgb), 0.08);
   color: var(--text-secondary);
-  border-left: 0.25em solid var(--border-subtle);
-  margin: 0;
-  margin-bottom: 16px;
 }
 
-.preview-content .markdown-rendered :deep(ul),
-.preview-content .markdown-rendered :deep(ol) {
-  padding-left: 2em;
-  margin-top: 0;
-  margin-bottom: 16px;
+.markdown-rendered :deep(code) {
+  border: 1px solid var(--border-default);
+  border-radius: 5px;
+  padding: 2px 5px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
 }
 
-.preview-content .markdown-rendered :deep(li) {
-  margin-top: 0.25em;
+.markdown-rendered :deep(pre) {
+  overflow: auto;
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-card);
 }
 
-.preview-content .markdown-rendered :deep(hr) {
-  height: 0.25em;
-  padding: 0;
-  margin: 24px 0;
-  background-color: var(--border-subtle);
+.markdown-rendered :deep(pre code) {
   border: 0;
+  padding: 0;
+  background: transparent;
+  white-space: pre;
 }
 
-.preview-content .markdown-rendered :deep(table) {
-  border-spacing: 0;
+.markdown-rendered :deep(table) {
+  width: 100%;
   border-collapse: collapse;
-  margin: 16px 0;
-  width: 100%;
-  overflow: auto;
-}
-
-.preview-content .markdown-rendered :deep(table th),
-.preview-content .markdown-rendered :deep(table td) {
-  padding: 6px 13px;
-  border: 1px solid var(--border-subtle);
-}
-
-.preview-content .markdown-rendered :deep(table tr) {
-  background-color: var(--bg-surface);
-}
-
-.preview-content .markdown-rendered :deep(img) {
-  max-width: 100%;
-  box-sizing: content-box;
-  border-radius: 6px;
-}
-
-.preview-content pre :deep(code) {
-  font-family: var(--font-mono);
-}
-
-.preview-unsupported {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  padding: 60px 20px;
-  color: var(--text-tertiary);
-}
-
-.preview-unsupported .el-icon {
-  font-size: 48px;
-}
-
-.preview-unsupported .hint {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-}
-
-/* ========== 亮色主题样式 - 奶油白风格 ========== */
-:root.light-theme .task-center__header {
-  border-bottom-color: var(--border-default);
-}
-
-:root.light-theme .task-center__title h1 {
-  color: var(--text-primary);
-  font-weight: 600;
-  text-shadow: none;
-}
-
-:root.light-theme .task-center__title p {
-  color: var(--text-tertiary);
-}
-
-:root.light-theme .ai-status {
-  background: var(--bg-surface);
-  border-color: var(--border-default);
-}
-
-:root.light-theme .ai-status.status--connected {
-  background: var(--badge-bg-idle);
-  border-color: var(--color-success);
-  color: var(--color-success);
-}
-
-:root.light-theme .status-dot {
-  background: var(--text-muted);
-}
-
-:root.light-theme .ai-status.status--connected .status-dot {
-  background: var(--color-success);
-  box-shadow: 0 0 8px var(--color-success-glow);
-}
-
-:root.light-theme .status-label {
-  color: var(--text-secondary);
-}
-
-:root.light-theme .ai-status.status--connected .status-label {
-  color: var(--color-success);
-}
-
-:root.light-theme .section-title {
-  color: var(--text-primary);
-}
-
-:root.light-theme .section-title::before {
-  background: linear-gradient(180deg, var(--color-primary), var(--color-secondary));
-}
-
-:root.light-theme .section-title span:last-child {
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-:root.light-theme .task-input-section {
-  background: var(--bg-surface);
-  box-shadow: var(--shadow-sm);
-  border: none;
-}
-
-:root.light-theme .task-input :deep(.el-textarea__inner) {
-  background: var(--bg-surface);
-  border-color: var(--border-default);
-  color: var(--text-primary);
-}
-
-:root.light-theme .task-input :deep(.el-textarea__inner):focus {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 2px var(--color-primary-bg);
-}
-
-:root.light-theme .send-btn-task {
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
-  border: none;
-  color: var(--text-inverse);
-  box-shadow:
-    0 2px 8px var(--color-primary-glow),
-    0 1px 3px var(--color-primary-bg);
-}
-
-:root.light-theme .send-btn-task:hover:not(:disabled) {
-  background: linear-gradient(135deg, var(--color-primary-dim) 0%, var(--color-primary) 100%);
-  box-shadow:
-    0 4px 12px var(--color-primary-glow),
-    0 2px 6px var(--color-primary-bg);
-  transform: translateY(-1px);
-}
-
-:root.light-theme .connection-hint {
-  color: var(--text-tertiary);
-}
-
-:root.light-theme .connection-hint.connected {
-  color: var(--color-success);
-}
-
-:root.light-theme .agent-status-section {
-  background: var(--bg-surface);
-  border-color: var(--border-default);
-  box-shadow: var(--shadow-sm);
-}
-
-:root.light-theme .agent-card {
-  background: var(--bg-surface);
-  border-color: var(--border-default);
-  box-shadow: var(--shadow-sm);
-}
-
-:root.light-theme .agent-card__header {
-  border-bottom-color: var(--border-subtle);
-}
-
-:root.light-theme .agent-card__name {
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-:root.light-theme .agent-card__id {
-  color: var(--text-tertiary);
-}
-
-:root.light-theme .agent-card__icon {
-  background: linear-gradient(135deg, var(--color-primary-bg) 0%, var(--color-secondary-bg) 100%);
-  border-color: var(--border-subtle);
-}
-
-:root.light-theme .status-badge {
-  background: transparent;
-  border: none;
-}
-
-:root.light-theme .status-badge .status-dot {
-  background: var(--color-success);
-  box-shadow: 0 0 0 2px var(--badge-bg-idle);
-}
-
-:root.light-theme .agent-card__body {
-  border-bottom-color: var(--border-subtle);
-}
-
-:root.light-theme .detail-label {
-  color: var(--text-tertiary);
-}
-
-:root.light-theme .detail-value {
-  color: var(--text-secondary);
-}
-
-:root.light-theme .agent-logs {
-  background: var(--bg-surface);
-  border-top-color: var(--border-subtle);
-}
-
-:root.light-theme .log-entry {
-  color: var(--text-secondary);
-}
-
-:root.light-theme .execution-progress {
-  background: var(--bg-surface);
-  border-color: var(--border-default);
-  box-shadow: var(--shadow-sm);
-}
-
-:root.light-theme .progress-title {
-  color: #1f2329;
-  font-weight: 600;
-}
-
-:root.light-theme .progress-value {
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
-:root.light-theme .phase-item {
-  background: #ffffff;
-  border-color: #dee0e3;
-  color: #646a73;
-}
-
-:root.light-theme .phase-item.active {
-  background: var(--color-primary-bg);
-  border-color: var(--color-primary);
-  color: var(--text-primary);
-}
-
-:root.light-theme .complete-card {
-  background: #ffffff;
-  border-color: #dee0e3;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-}
-
-:root.light-theme .complete-icon {
-  color: #00b365;
-}
-
-:root.light-theme .complete-card h3 {
-  color: #00b365;
-  font-weight: 600;
-}
-
-:root.light-theme .complete-card p {
-  color: #646a73;
-}
-
-:root.light-theme .stat-label {
-  color: #8f959e;
-}
-
-:root.light-theme .stat-value {
-  color: #1f2329;
-  font-weight: 600;
-}
-
-:root.light-theme .preview-content {
-  background: #ffffff;
-  border-color: #dee0e3;
-}
-
-:root.light-theme .preview-content .markdown-rendered {
-  color: #646a73;
-}
-
-:root.light-theme .preview-content .markdown-rendered :deep(h1),
-:root.light-theme .preview-content .markdown-rendered :deep(h2),
-:root.light-theme .preview-content .markdown-rendered :deep(h3) {
-  color: #1f2329;
-  font-weight: 600;
-  border-bottom-color: #dee0e3;
-}
-
-:root.light-theme .preview-content .markdown-rendered :deep(code) {
-  background: #f5f6f7;
-  border-color: #dee0e3;
-  color: #646a73;
-}
-
-:root.light-theme .preview-content .markdown-rendered :deep(pre) {
-  background: #1f2329;
-  border: none;
-}
-
-:root.light-theme .preview-content .markdown-rendered :deep(blockquote) {
-  color: #646a73;
-  border-left-color: #dee0e3;
-}
-
-:root.light-theme .preview-content .markdown-rendered :deep(table tr) {
-  background-color: #ffffff;
-}
-
-:root.light-theme .preview-unsupported {
-  color: #c2c8d1;
-}
-
-:root.light-theme .preview-unsupported .hint {
-  color: #c2c8d1;
-}
-
-:root.light-theme :deep(.el-dialog) {
-  background: #ffffff;
-  border-radius: 16px;
-}
-
-:root.light-theme :deep(.el-dialog__header) {
-  border-bottom-color: #dee0e3;
-}
-
-:root.light-theme :deep(.el-dialog__title) {
-  color: #1f2329;
-  font-weight: 600;
-}
-
-:root.light-theme :deep(.el-dialog__body) {
-  color: #646a73;
-}
-
-:root.light-theme :deep(.el-textarea__inner) {
-  background: #ffffff;
-  border-color: #dee0e3;
-  color: #1f2329;
-}
-
-:root.light-theme :deep(.el-textarea__inner):focus {
-  border-color: #3370ff;
-  box-shadow: 0 0 0 2px rgba(51, 112, 255, 0.1);
-}
-
-:root.light-theme :deep(.el-input__wrapper) {
-  background: var(--bg-surface);
-  box-shadow: 0 0 0 1px var(--border-default) inset;
-}
-
-:root.light-theme :deep(.el-input__wrapper.is-focus) {
-  box-shadow: 0 0 0 1px var(--color-primary) inset;
-}
-
-:root.light-theme :deep(.el-input__inner) {
-  color: #1f2329;
-}
-
-:root.light-theme :deep(.el-select-dropdown__item.selected) {
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
-:root.light-theme :deep(.el-button--primary) {
-  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
-  border: none;
-}
-
-:root.light-theme :deep(.el-button--success) {
-  background: var(--color-success);
-  border: none;
-}
-
-:root.light-theme :deep(.el-button--danger) {
-  background: var(--color-error);
-  border: none;
-}
-
-/* ========== 日志项样式 - 飞书风格 ========== */
-:root.light-theme .log-item {
-  background: #ffffff;
-  border-radius: 6px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  border: none;
-}
-
-:root.light-theme .log-item.type-user {
-  background: rgba(106, 161, 255, 0.06);
-}
-
-:root.light-theme .log-item.type-assistant {
-  background: #ffffff;
-}
-
-:root.light-theme .log-item.type-system {
-  background: rgba(194, 200, 209, 0.06);
-}
-
-:root.light-theme .log-role {
-  color: #8f959e;
-  font-weight: 600;
-}
-
-:root.light-theme .log-content {
-  color: #1f2329;
-}
-
-:root.light-theme .log-content :deep(p) {
-  color: #1f2329;
-}
-
-:root.light-theme .log-content :deep(strong) {
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
-:root.light-theme .log-content :deep(pre) {
-  background: #f5f6f7;
-  border: none;
-}
-
-:root.light-theme .log-content :deep(code) {
-  background: #f5f6f7;
-  border-color: #e5e6e9;
-  color: #646a73;
-}
-
-:root.light-theme .log-item.typing-indicator {
-  border-left-color: var(--color-primary);
-  background: var(--color-primary-bg);
-}
-
-:root.light-theme .typing-dot {
-  background: var(--color-primary);
-}
-
-:root.light-theme .log-empty {
-  color: #c2c8d1;
-}
-
-/* ClaudeCode 动态角色样式 - VoltAgent 风格 */
-.agent-panel--claudecode {
-  background: var(--agent-gradient-claude), var(--bg-panel);
-  box-shadow: var(--shadow-sm);
-}
-
-.agent-panel--claudecode:hover {
-  box-shadow: var(--shadow-md), 0 0 0 1px var(--agent-claude);
-  transform: translateY(-2px);
-}
-
-.agent-panel--claudecode.is-busy {
-  box-shadow: 0 0 0 1px var(--agent-claude), var(--shadow-lg);
-  animation: claude-busy-glow 2s ease-in-out infinite;
-  will-change: box-shadow;
-}
-
-@keyframes claude-busy-glow {
-  0%, 100% {
-    box-shadow: 0 0 0 1px var(--agent-claude),
-                0 4px 25px rgba(139, 92, 246, 0.2);
-  }
-  50% {
-    box-shadow: 0 0 0 2px var(--agent-claude),
-                0 6px 40px rgba(139, 92, 246, 0.3);
-  }
-}
-
-.claude-avatar {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  border: 2px solid var(--grid-line);
-}
-
-.claude-log-box {
-  background: var(--agent-gradient-claude);
-}
-
-.claude-session-item {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
-  background: var(--gray-900);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--agent-claude);
-}
-
-.session-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.session-icon {
-  font-size: 14px;
-}
-
-.session-name {
-  flex: 1;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-primary);
+  margin: 14px 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.session-model {
-  font-size: 10px;
-  color: var(--agent-claude);
-  background: var(--agent-gradient-claude);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-family: var(--font-mono);
-}
-
-.session-details {
-  display: flex;
-  gap: 16px;
-}
-
-.session-detail {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10px;
-}
-
-.detail-label {
-  color: var(--text-tertiary);
-}
-
-.detail-value {
-  color: var(--color-primary);
-  font-weight: 600;
-  font-family: var(--font-mono);
-}
-
-.session-path {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 10px;
-  color: var(--text-tertiary);
-  background: var(--gray-800);
-  padding: 4px 8px;
-  border-radius: 4px;
-}
-
-.path-icon {
-  font-size: 10px;
-}
-
-.path-value {
-  font-family: var(--font-mono);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.session-prompt {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 11px;
-}
-
-.prompt-label {
-  color: var(--text-tertiary);
-  font-size: 10px;
-}
-
-.prompt-value {
-  color: var(--text-secondary);
-  line-height: 1.4;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-
-/* ClaudeCode 会话列表样式 */
-.claude-session-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.claude-session-item-mini {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 12px;
-  background: var(--agent-gradient-claude);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--agent-claude);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.claude-session-item-mini:hover {
-  background: var(--agent-gradient-claude);
-  transform: translateX(2px);
-}
-
-.session-mini-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.session-model-badge {
-  font-size: 10px;
-  color: var(--agent-claude);
-  background: var(--agent-gradient-claude);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-family: var(--font-mono);
-  font-weight: 600;
-}
-
-.session-name-mini {
-  font-size: 12px;
-  color: var(--text-primary);
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.session-mini-stats {
-  display: flex;
-  gap: 12px;
-  font-size: 10px;
-  color: var(--text-tertiary);
-}
-
-/* ClaudeCode 展开面板样式 */
-.agent-panel--claudecode.is-expanded {
-  grid-column: span 2;
-  min-height: 500px;
-}
-
-.claude-session-expanded {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-}
-
-.session-info-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  background: var(--agent-gradient-claude);
-  border-bottom: 1px solid var(--agent-claude);
-}
-
-.session-info-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.back-btn {
-  padding: 4px 10px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  background: var(--gray-800);
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.back-btn:hover {
-  background: var(--gray-700);
-  color: var(--text-primary);
-}
-
-.session-path-mini {
-  font-size: 10px;
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.session-info-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.token-stat {
-  font-size: 10px;
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-}
-
-.refresh-btn {
-  font-size: 14px;
-  cursor: pointer;
-  opacity: 0.6;
-  transition: opacity 0.2s ease;
-}
-
-.refresh-btn:hover {
-  opacity: 1;
-}
-
-.expand-btn {
-  padding: 4px 8px;
-  background: transparent;
-  border: none;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  font-size: 10px;
-  transition: transform 0.3s ease;
-}
-
-.expand-btn span {
-  display: inline-block;
-  transition: transform 0.3s ease;
-}
-
-.expand-btn span.expanded {
-  transform: rotate(180deg);
-}
-
-/* 消息容器样式 */
-.claude-messages-container {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px;
-  background: var(--bg-panel);
-}
-
-.transcript-loading,
-.transcript-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100px;
-  color: var(--text-tertiary);
-  font-size: 12px;
-}
-
-.transcript-messages {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.transcript-msg {
-  padding: 8px 10px;
-  border-radius: var(--radius-md);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.transcript-msg.msg-user {
-  background: var(--color-primary-bg);
-  border: 1px solid var(--color-primary-light);
-}
-
-.transcript-msg.msg-assistant {
-  background: var(--agent-gradient-claude);
-  border: 1px solid var(--agent-claude);
-}
-
-.transcript-msg.msg-system {
-  background: var(--gray-800);
   border: 1px solid var(--border-default);
 }
 
-.msg-role-badge {
-  font-size: 9px;
-  color: var(--text-tertiary);
-  margin-bottom: 4px;
-  font-weight: 600;
+.markdown-rendered :deep(th),
+.markdown-rendered :deep(td) {
+  border: 1px solid var(--border-default);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
 }
 
-.msg-content {
+.markdown-rendered :deep(th) {
+  color: var(--text-primary);
+  background: rgba(var(--color-primary-rgb), 0.09);
+}
+
+.markdown-rendered :deep(hr) {
+  border: 0;
+  border-top: 1px solid var(--border-default);
+  margin: 20px 0;
+}
+
+:deep(.el-dialog) {
+  background: var(--bg-panel);
+}
+
+:deep(.el-dialog__title) {
   color: var(--text-primary);
 }
 
-.msg-text {
+:deep(.member-dialog .el-dialog) {
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-panel);
+}
+
+.member-dialog__header {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding-right: 28px;
+}
+
+.member-dialog__header h2 {
+  margin: 2px 0 0;
+  font-size: 17px;
+}
+
+.member-chat-shell {
+  display: grid;
+  gap: 12px;
+}
+
+.member-task-context {
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(var(--color-primary-rgb), 0.08);
+}
+
+.member-task-context strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.member-task-context p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.member-chat-list {
+  min-height: 260px;
+  max-height: 46vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
+}
+
+.chat-bubble {
+  max-width: 86%;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--bg-card);
+}
+
+.chat-bubble--user {
+  align-self: flex-end;
+  border-color: rgba(var(--color-primary-rgb), 0.45);
+  background: rgba(var(--color-primary-rgb), 0.12);
+}
+
+.chat-bubble--assistant {
+  align-self: flex-start;
+}
+
+.chat-bubble--system {
+  align-self: center;
+  max-width: 94%;
+  color: var(--text-tertiary);
+}
+
+.chat-bubble__meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.chat-bubble__meta span {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.chat-bubble p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.msg-thinking {
-  color: var(--text-tertiary);
-  font-style: italic;
-  padding: 4px 8px;
-  background: var(--bg-surface);
-  border-radius: 4px;
-  margin: 4px 0;
+.member-followup {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
 }
 
-.msg-tool {
-  margin: 4px 0;
-  padding: 6px 8px;
-  background: var(--gray-800);
-  border-radius: 4px;
+.member-followup textarea {
+  min-height: 70px;
+  resize: vertical;
 }
 
-.tool-name {
-  font-size: 10px;
-  color: var(--color-warning);
-  font-weight: 600;
-}
-
-.tool-input {
-  margin-top: 4px;
-  font-size: 9px;
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-  white-space: pre-wrap;
-  word-break: break-all;
-  max-height: 80px;
-  overflow-y: auto;
-}
-
-.msg-tool-result {
-  margin: 4px 0;
-  padding: 6px 8px;
-  background: var(--gray-900);
-  border-radius: 4px;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  color: var(--text-secondary);
-  white-space: pre-wrap;
-  word-break: break-all;
-  max-height: 100px;
-  overflow-y: auto;
-}
-
-.msg-tool-result.is-error {
-  border: 1px solid var(--color-error);
-  background: var(--color-error);
-}
-
-/* 输入区域样式 */
-.claude-input-area {
-  display: flex;
-  gap: 8px;
-  padding: 10px 12px;
-  background: var(--bg-surface);
-  border-top: 1px solid var(--agent-claude);
-}
-
-.claude-input {
-  flex: 1;
-  padding: 8px 12px;
-  font-size: 11px;
-  color: var(--text-primary);
-  background: var(--gray-900);
-  border: 1px solid var(--agent-claude);
-  border-radius: 6px;
-  outline: none;
-  transition: border-color 0.2s ease;
-}
-
-.claude-input:focus {
-  border-color: var(--agent-claude);
-}
-
-.claude-input::placeholder {
-  color: var(--text-tertiary);
-}
-
-.claude-input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.send-btn {
-  padding: 8px 16px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-inverse);
-  background: linear-gradient(135deg, var(--agent-claude) 0%, var(--color-primary) 100%);
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.send-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px var(--color-primary-glow);
-}
-
-.send-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.send-error {
-  padding: 6px 12px;
-  font-size: 10px;
-  color: var(--color-error);
-  background: var(--color-error);
-  border-top: 1px solid var(--color-error);
-}
-
-/* 减少动画偏好支持 */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+@media (max-width: 1180px) {
+  .task-command-layout {
+    grid-template-columns: 300px minmax(0, 1fr);
   }
 
-  .status-dot,
-  .connection-dot,
-  .typing-dot {
-    animation: none !important;
+  .task-inspector {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 820px) {
+  .task-command-layout {
+    grid-template-columns: 1fr;
+    overflow: auto;
   }
 
-  .agent-panel.is-busy,
-  .agent-panel--claudecode.is-busy {
-    animation: none !important;
+  .task-rail,
+  .mission-stage,
+  .task-inspector {
+    overflow: visible;
+  }
+
+  .task-inspector {
+    display: flex;
+  }
+
+  .mission-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .mission-hero__metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .member-followup {
+    grid-template-columns: 1fr;
+  }
+
+  .member-followup .primary-btn {
+    width: 100%;
   }
 }
 </style>

@@ -27,7 +27,14 @@ npm-debug.log*
 views.backup.*/
 
 # Database files
-server/data/*.db
-server/data/*.db-shm
-server/data/*.db-wal
-server/data/agent-chat.db
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+
+# Python
+__pycache__/
+*.pyc
+
+# Runtime session data
+analysis_service/workspace/

@@ -120,6 +120,12 @@ cp .env.example .env
 # 启动所有服务（推荐）
 ./start-dev.sh
 
+# 启动数据分析工作台后端链路
+npm run analysis:start
+
+# 停止数据分析工作台后端链路
+npm run analysis:stop
+
 # 或者分别启动
 # 1. 启动 Gateway: openclaw gateway start
 # 2. 启动后端：cd server && node index.js
@@ -127,6 +133,42 @@ cp .env.example .env
 ```
 
 访问 http://localhost:3000
+
+### 数据分析工作台启动说明
+
+数据分析工作台依赖两个本地服务：
+
+- `analysis_service`：Python 分析执行服务，默认端口 `18900`
+- `server/index.js`：Node API 代理，默认端口 `18888`
+
+推荐启动方式：
+
+```bash
+npm run analysis:start
+npm run dev
+```
+
+访问地址：
+
+- 工作台页面：`http://localhost:3000/analysis`
+- 分析服务健康检查：`http://127.0.0.1:18900/health`
+- Node 代理模型接口：`http://127.0.0.1:18888/api/analysis/models`
+
+首次使用前请先准备 Python 虚拟环境：
+
+```bash
+cd analysis_service
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+```
+
+如果页面里未填写 `API Base`，还需要在运行环境中配置默认模型地址，例如：
+
+```bash
+export ANALYSIS_DEFAULT_API_BASE=http://your-openai-compatible-endpoint/v1
+export ANALYSIS_DEFAULT_API_KEY=your-key
+export ANALYSIS_DEFAULT_MODEL=gpt-4o-mini
+```
 
 ### 生产构建
 

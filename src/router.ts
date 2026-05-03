@@ -1,6 +1,13 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
+import { useAuthStore, type UserRole } from '@/stores/auth'
 
 const routes: RouteRecordRaw[] = [
+  {
+    path: '/login',
+    name: 'login',
+    component: () => import('@/views/Login.vue'),
+    meta: { public: true, layout: 'blank' }
+  },
   {
     path: '/',
     redirect: '/dashboard'
@@ -8,108 +15,140 @@ const routes: RouteRecordRaw[] = [
   {
     path: '/dashboard',
     name: 'dashboard',
-    component: () => import('@/views/Dashboard.vue')
+    component: () => import('@/views/ObservabilityCenter.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/team-output',
+    name: 'team-output',
+    component: () => import('@/views/TeamOutputCenter.vue'),
+    meta: { requiresAuth: true }
   },
   {
     path: '/agents',
-    name: 'agents',
-    component: () => import('@/views/Agents.vue')
+    redirect: { path: '/team-output', query: { tab: 'team' } }
   },
   {
     path: '/digital-employee',
-    name: 'digital-employee',
-    component: () => import('@/views/DigitalEmployee.vue')
-  },
-  {
-    path: '/task-center',
-    name: 'task-center',
-    component: () => import('@/views/TaskCenter.vue')
+    redirect: { path: '/team-output', query: { tab: 'projects' } }
   },
   {
     path: '/task-center-2',
     name: 'task-center-2',
-    component: () => import('@/views/TaskCenter2.vue')
+    component: () => import('@/views/TaskCenter2.vue'),
+    meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
   },
   {
     path: '/configs',
     name: 'configs',
-    component: () => import('@/views/Configs.vue')
+    component: () => import('@/views/Configs.vue'),
+    meta: { requiresAuth: true, roles: ['admin'] as UserRole[] }
   },
   {
     path: '/logs',
-    name: 'logs',
-    component: () => import('@/views/Logs.vue')
+    redirect: { path: '/dashboard', query: { tab: 'events' } }
   },
   {
     path: '/status',
-    name: 'status',
-    component: () => import('@/views/Status.vue')
+    redirect: { path: '/dashboard', query: { tab: 'health' } }
   },
   {
-    path: '/tools',
-    name: 'tools',
-    component: () => import('@/views/Tools.vue')
+    path: '/capability',
+    name: 'capability',
+    component: () => import('@/views/CapabilityCenter.vue'),
+    meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
   },
   {
     path: '/chat',
-    name: 'chat',
-    component: () => import('@/views/Chat.vue')
+    redirect: '/dashboard'
+  },
+  {
+    path: '/automation',
+    name: 'automation',
+    component: () => import('@/views/AutomationIntegrationCenter.vue'),
+    meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
+  },
+  {
+    path: '/tools',
+    redirect: { path: '/capability', query: { tab: 'tools' } }
   },
   {
     path: '/group-chat',
     name: 'group-chat',
-    component: () => import('@/views/GroupChat.vue')
+    component: () => import('@/views/GroupChat.vue'),
+    meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
   },
   {
     path: '/skills',
-    name: 'skills',
-    component: () => import('@/views/SkillsHub.vue')
+    redirect: { path: '/capability', query: { tab: 'skills' } }
   },
   {
     path: '/skills-old',
-    name: 'skills-old',
-    component: () => import('@/views/Skills.vue')
+    redirect: { path: '/capability', query: { tab: 'skills' } }
   },
   {
     path: '/tokens',
     name: 'tokens',
-    component: () => import('@/views/Tokens.vue')
+    component: () => import('@/views/Tokens.vue'),
+    meta: { requiresAuth: true }
   },
   {
     path: '/memory',
     name: 'memory',
-    component: () => import('@/views/Memory.vue')
+    component: () => import('@/views/Memory.vue'),
+    meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
+  },
+  {
+    path: '/analysis',
+    name: 'analysis',
+    component: () => import('@/views/AnalysisWorkbench.vue'),
+    meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
   },
   {
     path: '/security',
     name: 'security',
-    component: () => import('@/views/Security.vue')
+    component: () => import('@/views/Security.vue'),
+    meta: { requiresAuth: true, roles: ['admin'] as UserRole[] }
   },
   {
     path: '/cron',
-    name: 'cron',
-    component: () => import('@/views/Cron.vue')
+    redirect: { path: '/automation', query: { tab: 'cron' } }
   },
   {
     path: '/webhooks',
-    name: 'webhooks',
-    component: () => import('@/views/Webhooks.vue')
-  },
-  {
-    path: '/mission-control',
-    name: 'mission-control',
-    component: () => import('@/views/MissionControl.vue')
-  },
-  {
-    path: '/task-board',
-    name: 'task-board',
-    component: () => import('@/views/TaskBoard.vue')
+    redirect: { path: '/automation', query: { tab: 'webhooks' } }
   }
 ]
 
 const router = createRouter({
   history: createWebHistory(),
   routes
+})
+
+router.beforeEach((to) => {
+  const authStore = useAuthStore()
+  authStore.restoreSession()
+
+  if (to.meta.public) {
+    if (to.path === '/login' && authStore.isAuthenticated) {
+      return '/dashboard'
+    }
+    return true
+  }
+
+  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+    return {
+      path: '/login',
+      query: { redirect: to.fullPath }
+    }
+  }
+
+  const roles = to.meta.roles as UserRole[] | undefined
+  if (roles && !authStore.hasAnyRole(roles)) {
+    return '/dashboard'
+  }
+
+  return true
 })
 
 export default router

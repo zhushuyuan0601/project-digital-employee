@@ -123,17 +123,19 @@ export async function sendMessageViaGateway(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const fullMessage = from ? `Message from ${from}: ${message}` : message
+    const agentName = extractAgentNameFromSessionKey(sessionKey)
 
     await runOpenClaw(
       [
-        'gateway',
-        'sessions_send',
-        '--session',
-        sessionKey,
+        'agent',
+        '--agent',
+        agentName,
+        '--timeout',
+        '600',
         '--message',
         fullMessage
       ],
-      { timeoutMs: 10000 }
+      { timeoutMs: 650000 }
     )
 
     return { success: true }
@@ -141,6 +143,16 @@ export async function sendMessageViaGateway(
     console.error('[Gateway] Failed to send message:', error.message)
     return { success: false, error: error.message }
   }
+}
+
+function extractAgentNameFromSessionKey(sessionKey: string): string {
+  if (!sessionKey) return sessionKey
+  const match = sessionKey.match(/^agent:([^:]+):/)
+  if (match) return match[1]
+  return sessionKey
+    .replace(/^agent:/, '')
+    .replace(/:main$/, '')
+    .replace(/:primary$/, '')
 }
 
 /**
