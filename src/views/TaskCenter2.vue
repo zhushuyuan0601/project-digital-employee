@@ -478,71 +478,191 @@
         </div>
       </template>
       <div v-if="activeMemberSubtask" class="member-chat-shell">
-        <div class="member-terminal">
-          <div class="member-terminal__bar">
-            <span class="member-terminal__pill">claude-runtime</span>
-            <span>status={{ subtaskStatusText(activeMemberSubtask.status) }}</span>
-            <span>progress={{ activeMemberSubtask.progress || 0 }}%</span>
-            <span>run={{ activeMemberRunId || '--' }}</span>
-            <span>session={{ activeMemberSessionId || '--' }}</span>
-            <span>logs={{ activeMemberTerminalLogs.length }}</span>
-            <button class="member-terminal__refresh" type="button" :disabled="memberLogsLoading" @click="fetchMemberRunLogs(activeMemberSubtask.id)">
-              <i class="ri-refresh-line"></i>
-              {{ memberLogsLoading ? 'sync' : 'refresh' }}
-            </button>
-            <span class="member-terminal__context">task={{ activeMemberSubtask.description }}</span>
-          </div>
-          <div ref="memberLogListRef" class="member-terminal__screen">
-            <div v-if="memberLogsLoading && activeMemberTerminalLogs.length === 0" class="member-terminal__empty">
-              正在同步 Claude Runtime 日志...
+        <div class="member-story">
+          <div class="member-story__toolbar">
+            <div class="member-story__chips">
+              <span>progress {{ activeMemberSubtask.progress || 0 }}%</span>
+              <span>logs {{ activeMemberTerminalLogs.length }}</span>
+              <span>outputs {{ activeMemberStoryOutputs.length }}</span>
+              <span>run {{ activeMemberRunId ? shortRunId(activeMemberRunId) : '--' }}</span>
             </div>
-            <div v-else-if="memberLogsError && activeMemberTerminalLogs.length === 0" class="member-terminal__empty member-terminal__empty--error">
-              {{ memberLogsError }}
-            </div>
-            <div v-else-if="activeMemberTerminalLogs.length === 0" class="member-terminal__empty">
-              暂无执行日志。Claude Runtime 开始运行后，这里会实时显示步骤、工具、文件和结果。
-            </div>
-            <article
-              v-for="log in activeMemberTerminalLogs"
-              :key="log.id"
-              class="terminal-entry"
-              :class="`terminal-entry--${log.tone}`"
-            >
-              <div class="terminal-entry__meta">
-                <span class="terminal-entry__time">{{ formatLogTime(log.timestampMs || log.timestamp * 1000) }}</span>
-                <span class="terminal-entry__prompt">{{ terminalPrompt(log) }}</span>
-                <span v-if="log.runId" class="terminal-entry__run">{{ shortRunId(log.runId) }}</span>
-              </div>
-              <pre
-                v-if="log.sourceType === 'agent.assistant'"
-                class="terminal-entry__content terminal-entry__content--assistant"
-                :class="{ 'terminal-entry__content--expanded': expandedLogIds.has(log.id) }"
-              >{{ log.content }}</pre>
-              <pre v-else class="terminal-entry__content">{{ log.content }}</pre>
-              <button
-                v-if="log.sourceType === 'agent.assistant' && isLongTerminalLog(log)"
-                class="terminal-entry__expand"
-                type="button"
-                @click="toggleTerminalLog(log.id)"
-              >
-                {{ expandedLogIds.has(log.id) ? '收起输出' : '展开完整输出' }}
+            <div class="member-story__actions">
+              <button class="ghost-btn ghost-btn--compact" type="button" :disabled="memberLogsLoading" @click="fetchMemberRunLogs(activeMemberSubtask.id)">
+                <i class="ri-refresh-line"></i>
+                {{ memberLogsLoading ? '刷新中' : '刷新状态' }}
               </button>
-              <div v-if="log.fileLabel || log.linkedOutput" class="terminal-entry__footer">
-                <span v-if="log.fileLabel" class="terminal-entry__file">{{ log.fileLabel }}</span>
-                <button
-                  v-if="log.linkedOutput"
-                  class="ghost-btn ghost-btn--compact"
-                  type="button"
-                  @click="previewOutput(log.linkedOutput)"
-                >
-                  打开文件
-                </button>
-              </div>
-            </article>
+              <button class="primary-btn primary-btn--compact" type="button" @click="memberLogsDrawer = true">
+                <i class="ri-terminal-box-line"></i>
+                原始日志
+              </button>
+            </div>
           </div>
+
+          <div v-if="memberLogsError" class="member-story__alert">
+            <i class="ri-error-warning-line"></i>
+            {{ memberLogsError }}
+          </div>
+
+          <section class="member-story__overview">
+            <div>
+              <p class="eyebrow">执行概览</p>
+              <h3>{{ activeMemberStoryTitle }}</h3>
+              <p>{{ activeMemberStorySummary }}</p>
+            </div>
+            <button
+              v-if="activeMemberStoryOutputs[0]"
+              class="story-output-hero"
+              type="button"
+              @click="previewOutput(activeMemberStoryOutputs[0])"
+            >
+              <i :class="fileIcon(activeMemberStoryOutputs[0].name)"></i>
+              <span>
+                <strong>{{ activeMemberStoryOutputs[0].name }}</strong>
+                <small>{{ formatOutputTime(activeMemberStoryOutputs[0]) }}</small>
+              </span>
+            </button>
+          </section>
+
+          <section class="member-story__timeline">
+            <div class="member-story__section-head">
+              <div>
+                <p class="eyebrow">关键步骤</p>
+                <h3>执行故事线</h3>
+              </div>
+              <span>{{ activeMemberStorySteps.length }} 个节点</span>
+            </div>
+            <div class="story-step-list">
+              <article
+                v-for="step in activeMemberStorySteps"
+                :key="step.key"
+                class="story-step"
+                :class="`story-step--${step.tone}`"
+              >
+                <span class="story-step__icon">
+                  <i :class="step.icon"></i>
+                </span>
+                <div>
+                  <div class="story-step__top">
+                    <strong>{{ step.title }}</strong>
+                    <span>{{ step.count > 1 ? `${step.count} 次` : formatLogTime(step.timestampMs) }}</span>
+                  </div>
+                  <p>{{ step.detail }}</p>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="member-story__outputs">
+            <div class="member-story__section-head">
+              <div>
+                <p class="eyebrow">产出</p>
+                <h3>报告和文件</h3>
+              </div>
+              <span>{{ activeMemberStoryOutputs.length }} 个文件</span>
+            </div>
+            <div v-if="activeMemberStoryOutputs.length === 0" class="member-story__empty">
+              暂无报告产出，完成后会在这里显示入口。
+            </div>
+            <div v-else class="story-output-list">
+              <button
+                v-for="output in activeMemberStoryOutputs"
+                :key="output.id"
+                class="story-output-row"
+                type="button"
+                @click="previewOutput(output)"
+              >
+                <i :class="fileIcon(output.name)"></i>
+                <span>
+                  <strong>{{ output.name }}</strong>
+                  <small>{{ formatOutputTime(output) }}</small>
+                </span>
+                <i class="ri-arrow-right-up-line"></i>
+              </button>
+            </div>
+          </section>
         </div>
       </div>
     </el-dialog>
+
+    <el-drawer
+      v-model="memberLogsDrawer"
+      direction="rtl"
+      size="min(820px, 92vw)"
+      class="member-logs-drawer"
+      append-to-body
+    >
+      <template #header>
+        <div class="member-logs-drawer__header" v-if="activeMemberSubtask">
+          <div>
+            <p class="eyebrow">Claude 原始日志</p>
+            <h2>{{ agentName(activeMemberSubtask.assigned_agent_id) }} · {{ activeMemberSubtask.title }}</h2>
+          </div>
+          <button class="ghost-btn ghost-btn--compact" type="button" :disabled="memberLogsLoading" @click="fetchMemberRunLogs(activeMemberSubtask.id)">
+            <i class="ri-refresh-line"></i>
+            {{ memberLogsLoading ? 'sync' : 'refresh' }}
+          </button>
+        </div>
+      </template>
+      <div v-if="activeMemberSubtask" class="member-terminal">
+        <div class="member-terminal__bar">
+          <span class="member-terminal__pill">claude-runtime</span>
+          <span>status={{ subtaskStatusText(activeMemberSubtask.status) }}</span>
+          <span>progress={{ activeMemberSubtask.progress || 0 }}%</span>
+          <span>run={{ activeMemberRunId || '--' }}</span>
+          <span>session={{ activeMemberSessionId || '--' }}</span>
+          <span>logs={{ activeMemberTerminalLogs.length }}</span>
+          <span class="member-terminal__context">task={{ activeMemberSubtask.description }}</span>
+        </div>
+        <div ref="memberLogListRef" class="member-terminal__screen">
+          <div v-if="memberLogsLoading && activeMemberTerminalLogs.length === 0" class="member-terminal__empty">
+            正在同步 Claude Runtime 日志...
+          </div>
+          <div v-else-if="memberLogsError && activeMemberTerminalLogs.length === 0" class="member-terminal__empty member-terminal__empty--error">
+            {{ memberLogsError }}
+          </div>
+          <div v-else-if="activeMemberTerminalLogs.length === 0" class="member-terminal__empty">
+            暂无执行日志。Claude Runtime 开始运行后，这里会实时显示步骤、工具、文件和结果。
+          </div>
+          <article
+            v-for="log in activeMemberTerminalLogs"
+            :key="log.id"
+            class="terminal-entry"
+            :class="`terminal-entry--${log.tone}`"
+          >
+            <div class="terminal-entry__meta">
+              <span class="terminal-entry__time">{{ formatLogTime(log.timestampMs || log.timestamp * 1000) }}</span>
+              <span class="terminal-entry__prompt">{{ terminalPrompt(log) }}</span>
+              <span v-if="log.runId" class="terminal-entry__run">{{ shortRunId(log.runId) }}</span>
+            </div>
+            <pre
+              v-if="log.sourceType === 'agent.assistant'"
+              class="terminal-entry__content terminal-entry__content--assistant"
+              :class="{ 'terminal-entry__content--expanded': expandedLogIds.has(log.id) }"
+            >{{ log.content }}</pre>
+            <pre v-else class="terminal-entry__content">{{ log.content }}</pre>
+            <button
+              v-if="log.sourceType === 'agent.assistant' && isLongTerminalLog(log)"
+              class="terminal-entry__expand"
+              type="button"
+              @click="toggleTerminalLog(log.id)"
+            >
+              {{ expandedLogIds.has(log.id) ? '收起输出' : '展开完整输出' }}
+            </button>
+            <div v-if="log.fileLabel || log.linkedOutput" class="terminal-entry__footer">
+              <span v-if="log.fileLabel" class="terminal-entry__file">{{ log.fileLabel }}</span>
+              <button
+                v-if="log.linkedOutput"
+                class="ghost-btn ghost-btn--compact"
+                type="button"
+                @click="previewOutput(log.linkedOutput)"
+              >
+                打开文件
+              </button>
+            </div>
+          </article>
+        </div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -606,6 +726,7 @@ const previewType = ref('')
 const previewLoading = ref(false)
 const previewError = ref<string | null>(null)
 const memberDialog = ref(false)
+const memberLogsDrawer = ref(false)
 const activeMemberSubtaskId = ref('')
 const memberRunLogs = ref<Record<string, AgentRunLog[]>>({})
 const memberLogsLoading = ref(false)
@@ -654,6 +775,15 @@ type TerminalLogEntry = {
   linkedOutput: TaskOutput | null
   sourceType: string
   runId: string
+}
+type MemberStoryStep = {
+  key: string
+  title: string
+  detail: string
+  tone: EventTone
+  icon: string
+  count: number
+  timestampMs: number
 }
 type WorkflowTarget = 'plan' | 'execution' | 'review'
 type FlowStepState = 'done' | 'current' | 'pending'
@@ -1177,6 +1307,117 @@ function terminalPrompt(log: TerminalLogEntry) {
   }
 }
 
+const activeMemberStoryOutputs = computed(() => {
+  const subtask = activeMemberSubtask.value
+  if (!subtask) return []
+  return selectedTaskOutputs.value
+    .filter(output => output.subtask_id === subtask.id)
+    .sort((a, b) => outputTimestampMs(b) - outputTimestampMs(a))
+})
+
+function storyStepDefinition(log: TerminalLogEntry) {
+  const source = log.sourceType
+  const label = log.label
+  if (source === 'queue' || source === 'agent.run.queued' || label === 'QUEUE') {
+    return { key: 'queue', title: '进入队列', icon: 'ri-list-check-2', tone: 'warning' as EventTone }
+  }
+  if (source === 'start' || source === 'system' || source === 'agent.start' || label === 'START') {
+    return { key: 'start', title: '启动运行', icon: 'ri-play-circle-line', tone: 'progress' as EventTone }
+  }
+  if (source === 'tool' || source === 'agent.tool' || label === 'TOOL') {
+    return { key: 'tool', title: '使用工具', icon: 'ri-tools-line', tone: 'progress' as EventTone }
+  }
+  if (source === 'agent.assistant' || label === 'CLAUDE') {
+    return { key: 'assistant', title: '生成内容', icon: 'ri-quill-pen-line', tone: 'progress' as EventTone }
+  }
+  if (source === 'output' || source === 'outputs.bound' || label === 'OUTPUT') {
+    return { key: 'output', title: '绑定产出', icon: 'ri-file-markdown-line', tone: 'output' as EventTone }
+  }
+  if (['done', 'result', 'agent.done'].includes(source) || ['DONE', 'RESULT'].includes(label)) {
+    return { key: 'done', title: '执行完成', icon: 'ri-checkbox-circle-line', tone: 'success' as EventTone }
+  }
+  if (['error', 'agent.error'].includes(source) || label === 'ERROR') {
+    return { key: 'error', title: '执行异常', icon: 'ri-error-warning-line', tone: 'danger' as EventTone }
+  }
+  if (source === 'cancelled' || label === 'CANCEL') {
+    return { key: 'cancelled', title: '已停止', icon: 'ri-stop-circle-line', tone: 'danger' as EventTone }
+  }
+  return { key: 'activity', title: log.label || '运行记录', icon: 'ri-pulse-line', tone: log.tone }
+}
+
+const activeMemberStorySteps = computed<MemberStoryStep[]>(() => {
+  const subtask = activeMemberSubtask.value
+  if (!subtask) return []
+
+  const order = ['queue', 'start', 'tool', 'assistant', 'output', 'done', 'error', 'cancelled', 'activity']
+  const steps = new Map<string, MemberStoryStep>()
+
+  for (const log of activeMemberTerminalLogs.value) {
+    const definition = storyStepDefinition(log)
+    const timestampMs = log.timestampMs || log.timestamp * 1000
+    const existing = steps.get(definition.key)
+    const detail = cleanText(log.fileLabel || log.content, definition.key === 'assistant' ? 96 : 120)
+
+    if (!existing) {
+      steps.set(definition.key, {
+        ...definition,
+        detail,
+        count: 1,
+        timestampMs,
+      })
+      continue
+    }
+
+    existing.count += 1
+    if (timestampMs >= existing.timestampMs) {
+      existing.timestampMs = timestampMs
+      existing.detail = detail
+    }
+  }
+
+  if (steps.size === 0) {
+    steps.set('pending', {
+      key: 'pending',
+      title: subtask.status === 'completed' ? '等待日志同步' : '等待执行',
+      detail: subtask.status === 'completed'
+        ? '当前子任务已完成，但详细运行日志还未同步到本地。'
+        : cleanText(subtask.description, 120),
+      tone: subtask.status === 'failed' ? 'danger' : 'neutral',
+      icon: subtask.status === 'failed' ? 'ri-error-warning-line' : 'ri-time-line',
+      count: 1,
+      timestampMs: Number(subtask.updated_at || 0) * 1000,
+    })
+  }
+
+  return [...steps.values()]
+    .sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key))
+    .slice(0, 8)
+})
+
+const activeMemberStoryTitle = computed(() => {
+  const subtask = activeMemberSubtask.value
+  if (!subtask) return '暂无执行任务'
+  if (subtask.status === 'failed') return '执行出现异常，需要查看日志或重试'
+  if (subtask.status === 'completed') return '执行已完成，报告可进入产出区查看'
+  if (subtask.status === 'running') return '正在执行，关键步骤会持续更新'
+  if (subtask.status === 'assigned') return '任务已分配，等待进入 Claude Runtime'
+  return '任务等待执行'
+})
+
+const activeMemberStorySummary = computed(() => {
+  const subtask = activeMemberSubtask.value
+  if (!subtask) return '请选择一个团队成员查看执行详情。'
+  if (subtask.error) return cleanText(subtask.error, 180)
+  if (subtask.result_summary) return cleanText(subtask.result_summary, 180)
+  const latestOutput = activeMemberStoryOutputs.value[0]
+  if (latestOutput) return `${agentName(subtask.assigned_agent_id)} 已生成 ${latestOutput.name}，可直接打开报告检视结论。`
+  const latestAssistant = [...activeMemberTerminalLogs.value].reverse().find(log => log.sourceType === 'agent.assistant')
+  if (latestAssistant) return cleanText(latestAssistant.content, 180)
+  const latestStep = activeMemberStorySteps.value.at(-1)
+  if (latestStep) return cleanText(latestStep.detail, 180)
+  return cleanText(subtask.description, 180)
+})
+
 function subtaskActivityTimestampMs(subtask: Subtask) {
   const latestEvent = [...selectedTaskEvents.value]
     .reverse()
@@ -1612,6 +1853,7 @@ function agentInitial(agentId: string) {
 async function openMemberConversation(subtask: Subtask) {
   activeMemberSubtaskId.value = subtask.id
   memberDialog.value = true
+  memberLogsDrawer.value = false
   await fetchMemberRunLogs(subtask.id)
   scrollMemberChatToBottom(true)
 }
@@ -1926,12 +2168,13 @@ watch(
 watch(
   () => [
     memberDialog.value,
+    memberLogsDrawer.value,
     activeMemberSubtaskId.value,
     activeMemberTerminalLogs.value.length,
     activeMemberTerminalLogs.value.at(-1)?.content,
   ],
   () => {
-    if (memberDialog.value) scrollMemberChatToBottom()
+    if (memberLogsDrawer.value) scrollMemberChatToBottom()
   },
   { flush: 'post' }
 )
@@ -2176,6 +2419,12 @@ watch(
   border-color: var(--color-primary);
   color: #08111f;
   font-weight: 700;
+}
+
+.primary-btn--compact {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
 }
 
 .scan-btn {
@@ -3377,6 +3626,268 @@ watch(
   width: 100%;
   display: flex;
   overflow: hidden;
+}
+
+.member-story {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+.member-story__toolbar,
+.member-story__section-head,
+.member-story__actions,
+.member-story__chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.member-story__toolbar {
+  justify-content: space-between;
+  min-height: 34px;
+}
+
+.member-story__chips {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.member-story__chips span,
+.member-story__section-head > span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  font-size: 12px;
+}
+
+.member-story__actions {
+  flex: 0 0 auto;
+}
+
+.member-story__alert {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  border-radius: 8px;
+  color: #fecaca;
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.member-story__overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
+  gap: 14px;
+  align-items: stretch;
+  padding: 14px;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.2);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.12), transparent 64%),
+    var(--bg-card);
+}
+
+.member-story h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 16px;
+  letter-spacing: 0;
+}
+
+.member-story__overview p {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.member-story__timeline,
+.member-story__outputs {
+  min-height: 0;
+}
+
+.member-story__section-head {
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.story-step-list {
+  display: grid;
+  gap: 9px;
+}
+
+.story-step {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card) 92%, transparent);
+}
+
+.story-step__icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb), 0.12);
+}
+
+.story-step--success .story-step__icon {
+  color: var(--color-success);
+  background: rgba(74, 222, 128, 0.12);
+}
+
+.story-step--warning .story-step__icon {
+  color: var(--color-warning);
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.story-step--danger .story-step__icon {
+  color: var(--color-error);
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.story-step--output .story-step__icon {
+  color: var(--color-secondary);
+  background: rgba(94, 234, 212, 0.12);
+}
+
+.story-step__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.story-step__top strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.story-step__top span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.story-step p {
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  font-size: 13px;
+}
+
+.story-output-hero,
+.story-output-row {
+  border: 1px solid rgba(var(--color-primary-rgb), 0.24);
+  border-radius: 8px;
+  background: rgba(var(--color-primary-rgb), 0.08);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.story-output-hero {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+  text-align: left;
+}
+
+.story-output-list {
+  display: grid;
+  gap: 8px;
+  max-height: 142px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+.story-output-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 18px;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 11px;
+  text-align: left;
+}
+
+.story-output-hero span,
+.story-output-row span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.story-output-hero strong,
+.story-output-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.story-output-hero small,
+.story-output-row small,
+.member-story__empty {
+  color: var(--text-tertiary);
+}
+
+.member-story__empty {
+  padding: 14px;
+  border: 1px dashed var(--border-default);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+:deep(.member-logs-drawer .el-drawer) {
+  background: var(--bg-panel);
+}
+
+:deep(.member-logs-drawer .el-drawer__header) {
+  margin-bottom: 0;
+  padding: 18px 18px 12px;
+}
+
+:deep(.member-logs-drawer .el-drawer__body) {
+  min-height: 0;
+  display: flex;
+  padding: 0 18px 18px;
+  overflow: hidden;
+}
+
+.member-logs-drawer__header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.member-logs-drawer__header h2 {
+  margin: 2px 0 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  letter-spacing: 0;
 }
 
 .member-terminal {
