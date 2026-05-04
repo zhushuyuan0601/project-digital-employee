@@ -1,0 +1,719 @@
+import {
+  addTaskEvent,
+  addAgentRunLog,
+  createAgentRun,
+  createSubtasksFromPlan,
+  getAgentRun,
+  getSubtask,
+  getTaskDetail,
+  listActiveAgentRuns,
+  listActiveRunsForSubtask,
+  listAgentRuns,
+  markPlanInvalid,
+  patchSubtaskContext,
+  savePlan,
+  updateAgentRun,
+  updateSubtask,
+  updateTask,
+  upsertTaskOutput,
+} from '../db/tasks.js'
+import { getClaudeRuntimeConfig } from './config.js'
+import { emitRuntimeEvent } from './event-bus.js'
+import { writeRunReport } from './report-writer.js'
+import {
+  buildCoordinatorPlanPrompt,
+  buildFinalSummaryPrompt,
+  buildSubtaskPrompt,
+  PLAN_OUTPUT_FORMAT,
+  ROLE_DEFINITIONS,
+} from './roles.js'
+import { RUNTIME_AGENT_MAP, extractJsonPlan, validatePlan } from './plan-utils.js'
+import { runClaudeQuery } from './sdk-runner.js'
+import { ensureTaskWorkspace } from './workspace.js'
+
+const terminalStatuses = new Set(['completed', 'failed', 'cancelled'])
+
+function nowSeconds() {
+  return Math.floor(Date.now() / 1000)
+}
+
+function makeRunId(prefix = 'run') {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function summarize(text) {
+  return String(text || '').replace(/\s+/g, ' ').trim().slice(0, 2000)
+}
+
+function logMessage(text, limit = 32000) {
+  return String(text || '').slice(0, limit)
+}
+
+function emitTaskEvent(type, payload) {
+  emitRuntimeEvent({
+    type,
+    created_at: nowSeconds(),
+    timestamp: Date.now(),
+    ...payload,
+  })
+}
+
+function emitRunLog(job, type, message, payload = {}) {
+  const log = addAgentRunLog({
+    runId: job.run.id,
+    taskId: job.taskId,
+    subtaskId: job.subtaskId,
+    agentId: job.agentId,
+    type,
+    message: logMessage(message),
+    payload: {
+      runId: job.run.id,
+      kind: job.kind,
+      ...payload,
+    },
+  })
+  emitTaskEvent('agent.log', {
+    taskId: job.taskId,
+    subtaskId: job.subtaskId,
+    agentId: job.agentId,
+    runId: job.run.id,
+    log,
+  })
+  return log
+}
+
+function inferRunKind(run) {
+  if (run?.subtask_id) return 'subtask'
+  if (String(run?.id || '').startsWith('summary-')) return 'summary'
+  return 'plan'
+}
+
+function orphanReason(run, context = 'runtime') {
+  const phase = run?.status === 'queued' ? '排队' : '运行'
+  return context === 'startup'
+    ? `Claude Runtime 服务启动时清理孤儿${phase}记录`
+    : `检测到数据库中的孤儿${phase}记录，已自动清理后重新入队`
+}
+
+class ClaudeRuntimeQueue {
+  constructor() {
+    this.jobs = []
+    this.running = new Map()
+    this.controllers = new Map()
+  }
+
+  get config() {
+    return getClaudeRuntimeConfig()
+  }
+
+  status() {
+    const config = this.config
+    return {
+      runtime: config.runtime,
+      reportOnly: config.reportOnly,
+      maxConcurrency: config.maxConcurrency,
+      maxTurns: config.maxTurns,
+      allowedTools: config.allowedTools,
+      cwd: config.cwd,
+      workspaceIsolation: config.workspaceIsolation,
+      workspaceRoot: config.workspaceRoot,
+      outputRoot: config.outputRoot,
+      queued: this.jobs.length,
+      running: this.running.size,
+    }
+  }
+
+  trackedState(runId) {
+    if (this.running.has(runId)) return 'running'
+    if (this.jobs.some((job) => job.run.id === runId)) return 'queued'
+    return null
+  }
+
+  enqueue(job) {
+    this.jobs.push(job)
+    emitRunLog(job, 'queue', `${ROLE_DEFINITIONS[job.agentId]?.name || job.agentId} 已进入 Claude Runtime 队列`, {
+      queueDepth: this.jobs.length,
+    })
+    this.pump()
+    return job.run
+  }
+
+  cancel(runId) {
+    const queuedIndex = this.jobs.findIndex((job) => job.run.id === runId)
+    if (queuedIndex >= 0) {
+      const [job] = this.jobs.splice(queuedIndex, 1)
+      updateAgentRun(runId, { status: 'cancelled', completed_at: nowSeconds(), error: '用户取消排队任务' })
+      emitRunLog(job, 'cancelled', 'Claude Runtime 排队任务已取消')
+      addTaskEvent({
+        taskId: job.run.task_id,
+        subtaskId: job.run.subtask_id,
+        agentId: job.run.agent_id,
+        type: 'agent.cancelled',
+        message: 'Claude Runtime 排队任务已取消',
+        payload: { runId },
+      })
+      emitTaskEvent('agent.cancelled', { taskId: job.run.task_id, subtaskId: job.run.subtask_id, agentId: job.run.agent_id, runId })
+      return { ok: true, cancelled: 'queued' }
+    }
+
+    const controller = this.controllers.get(runId)
+    if (controller) {
+      controller.abort()
+      return { ok: true, cancelled: 'running' }
+    }
+
+    return { ok: false, error: 'Run not found or already finished' }
+  }
+
+  pump() {
+    const config = this.config
+    while (this.running.size < config.maxConcurrency && this.jobs.length > 0) {
+      const job = this.jobs.shift()
+      this.running.set(job.run.id, job)
+      this.execute(job).finally(() => {
+        this.running.delete(job.run.id)
+        this.controllers.delete(job.run.id)
+        this.pump()
+      })
+    }
+  }
+
+  async execute(job) {
+    const config = this.config
+    const run = job.run
+    const controller = new AbortController()
+    this.controllers.set(run.id, controller)
+    const task = getTaskDetail(job.taskId)
+    const workspace = await ensureTaskWorkspace({ config, task })
+
+    updateAgentRun(run.id, { status: 'running', started_at: nowSeconds(), cwd: workspace.cwd })
+    emitRunLog(job, 'start', `${ROLE_DEFINITIONS[job.agentId]?.name || job.agentId} 开始执行`, {
+      cwd: workspace.cwd,
+      sourceCwd: config.cwd,
+      workspaceIsolation: workspace.isolated,
+      allowedTools: config.allowedTools,
+      maxTurns: config.maxTurns,
+    })
+    if (job.subtaskId) {
+      updateSubtask(job.subtaskId, {
+        status: 'running',
+        progress: Math.max(Number(getSubtask(job.subtaskId)?.progress || 0), 30),
+        started_at: getSubtask(job.subtaskId)?.started_at || nowSeconds(),
+        error: null,
+      })
+    }
+
+    addTaskEvent({
+      taskId: job.taskId,
+      subtaskId: job.subtaskId,
+      agentId: job.agentId,
+      type: 'agent.start',
+      message: `${ROLE_DEFINITIONS[job.agentId]?.name || job.agentId} 开始执行 Claude Runtime run`,
+      payload: { runId: run.id, kind: job.kind },
+    })
+    emitTaskEvent('agent.start', { taskId: job.taskId, subtaskId: job.subtaskId, agentId: job.agentId, runId: run.id, kind: job.kind })
+
+    try {
+      const result = await runClaudeQuery({
+        prompt: job.prompt,
+        config,
+        outputFormat: job.outputFormat,
+        resume: job.resume,
+        cwd: workspace.cwd,
+        abortController: controller,
+        onEvent: (event) => this.handleSdkEvent(job, event),
+      })
+
+      if (!result.ok) {
+        await this.failJob(job, result.error || 'Claude Runtime 执行失败', result)
+        return
+      }
+
+      if (job.kind === 'plan') {
+        await this.completePlanJob(job, result)
+      } else if (job.kind === 'summary') {
+        await this.completeSummaryJob(job, result)
+      } else {
+        await this.completeSubtaskJob(job, result)
+      }
+    } catch (err) {
+      if (controller.signal.aborted) {
+        await this.cancelRunningJob(job)
+      } else {
+        await this.failJob(job, err instanceof Error ? err.message : String(err || 'Claude Runtime 执行失败'))
+      }
+    }
+  }
+
+  handleSdkEvent(job, event) {
+    if (event.sessionId) {
+      updateAgentRun(job.run.id, { claude_session_id: event.sessionId })
+      if (job.subtaskId) {
+        patchSubtaskContext(job.subtaskId, { lastClaudeSessionId: event.sessionId })
+      }
+    }
+
+    if (event.type === 'start') {
+      emitRunLog(job, 'system', `Claude session 已初始化${event.sessionId ? `: ${event.sessionId}` : ''}`, {
+        sessionId: event.sessionId || null,
+      })
+    }
+
+    if (event.type === 'assistant' && event.text) {
+      emitRunLog(job, event.snapshot ? 'assistant.snapshot' : 'assistant.delta', event.text, {
+        sessionId: event.sessionId || null,
+        snapshot: Boolean(event.snapshot),
+      })
+    }
+
+    if (event.type === 'tool') {
+      emitRunLog(job, 'tool', `Claude Code 使用只读工具：${event.toolName}`, {
+        toolName: event.toolName,
+        sessionId: event.sessionId || null,
+      })
+      addTaskEvent({
+        taskId: job.taskId,
+        subtaskId: job.subtaskId,
+        agentId: job.agentId,
+        type: 'agent.tool',
+        message: `Claude Code 使用只读工具：${event.toolName}`,
+        payload: { runId: job.run.id, toolName: event.toolName },
+      })
+      emitTaskEvent('agent.tool', { taskId: job.taskId, subtaskId: job.subtaskId, agentId: job.agentId, runId: job.run.id, toolName: event.toolName })
+    }
+
+    if (event.type === 'result') {
+      emitRunLog(job, event.ok ? 'result' : 'error', event.ok ? 'Claude Code 返回成功结果' : (event.error || 'Claude Code 返回失败结果'), {
+        sessionId: event.sessionId || null,
+        costUsd: event.costUsd || 0,
+        durationMs: event.durationMs || 0,
+        subtype: event.subtype || null,
+      })
+    }
+  }
+
+  async completePlanJob(job, result) {
+    const rawPlan = result.structuredOutput || extractJsonPlan(result.text)
+    let plan
+    try {
+      plan = validatePlan(rawPlan)
+    } catch (err) {
+      markPlanInvalid(job.taskId, `拆解计划校验失败：${err.message}`, {
+        raw: rawPlan,
+        errors: err.validationErrors || [err.message],
+        runId: job.run.id,
+      })
+      await this.failJob(job, err.message, result)
+      return
+    }
+
+    savePlan(job.taskId, plan)
+    createSubtasksFromPlan(job.taskId, plan, RUNTIME_AGENT_MAP)
+    updateAgentRun(job.run.id, {
+      status: 'completed',
+      claude_session_id: result.sessionId,
+      result_summary: summarize(result.text || JSON.stringify(plan)),
+      completed_at: nowSeconds(),
+    })
+    emitRunLog(job, 'done', '小呦已完成结构化拆解', {
+      sessionId: result.sessionId,
+      costUsd: result.costUsd,
+      durationMs: result.durationMs,
+    })
+    addTaskEvent({
+      taskId: job.taskId,
+      agentId: job.agentId,
+      type: 'agent.done',
+      message: '小呦已完成结构化拆解，子任务将进入 Claude Runtime 队列',
+      payload: { runId: job.run.id, sessionId: result.sessionId, costUsd: result.costUsd, durationMs: result.durationMs },
+    })
+    emitTaskEvent('agent.done', { taskId: job.taskId, agentId: job.agentId, runId: job.run.id })
+    enqueueSubtasksForTask(job.taskId)
+  }
+
+  async completeSubtaskJob(job, result) {
+    const report = await writeRunReport({
+      config: this.config,
+      taskId: job.taskId,
+      subtaskId: job.subtaskId,
+      agentId: job.agentId,
+      content: result.text,
+    })
+
+    upsertTaskOutput({
+      taskId: job.taskId,
+      subtaskId: job.subtaskId,
+      agentId: job.agentId,
+      name: report.name,
+      type: 'markdown',
+      path: report.path,
+      mtime: report.mtime,
+    })
+
+    updateSubtask(job.subtaskId, {
+      status: 'completed',
+      progress: 100,
+      result_summary: summarize(result.text),
+      completed_at: nowSeconds(),
+      error: null,
+    })
+    patchSubtaskContext(job.subtaskId, {
+      lastRunId: job.run.id,
+      lastClaudeSessionId: result.sessionId,
+      lastReportPath: report.path,
+    })
+    updateAgentRun(job.run.id, {
+      status: 'completed',
+      claude_session_id: result.sessionId,
+      result_summary: summarize(result.text),
+      output_path: report.path,
+      completed_at: nowSeconds(),
+    })
+    emitRunLog(job, 'output', `已生成并绑定报告：${report.name}`, { path: report.path })
+    emitRunLog(job, 'done', `${ROLE_DEFINITIONS[job.agentId]?.name || job.agentId} 已完成报告`, {
+      sessionId: result.sessionId,
+      costUsd: result.costUsd,
+      durationMs: result.durationMs,
+      path: report.path,
+    })
+    addTaskEvent({
+      taskId: job.taskId,
+      subtaskId: job.subtaskId,
+      agentId: job.agentId,
+      type: 'outputs.bound',
+      message: `已生成并绑定报告：${report.name}`,
+      payload: { runId: job.run.id, path: report.path },
+    })
+    addTaskEvent({
+      taskId: job.taskId,
+      subtaskId: job.subtaskId,
+      agentId: job.agentId,
+      type: 'agent.done',
+      message: `${ROLE_DEFINITIONS[job.agentId]?.name || job.agentId} 已完成报告`,
+      payload: { runId: job.run.id, sessionId: result.sessionId, costUsd: result.costUsd, durationMs: result.durationMs },
+    })
+    emitTaskEvent('agent.done', { taskId: job.taskId, subtaskId: job.subtaskId, agentId: job.agentId, runId: job.run.id, outputPath: report.path })
+  }
+
+  async completeSummaryJob(job, result) {
+    const report = await writeRunReport({
+      config: this.config,
+      taskId: job.taskId,
+      agentId: job.agentId,
+      kind: 'summary',
+      content: result.text,
+    })
+    upsertTaskOutput({
+      taskId: job.taskId,
+      agentId: job.agentId,
+      name: report.name,
+      type: 'markdown',
+      path: report.path,
+      mtime: report.mtime,
+    })
+    updateTask(job.taskId, { status: 'reviewing', summary: summarize(result.text) })
+    updateAgentRun(job.run.id, {
+      status: 'completed',
+      claude_session_id: result.sessionId,
+      result_summary: summarize(result.text),
+      output_path: report.path,
+      completed_at: nowSeconds(),
+    })
+    emitRunLog(job, 'output', `已生成最终汇总：${report.name}`, { path: report.path })
+    emitRunLog(job, 'done', '小呦已完成最终汇总', {
+      sessionId: result.sessionId,
+      costUsd: result.costUsd,
+      durationMs: result.durationMs,
+      path: report.path,
+    })
+    addTaskEvent({
+      taskId: job.taskId,
+      agentId: job.agentId,
+      type: 'agent.done',
+      message: `小呦已生成最终汇总：${report.name}`,
+      payload: { runId: job.run.id, sessionId: result.sessionId, path: report.path },
+    })
+    emitTaskEvent('agent.done', { taskId: job.taskId, agentId: job.agentId, runId: job.run.id, outputPath: report.path })
+  }
+
+  async failJob(job, error, result = {}) {
+    updateAgentRun(job.run.id, {
+      status: 'failed',
+      claude_session_id: result.sessionId || getAgentRun(job.run.id)?.claude_session_id || null,
+      error,
+      completed_at: nowSeconds(),
+    })
+    emitRunLog(job, 'error', error, {
+      sessionId: result.sessionId || getAgentRun(job.run.id)?.claude_session_id || null,
+    })
+    if (job.subtaskId) {
+      updateSubtask(job.subtaskId, {
+        status: 'failed',
+        progress: Math.max(Number(getSubtask(job.subtaskId)?.progress || 0), 5),
+        error,
+      })
+    } else if (job.kind === 'plan') {
+      updateTask(job.taskId, { status: 'failed' })
+    }
+    addTaskEvent({
+      taskId: job.taskId,
+      subtaskId: job.subtaskId,
+      agentId: job.agentId,
+      type: 'agent.error',
+      message: error,
+      payload: { runId: job.run.id, sessionId: result.sessionId },
+    })
+    emitTaskEvent('agent.error', { taskId: job.taskId, subtaskId: job.subtaskId, agentId: job.agentId, runId: job.run.id, error })
+  }
+
+  async cancelRunningJob(job) {
+    updateAgentRun(job.run.id, { status: 'cancelled', completed_at: nowSeconds(), error: '用户取消运行中任务' })
+    emitRunLog(job, 'cancelled', 'Claude Runtime 运行中任务已取消')
+    if (job.subtaskId) {
+      updateSubtask(job.subtaskId, { status: 'blocked', error: '运行已取消' })
+    }
+    addTaskEvent({
+      taskId: job.taskId,
+      subtaskId: job.subtaskId,
+      agentId: job.agentId,
+      type: 'agent.cancelled',
+      message: 'Claude Runtime 运行中任务已取消',
+      payload: { runId: job.run.id },
+    })
+    emitTaskEvent('agent.cancelled', { taskId: job.taskId, subtaskId: job.subtaskId, agentId: job.agentId, runId: job.run.id })
+  }
+}
+
+export const claudeRuntimeQueue = new ClaudeRuntimeQueue()
+
+function cleanupOrphanRun(run, { context = 'runtime', preserveSubtaskState = false } = {}) {
+  const reason = orphanReason(run, context)
+  updateAgentRun(run.id, {
+    status: 'failed',
+    error: reason,
+    completed_at: nowSeconds(),
+  })
+
+  const kind = inferRunKind(run)
+  if (run.subtask_id) {
+    const subtask = getSubtask(run.subtask_id)
+    if (subtask && !preserveSubtaskState && subtask.status !== 'completed') {
+      updateSubtask(run.subtask_id, {
+        status: 'failed',
+        progress: Math.max(Number(subtask.progress || 0), 5),
+        error: reason,
+      })
+    }
+  } else if (kind === 'plan') {
+    updateTask(run.task_id, { status: 'failed' })
+  }
+
+  addTaskEvent({
+    taskId: run.task_id,
+    subtaskId: run.subtask_id,
+    agentId: run.agent_id,
+    type: 'agent.orphaned',
+    message: reason,
+    payload: { runId: run.id, previousStatus: run.status, kind },
+  })
+  addAgentRunLog({
+    runId: run.id,
+    taskId: run.task_id,
+    subtaskId: run.subtask_id,
+    agentId: run.agent_id,
+    type: 'error',
+    message: reason,
+    payload: { runId: run.id, previousStatus: run.status, kind },
+  })
+  emitTaskEvent('agent.orphaned', {
+    taskId: run.task_id,
+    subtaskId: run.subtask_id,
+    agentId: run.agent_id,
+    runId: run.id,
+    previousStatus: run.status,
+    kind,
+  })
+}
+
+function reconcileActiveRunsForSubtask(subtaskId) {
+  const activeRuns = listActiveRunsForSubtask(subtaskId)
+  if (!activeRuns.length) return null
+
+  let trackedRun = null
+  const orphanRuns = []
+
+  for (const run of activeRuns) {
+    const trackedState = claudeRuntimeQueue.trackedState(run.id)
+    if (trackedState && !trackedRun) {
+      trackedRun = run
+      continue
+    }
+    orphanRuns.push(run)
+  }
+
+  for (const run of orphanRuns) {
+    cleanupOrphanRun(run, {
+      context: 'runtime',
+      preserveSubtaskState: Boolean(trackedRun),
+    })
+  }
+
+  return trackedRun
+}
+
+export function cleanupOrphanAgentRunsOnStartup() {
+  const activeRuns = listActiveAgentRuns({ limit: 1000 })
+  let cleaned = 0
+  for (const run of activeRuns) {
+    if (claudeRuntimeQueue.trackedState(run.id)) continue
+    cleanupOrphanRun(run, { context: 'startup' })
+    cleaned += 1
+  }
+  return { cleaned }
+}
+
+function createRunAndJob({ taskId, subtaskId = null, agentId, kind, prompt, outputFormat, resume = null }) {
+  const config = getClaudeRuntimeConfig()
+  const task = getTaskDetail(taskId)
+  const cwd = config.workspaceIsolation
+    ? `${config.workspaceRoot}/${taskId}/project`
+    : config.cwd
+  const run = createAgentRun({
+    id: makeRunId(kind),
+    taskId,
+    subtaskId,
+    agentId,
+    roleName: ROLE_DEFINITIONS[agentId]?.roleName || agentId,
+    status: 'queued',
+    cwd,
+    prompt,
+  })
+  addTaskEvent({
+    taskId,
+    subtaskId,
+    agentId,
+    type: 'agent.run.queued',
+    message: `${ROLE_DEFINITIONS[agentId]?.name || agentId} 已进入 Claude Runtime 队列`,
+    payload: { runId: run.id, kind },
+  })
+  emitTaskEvent('agent.run.queued', { taskId, subtaskId, agentId, runId: run.id, kind })
+  return {
+    run,
+    taskId,
+    subtaskId,
+    agentId,
+    kind,
+    prompt,
+    outputFormat,
+    resume,
+  }
+}
+
+export function enqueuePlanRun(taskId) {
+  const task = getTaskDetail(taskId)
+  if (!task) throw new Error('Task not found')
+  const job = createRunAndJob({
+    taskId,
+    agentId: 'xiaomu',
+    kind: 'plan',
+    prompt: buildCoordinatorPlanPrompt(task),
+    outputFormat: PLAN_OUTPUT_FORMAT,
+  })
+  return claudeRuntimeQueue.enqueue(job)
+}
+
+export function enqueueSubtaskRun(subtaskId, { resume = null } = {}) {
+  const subtask = getSubtask(subtaskId)
+  if (!subtask) throw new Error('Subtask not found')
+  const active = reconcileActiveRunsForSubtask(subtaskId)
+  if (active) return active
+  const task = getTaskDetail(subtask.task_id)
+  const job = createRunAndJob({
+    taskId: task.id,
+    subtaskId: subtask.id,
+    agentId: subtask.assigned_agent_id,
+    kind: 'subtask',
+    prompt: buildSubtaskPrompt(task, subtask),
+    resume,
+  })
+  patchSubtaskContext(subtask.id, {
+    lastRunId: job.run.id,
+    retryCount: Number(subtask.context_json?.retryCount || 0) + (resume ? 1 : 0),
+  })
+  updateSubtask(subtask.id, { status: 'assigned', progress: Math.max(Number(subtask.progress || 0), 10), error: null })
+  return claudeRuntimeQueue.enqueue(job)
+}
+
+export function enqueueSubtasksForTask(taskId) {
+  const task = getTaskDetail(taskId)
+  if (!task) throw new Error('Task not found')
+  const runs = []
+  for (const subtask of task.subtasks || []) {
+    if (['pending', 'assigned', 'blocked', 'failed'].includes(subtask.status)) {
+      runs.push(enqueueSubtaskRun(subtask.id))
+    }
+  }
+  return runs
+}
+
+export function enqueueSummaryRun(taskId) {
+  const task = getTaskDetail(taskId)
+  if (!task) throw new Error('Task not found')
+  const job = createRunAndJob({
+    taskId,
+    agentId: 'xiaomu',
+    kind: 'summary',
+    prompt: buildFinalSummaryPrompt(task),
+  })
+  return claudeRuntimeQueue.enqueue(job)
+}
+
+export function retrySubtaskRun(subtaskId) {
+  const subtask = getSubtask(subtaskId)
+  if (!subtask) throw new Error('Subtask not found')
+  const resume = subtask.context_json?.lastClaudeSessionId || null
+  return enqueueSubtaskRun(subtaskId, { resume })
+}
+
+export function cancelRun(runId) {
+  return claudeRuntimeQueue.cancel(runId)
+}
+
+export function getRun(runId) {
+  return getAgentRun(runId)
+}
+
+export function listRuns(params) {
+  return listAgentRuns(params)
+}
+
+export function getRuntimeStatus() {
+  const queueStatus = claudeRuntimeQueue.status()
+  const recentRuns = listAgentRuns({ limit: 50 })
+  const compactRuns = recentRuns.map((run) => ({
+    id: run.id,
+    task_id: run.task_id,
+    subtask_id: run.subtask_id,
+    agent_id: run.agent_id,
+    role_name: run.role_name,
+    claude_session_id: run.claude_session_id,
+    status: run.status,
+    cwd: run.cwd,
+    output_path: run.output_path,
+    error: run.error ? `${run.error.slice(0, 240)}${run.error.length > 240 ? '...' : ''}` : null,
+    started_at: run.started_at,
+    completed_at: run.completed_at,
+    created_at: run.created_at,
+    updated_at: run.updated_at,
+  }))
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+  const today = Math.floor(todayStart.getTime() / 1000)
+  return {
+    ...queueStatus,
+    completedToday: recentRuns.filter((run) => run.status === 'completed' && Number(run.completed_at || 0) >= today).length,
+    failedToday: recentRuns.filter((run) => run.status === 'failed' && Number(run.completed_at || 0) >= today).length,
+    recentRuns: compactRuns,
+    healthy: true,
+  }
+}

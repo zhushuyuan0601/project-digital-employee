@@ -91,7 +91,10 @@ onMounted(() => {
 .stage-content {
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  background: inherit;
   padding: 0;
 }
 

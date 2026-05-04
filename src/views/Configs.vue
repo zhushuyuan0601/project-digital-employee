@@ -36,37 +36,29 @@ import { ref } from 'vue'
 
 const configs = ref([
   {
-    id: 'openclaw',
-    name: '主配置文件',
-    path: '~/.openclaw/openclaw.json',
+    id: 'claude-runtime',
+    name: 'Claude Runtime',
+    path: '.env / server runtime',
     icon: 'ri-settings-3-line',
     expanded: true,
-    content: `{
-  "agents": {
-    "defaults": {
-      "model": {
-        "primary": "alibaba/glm-5"
-      },
-      "workspace": "/Users/lihzz/.openclaw/workspace"
-    },
-    "list": [
-      { "id": "main", "model": "alibaba/glm-5" },
-      { "id": "ceo", "model": "alibaba/glm-5" }
-    ]
-  },
-  "gateway": {
-    "port": 18789,
-    "mode": "local"
-  }
-}`
+    content: `AGENT_RUNTIME=claude-code
+CLAUDE_AGENT_MAX_CONCURRENCY=3
+CLAUDE_AGENT_MAX_TURNS=256
+CLAUDE_REPORT_ONLY=true
+CLAUDE_RUNTIME_CWD=/Users/lh/git/project-digital-employee
+CLAUDE_WORKSPACE_ISOLATION=true
+CLAUDE_WORKSPACE_ROOT=server/data/runtime-workspaces
+CLAUDE_ALLOWED_TOOLS=Read,Glob,Grep
+CLAUDE_OUTPUT_ROOT=server/data/task-outputs`
   },
   {
-    id: 'openclaw-json',
-    name: '配置备份',
-    path: '~/.openclaw/openclaw.json.bak',
+    id: 'openclaw-legacy',
+    name: 'OpenClaw Legacy',
+    path: '~/.openclaw/openclaw.json',
     icon: 'ri-file-copy-line',
     expanded: false,
-    content: '// 配置备份文件...'
+    content: `OpenClaw Gateway 相关配置已作为 legacy fallback 保留。
+当前默认运行时为 Claude Code；任务中心和群聊优先走 Claude Runtime。`
   }
 ])
 
@@ -76,7 +68,7 @@ const toggleConfig = (config) => {
 
 const refreshConfig = () => {
   console.log('Refresh config')
-  // TODO: 从 Gateway API 获取最新配置
+  // TODO: 后续接入 /api/runtime/status 和 runtime 配置写入接口
 }
 </script>
 

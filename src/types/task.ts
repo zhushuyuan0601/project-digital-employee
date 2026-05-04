@@ -33,7 +33,7 @@ export interface TaskOutput {
 }
 
 export interface TaskEvent {
-  id: number
+  id: number | string
   task_id: string
   subtask_id?: string | null
   agent_id?: string | null

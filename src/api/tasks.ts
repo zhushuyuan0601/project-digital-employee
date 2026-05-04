@@ -6,6 +6,59 @@ export interface TaskResponse {
   task: Task
   dispatch?: TaskDispatch
   dispatches?: TaskDispatch[]
+  run?: AgentRun
+  runs?: AgentRun[]
+  planRunId?: string
+  summaryRunId?: string
+}
+
+export interface AgentRun {
+  id: string
+  task_id?: string | null
+  subtask_id?: string | null
+  agent_id: string
+  role_name?: string | null
+  claude_session_id?: string | null
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  cwd?: string | null
+  prompt?: string | null
+  result_summary?: string | null
+  output_path?: string | null
+  error?: string | null
+  started_at?: number | null
+  completed_at?: number | null
+  created_at?: number
+  updated_at?: number
+}
+
+export interface AgentRunLog {
+  id: number
+  run_id: string
+  task_id: string
+  subtask_id?: string | null
+  agent_id?: string | null
+  type: string
+  message: string
+  payload_json?: Record<string, unknown> | null
+  created_at: number
+  created_at_ms?: number | null
+}
+
+interface RuntimeStatusResponse {
+  success: boolean
+  status: {
+    runtime: string
+    reportOnly: boolean
+    maxConcurrency: number
+    maxTurns: number
+    workspaceIsolation: boolean
+    workspaceRoot: string
+    queued: number
+    running: number
+    completedToday: number
+    failedToday: number
+    healthy: boolean
+  }
 }
 
 interface TasksResponse {
@@ -21,6 +74,11 @@ interface TaskEventsResponse {
 interface TaskOutputsResponse {
   success: boolean
   outputs: TaskOutput[]
+}
+
+interface AgentRunLogsResponse {
+  success: boolean
+  logs: AgentRunLog[]
 }
 
 export const taskApi = {
@@ -39,8 +97,13 @@ export const taskApi = {
     })
   },
 
-  getTask(taskId: string) {
-    return request<TaskResponse>(`/api/tasks/${encodeURIComponent(taskId)}`)
+  getTask(taskId: string, params: { includeEvents?: boolean; eventLimit?: number; beforeEventId?: number } = {}) {
+    const search = new URLSearchParams()
+    if (params.includeEvents) search.set('includeEvents', '1')
+    if (params.eventLimit) search.set('eventLimit', String(params.eventLimit))
+    if (params.beforeEventId) search.set('beforeEventId', String(params.beforeEventId))
+    const query = search.toString()
+    return request<TaskResponse>(`/api/tasks/${encodeURIComponent(taskId)}${query ? `?${query}` : ''}`)
   },
 
   applyPlan(taskId: string, content: string | Record<string, unknown>) {
@@ -52,6 +115,24 @@ export const taskApi = {
 
   dispatchTask(taskId: string) {
     return request<TaskResponse>(`/api/tasks/${encodeURIComponent(taskId)}/dispatch`, {
+      method: 'POST',
+    })
+  },
+
+  runPlan(taskId: string) {
+    return request<TaskResponse>(`/api/tasks/${encodeURIComponent(taskId)}/plan/run`, {
+      method: 'POST',
+    })
+  },
+
+  runSubtasks(taskId: string) {
+    return request<TaskResponse>(`/api/tasks/${encodeURIComponent(taskId)}/subtasks/run`, {
+      method: 'POST',
+    })
+  },
+
+  runSubtask(subtaskId: string) {
+    return request<TaskResponse>(`/api/subtasks/${encodeURIComponent(subtaskId)}/run`, {
       method: 'POST',
     })
   },
@@ -109,8 +190,32 @@ export const taskApi = {
     })
   },
 
-  listEvents(taskId: string) {
-    return request<TaskEventsResponse>(`/api/tasks/${encodeURIComponent(taskId)}/events`)
+  listEvents(taskId: string, params: { limit?: number; beforeId?: number } = {}) {
+    const search = new URLSearchParams()
+    if (params.limit) search.set('limit', String(params.limit))
+    if (params.beforeId) search.set('beforeId', String(params.beforeId))
+    const query = search.toString()
+    return request<TaskEventsResponse>(`/api/tasks/${encodeURIComponent(taskId)}/events${query ? `?${query}` : ''}`)
+  },
+
+  runtimeStatus() {
+    return request<RuntimeStatusResponse>('/api/runtime/status')
+  },
+
+  listRunLogs(runId: string, params: { limit?: number; beforeId?: number } = {}) {
+    const search = new URLSearchParams()
+    if (params.limit) search.set('limit', String(params.limit))
+    if (params.beforeId) search.set('beforeId', String(params.beforeId))
+    const query = search.toString()
+    return request<AgentRunLogsResponse>(`/api/runs/${encodeURIComponent(runId)}/logs${query ? `?${query}` : ''}`)
+  },
+
+  listSubtaskLogs(subtaskId: string, params: { limit?: number; beforeId?: number } = {}) {
+    const search = new URLSearchParams()
+    if (params.limit) search.set('limit', String(params.limit))
+    if (params.beforeId) search.set('beforeId', String(params.beforeId))
+    const query = search.toString()
+    return request<AgentRunLogsResponse>(`/api/subtasks/${encodeURIComponent(subtaskId)}/logs${query ? `?${query}` : ''}`)
   },
 
   listOutputs(params: { taskId?: string; agentId?: string; status?: string } = {}) {

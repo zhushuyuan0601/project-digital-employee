@@ -38,3 +38,5 @@ __pycache__/
 
 # Runtime session data
 analysis_service/workspace/
+server/data/task-outputs/
+server/data/runtime-workspaces/

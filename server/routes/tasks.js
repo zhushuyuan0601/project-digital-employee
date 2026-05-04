@@ -11,6 +11,7 @@ import {
   getTaskDetail,
   listTaskEvents,
   listTaskOutputs,
+  listAgentRunLogs,
   listTasks,
   markPlanInvalid,
   savePlan,
@@ -18,9 +19,22 @@ import {
   updateTask,
   upsertTaskOutput,
 } from '../db/tasks.js'
+import {
+  cancelRun,
+  enqueuePlanRun,
+  enqueueSubtaskRun,
+  enqueueSubtasksForTask,
+  enqueueSummaryRun,
+  getRun,
+  getRuntimeStatus,
+  retrySubtaskRun,
+} from '../claude-runtime/index.js'
+import { claudeRuntimeEvents } from '../claude-runtime/event-bus.js'
+import { RUNTIME_AGENT_MAP } from '../claude-runtime/plan-utils.js'
 
 const router = express.Router()
 const HOME_DIR = process.env.HOME || process.env.USERPROFILE || homedir()
+const DEFAULT_EVENT_LIMIT = 100
 
 const AGENT_MAP = {
   xiaomu: { name: '小呦', gatewayAgentId: 'ceo', sessionKey: 'agent:ceo:main', roleId: 'ceo' },
@@ -45,6 +59,17 @@ function fileType(name) {
   if (['xls', 'xlsx', 'csv'].includes(ext)) return 'excel'
   if (['html', 'htm'].includes(ext)) return 'html'
   return 'text'
+}
+
+function parseBooleanFlag(value, fallback = false) {
+  if (value == null || value === '') return fallback
+  return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase())
+}
+
+function parsePositiveInt(value, fallback) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback
+  return Math.floor(parsed)
 }
 
 async function scanFiles(basePath, startTime = null, endTime = null, limit = 200) {
@@ -261,11 +286,55 @@ router.post('/tasks', (req, res) => {
       taskId: task.id,
       agentId: 'xiaomu',
       type: 'plan.request.queued',
-      message: '已生成小呦拆解请求，等待前端 WebSocket 派发',
-      payload: { sessionKey: task.coordinator_session_key, mode: 'frontend-websocket' },
+      message: '已生成小呦拆解请求，进入 Claude Runtime 队列',
+      payload: { sessionKey: task.coordinator_session_key, mode: 'claude-runtime' },
     })
 
-    res.json({ success: true, task: getTaskDetail(task.id), dispatch: coordinatorDispatch(task) })
+    const run = enqueuePlanRun(task.id)
+    res.json({ success: true, task: getTaskDetail(task.id), planRunId: run.id, run })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.get('/runtime/status', (_req, res) => {
+  try {
+    res.json({ success: true, status: getRuntimeStatus() })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.get('/runs/:id', (req, res) => {
+  try {
+    const run = getRun(req.params.id)
+    if (!run) return res.status(404).json({ success: false, error: 'Run not found' })
+    res.json({ success: true, run })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.get('/runs/:id/logs', (req, res) => {
+  try {
+    const run = getRun(req.params.id)
+    if (!run) return res.status(404).json({ success: false, error: 'Run not found' })
+    const limit = parsePositiveInt(req.query.limit, 2000)
+    const beforeId = req.query.beforeId != null ? parsePositiveInt(req.query.beforeId, null) : null
+    res.json({
+      success: true,
+      logs: listAgentRunLogs({ runId: req.params.id, limit, beforeId }),
+    })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/runs/:id/cancel', (req, res) => {
+  try {
+    const result = cancelRun(req.params.id)
+    if (!result.ok) return res.status(404).json({ success: false, error: result.error })
+    res.json({ success: true, result, run: getRun(req.params.id) })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }
@@ -273,7 +342,12 @@ router.post('/tasks', (req, res) => {
 
 router.get('/tasks/:id', (req, res) => {
   try {
-    const task = getTaskDetail(req.params.id)
+    const includeEvents = parseBooleanFlag(req.query.includeEvents, false)
+    const eventLimit = includeEvents ? parsePositiveInt(req.query.eventLimit, DEFAULT_EVENT_LIMIT) : null
+    const beforeEventId = includeEvents && req.query.beforeEventId != null
+      ? parsePositiveInt(req.query.beforeEventId, null)
+      : null
+    const task = getTaskDetail(req.params.id, { includeEvents, eventLimit, beforeEventId })
     if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
     res.json({ success: true, task })
   } catch (err) {
@@ -283,7 +357,48 @@ router.get('/tasks/:id', (req, res) => {
 
 router.get('/tasks/:id/events', (req, res) => {
   try {
-    res.json({ success: true, events: listTaskEvents(req.params.id) })
+    const limit = parsePositiveInt(req.query.limit, DEFAULT_EVENT_LIMIT)
+    const beforeId = req.query.beforeId != null ? parsePositiveInt(req.query.beforeId, null) : null
+    res.json({
+      success: true,
+      events: listTaskEvents(req.params.id, { limit, beforeId }),
+    })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.get('/tasks/:id/events/stream', (req, res) => {
+  const taskId = req.params.id
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.flushHeaders?.()
+
+  res.write(`data: ${JSON.stringify({ type: 'connected', taskId, timestamp: Date.now() })}\n\n`)
+
+  const handler = (event) => {
+    if (event.taskId !== taskId) return
+    res.write(`data: ${JSON.stringify(event)}\n\n`)
+  }
+  claudeRuntimeEvents.on('event', handler)
+
+  const keepAlive = setInterval(() => {
+    res.write(`data: ${JSON.stringify({ type: 'ping', taskId, timestamp: Date.now() })}\n\n`)
+  }, 25000)
+
+  req.on('close', () => {
+    clearInterval(keepAlive)
+    claudeRuntimeEvents.off('event', handler)
+  })
+})
+
+router.post('/tasks/:id/plan/run', (req, res) => {
+  try {
+    const task = getTaskDetail(req.params.id)
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+    const run = enqueuePlanRun(task.id)
+    res.json({ success: true, task: getTaskDetail(task.id), planRunId: run.id, run })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }
@@ -306,7 +421,7 @@ router.post('/tasks/:id/plan', (req, res) => {
     }
 
     savePlan(req.params.id, plan)
-    createSubtasksFromPlan(req.params.id, plan, AGENT_MAP)
+    createSubtasksFromPlan(req.params.id, plan, RUNTIME_AGENT_MAP)
     const updated = getTaskDetail(req.params.id)
     res.json({ success: true, task: updated, dispatches: subtaskDispatches(updated) })
   } catch (err) {
@@ -319,15 +434,27 @@ router.post('/tasks/:id/dispatch', (req, res) => {
     const task = getTaskDetail(req.params.id)
     if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
     if (!task.plan_json) return res.status(400).json({ success: false, error: 'Task has no accepted plan_json' })
-    createSubtasksFromPlan(req.params.id, validatePlan(task.plan_json), AGENT_MAP)
+    createSubtasksFromPlan(req.params.id, validatePlan(task.plan_json), RUNTIME_AGENT_MAP)
     const updated = getTaskDetail(req.params.id)
     addTaskEvent({
       taskId: task.id,
       type: 'task.dispatch.queued',
-      message: '已重新生成子任务 WebSocket 派发指令',
-      payload: { subtaskCount: updated.subtasks.length },
+      message: '已重新生成子任务 Claude Runtime 派发指令',
+      payload: { subtaskCount: updated.subtasks.length, mode: 'claude-runtime' },
     })
-    res.json({ success: true, task: updated, dispatches: subtaskDispatches(updated) })
+    const runs = enqueueSubtasksForTask(updated.id)
+    res.json({ success: true, task: getTaskDetail(updated.id), runs })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/tasks/:id/subtasks/run', (req, res) => {
+  try {
+    const task = getTaskDetail(req.params.id)
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+    const runs = enqueueSubtasksForTask(task.id)
+    res.json({ success: true, task: getTaskDetail(task.id), runs })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }
@@ -361,17 +488,43 @@ router.post('/subtasks/:id/retry', (req, res) => {
   try {
     const subtask = getSubtask(req.params.id)
     if (!subtask) return res.status(404).json({ success: false, error: 'Subtask not found' })
-    const task = getTaskDetail(subtask.task_id)
     updateSubtask(subtask.id, { status: 'assigned', progress: 5, error: null })
     addTaskEvent({
-      taskId: task.id,
+      taskId: subtask.task_id,
       subtaskId: subtask.id,
       agentId: subtask.assigned_agent_id,
       type: 'subtask.retry.queued',
-      message: '已生成子任务重试派发指令，等待前端 WebSocket 发送',
-      payload: { sessionKey: subtask.session_key, mode: 'frontend-websocket' },
+      message: '已生成子任务重试请求，进入 Claude Runtime 队列',
+      payload: { sessionKey: subtask.session_key, mode: 'claude-runtime' },
     })
-    res.json({ success: true, task: getTaskDetail(task.id), dispatch: subtaskDispatch(task, getSubtask(subtask.id)) })
+    const run = retrySubtaskRun(subtask.id)
+    res.json({ success: true, task: getTaskDetail(subtask.task_id), run })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/subtasks/:id/run', (req, res) => {
+  try {
+    const subtask = getSubtask(req.params.id)
+    if (!subtask) return res.status(404).json({ success: false, error: 'Subtask not found' })
+    const run = enqueueSubtaskRun(subtask.id)
+    res.json({ success: true, task: getTaskDetail(subtask.task_id), run })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.get('/subtasks/:id/logs', (req, res) => {
+  try {
+    const subtask = getSubtask(req.params.id)
+    if (!subtask) return res.status(404).json({ success: false, error: 'Subtask not found' })
+    const limit = parsePositiveInt(req.query.limit, 2000)
+    const beforeId = req.query.beforeId != null ? parsePositiveInt(req.query.beforeId, null) : null
+    res.json({
+      success: true,
+      logs: listAgentRunLogs({ subtaskId: req.params.id, limit, beforeId }),
+    })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }
@@ -502,10 +655,11 @@ router.post('/tasks/:id/finalize', (req, res) => {
       taskId: task.id,
       agentId: 'xiaomu',
       type: 'summary.request.queued',
-      message: '已生成最终汇总请求，等待前端 WebSocket 派发',
-      payload: { sessionKey: task.coordinator_session_key, mode: 'frontend-websocket' },
+      message: '已生成最终汇总请求，进入 Claude Runtime 队列',
+      payload: { sessionKey: task.coordinator_session_key, mode: 'claude-runtime' },
     })
-    res.json({ success: true, task: getTaskDetail(task.id), dispatch: coordinatorDispatch(getTaskDetail(task.id), 'summary') })
+    const run = enqueueSummaryRun(task.id)
+    res.json({ success: true, task: getTaskDetail(task.id), summaryRunId: run.id, run })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }

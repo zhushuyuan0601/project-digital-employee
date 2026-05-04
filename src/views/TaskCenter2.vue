@@ -43,40 +43,48 @@
             </button>
           </div>
 
-          <div v-if="tasksStore.loading" class="quiet-state">任务加载中...</div>
-          <div v-else-if="tasks.length === 0" class="quiet-state">暂无任务，先创建一个协作目标。</div>
-          <template v-else>
-            <button
-              v-for="task in tasks"
-              :key="task.id"
-              type="button"
-              class="task-row"
-              :class="{ active: selectedTask?.id === task.id }"
-              @click="selectTask(task.id)"
-            >
-              <div class="task-row__top">
-                <strong>{{ task.title }}</strong>
-                <span class="status-chip" :class="`status-chip--${task.status}`">{{ statusText(task.status) }}</span>
-              </div>
-              <div class="task-row__meta">
-                <span>{{ task.progress || 0 }}%</span>
-                <span>{{ task.completed_subtask_count || completedCount(task) }}/{{ task.subtask_count || task.subtasks?.length || 0 }} 子任务</span>
-                <span>{{ formatTime(task.updated_at) }}</span>
-              </div>
-              <div class="mini-progress">
-                <span :style="{ width: `${task.progress || 0}%` }"></span>
-              </div>
-            </button>
-          </template>
+          <div ref="taskListScrollRef" class="task-list__body">
+            <div v-if="tasksStore.loading" class="quiet-state">任务加载中...</div>
+            <div v-else-if="tasks.length === 0" class="quiet-state">暂无任务，先创建一个协作目标。</div>
+            <template v-else>
+              <button
+                v-for="task in tasks"
+                :key="task.id"
+                type="button"
+                class="task-row"
+                :class="{ active: selectedTask?.id === task.id }"
+                :ref="el => setTaskRowRef(task.id, el as HTMLButtonElement | null)"
+                @click="selectTask(task.id)"
+              >
+                <div class="task-row__top">
+                  <strong>{{ task.title }}</strong>
+                  <span class="status-chip" :class="`status-chip--${task.status}`">{{ statusText(task.status) }}</span>
+                </div>
+                <div class="task-row__meta">
+                  <span>{{ task.progress || 0 }}%</span>
+                  <span>{{ task.completed_subtask_count || completedCount(task) }}/{{ task.subtask_count || task.subtasks?.length || 0 }} 子任务</span>
+                  <span>{{ formatTime(task.updated_at) }}</span>
+                </div>
+                <div class="mini-progress">
+                  <span :style="{ width: `${task.progress || 0}%` }"></span>
+                </div>
+              </button>
+            </template>
+          </div>
         </section>
       </aside>
 
       <main class="mission-stage">
         <section v-if="selectedTask" class="surface mission-hero">
-          <div class="mission-hero__copy">
-            <p class="eyebrow">当前任务</p>
-            <h1>{{ selectedTask.title }}</h1>
-            <p>{{ selectedTask.description }}</p>
+          <div class="mission-hero__head">
+            <div class="mission-hero__copy">
+              <p class="eyebrow">当前任务</p>
+              <h1>{{ selectedTask.title }}</h1>
+            </div>
+            <span class="status-chip" :class="`status-chip--${selectedTask.status}`">{{ statusText(selectedTask.status) }}</span>
+          </div>
+          <div class="mission-hero__tips">
+            <span v-for="tip in taskHeaderTips" :key="tip" class="mission-tip">{{ tip }}</span>
           </div>
           <div class="mission-hero__metrics">
             <div>
@@ -94,65 +102,41 @@
           </div>
         </section>
 
-        <section v-if="selectedTask?.subtasks.length" class="surface team-live">
-          <div class="surface-heading">
-            <div>
-              <p class="eyebrow">协作现场</p>
-              <h2>团队成员正在处理什么</h2>
-            </div>
-            <span class="status-chip status-chip--running">{{ selectedTask.subtasks.length }} 名成员</span>
-          </div>
-          <div class="team-live-grid">
-            <button
-              v-for="subtask in selectedTask.subtasks"
-              :key="subtask.id"
-              class="member-card"
-              type="button"
-              @click="openMemberConversation(subtask)"
-            >
-              <div class="member-card__top">
-                <span class="member-avatar">{{ agentInitial(subtask.assigned_agent_id) }}</span>
-                <div>
-                  <strong>{{ agentName(subtask.assigned_agent_id) }}</strong>
-                  <small>{{ subtask.title }}</small>
+        <section v-if="selectedTask" class="surface mission-flow mission-flow--compact">
+          <div class="mission-flow__compact-head">
+            <div class="mission-flow__rail mission-flow__rail--compact">
+              <article
+                v-for="(step, index) in taskFlowSteps"
+                :key="step.key"
+                class="flow-step flow-step--compact"
+                :class="`flow-step--${step.state}`"
+              >
+                <div class="flow-step__marker">
+                  <span>{{ index + 1 }}</span>
                 </div>
-                <i class="ri-message-3-line"></i>
-              </div>
-              <div class="member-card__activity">
-                <span class="status-chip" :class="`status-chip--${subtask.status}`">{{ subtaskStatusText(subtask.status) }}</span>
-                <span>{{ subtask.progress || 0 }}%</span>
-              </div>
-              <p>{{ latestAgentMessage(subtask.assigned_agent_id) || subtask.description }}</p>
-            </button>
-          </div>
-        </section>
-
-        <section v-if="selectedTask && needsPlan(selectedTask)" class="surface plan-console">
-          <div class="surface-heading">
-            <div>
-              <p class="eyebrow">拆解计划</p>
-              <h2>应用小呦返回的 JSON</h2>
+                <div class="flow-step__body">
+                  <strong>{{ step.title }}</strong>
+                </div>
+              </article>
             </div>
-            <button class="ghost-btn" type="button" @click="fillFromCoordinator">
-              <i class="ri-robot-line"></i>
-              使用小呦最新回复
+            <button
+              v-if="taskFlowCallout.actionLabel && taskFlowCallout.target"
+              class="ghost-btn ghost-btn--compact mission-flow__jump"
+              type="button"
+              @click="scrollToWorkflowTarget(taskFlowCallout.target)"
+            >
+              <i class="ri-corner-down-right-line"></i>
+              {{ taskFlowCallout.actionLabel }}
             </button>
           </div>
-          <textarea
-            v-model="planDraft"
-            class="field field--plan"
-            placeholder="粘贴小呦返回的结构化 JSON，平台会校验并自动派发子任务。"
-          ></textarea>
-          <div class="plan-actions">
-            <span>状态：{{ statusText(selectedTask.status) }}</span>
-            <button class="primary-btn" type="button" :disabled="applyingPlan || !planDraft.trim()" @click="applyPlan">
-              <i class="ri-node-tree"></i>
-              {{ applyingPlan ? '应用中' : '校验并派发' }}
-            </button>
+          <div class="mission-flow__hint">
+            <span class="mission-flow__label">当前动作</span>
+            <strong>{{ taskFlowCallout.title }}</strong>
+            <p>{{ taskFlowCallout.detail }}</p>
           </div>
         </section>
 
-        <section v-if="selectedTask" class="surface subtask-board">
+        <section v-if="selectedTask" ref="executionSectionRef" class="surface subtask-board">
           <div class="surface-heading">
             <div>
               <p class="eyebrow">执行板</p>
@@ -195,6 +179,148 @@
           </div>
         </section>
 
+        <section
+          v-if="selectedTask?.subtasks.length"
+          class="surface team-live"
+          :class="{
+            'team-live--active': liveSubtaskCount > 0,
+            'team-live--changed': recentTeamChangeCount > 0,
+          }"
+        >
+          <div class="surface-heading">
+            <div>
+              <p class="eyebrow">协作现场</p>
+              <h2>团队成员执行细节</h2>
+            </div>
+            <div class="surface-heading__meta">
+              <span class="status-chip status-chip--running" :class="{ 'status-chip--live': liveSubtaskCount > 0 }">
+                {{ liveSubtaskCount }} 名执行中
+              </span>
+              <span class="status-chip" :class="{ 'status-chip--pulse': recentTeamChangeCount > 0 }">
+                刚更新 {{ recentTeamChangeCount }}
+              </span>
+              <span class="status-chip">产出 {{ selectedTask.outputs.length }}</span>
+            </div>
+          </div>
+          <div class="team-live-grid">
+            <article
+              v-for="subtask in selectedTask.subtasks"
+              :key="subtask.id"
+              class="member-card"
+              :class="{
+                'member-card--active': isSubtaskWorking(subtask),
+                'member-card--changed': isSubtaskRecentlyUpdated(subtask),
+              }"
+            >
+              <div class="member-card__top">
+                <span class="member-avatar">{{ agentInitial(subtask.assigned_agent_id) }}</span>
+                <div>
+                  <strong>{{ agentName(subtask.assigned_agent_id) }}</strong>
+                  <small>{{ subtask.title }}</small>
+                </div>
+                <div class="member-card__signals">
+                  <span v-if="isSubtaskWorking(subtask)" class="member-live-badge">
+                    <span class="member-live-badge__dot"></span>
+                    执行中
+                  </span>
+                  <span v-else-if="isSubtaskRecentlyUpdated(subtask)" class="member-live-badge member-live-badge--changed">
+                    刚更新
+                  </span>
+                  <i class="ri-message-3-line"></i>
+                </div>
+              </div>
+              <div class="member-card__activity">
+                <span class="status-chip" :class="`status-chip--${subtask.status}`">{{ subtaskStatusText(subtask.status) }}</span>
+                <span>{{ subtask.progress || 0 }}%</span>
+              </div>
+              <div class="member-card__focus">
+                <span class="member-card__label">当前在做</span>
+                <p>{{ agentWorkbench(subtask).focus }}</p>
+              </div>
+              <div class="member-card__focus member-card__focus--muted">
+                <span class="member-card__label">交付目标</span>
+                <p>{{ subtask.expected_output || subtask.description }}</p>
+              </div>
+              <div v-if="agentWorkbench(subtask).latestOutput" class="member-card__file">
+                <button
+                  type="button"
+                  class="member-file-pill"
+                  @click="agentWorkbench(subtask).latestOutput && previewOutput(agentWorkbench(subtask).latestOutput)"
+                >
+                  <i :class="fileIcon(agentWorkbench(subtask).latestOutput?.name || '')"></i>
+                  <span>
+                    <strong>{{ agentWorkbench(subtask).latestOutput?.name }}</strong>
+                    <small>{{ agentWorkbench(subtask).latestOutput ? formatOutputTime(agentWorkbench(subtask).latestOutput) : '--' }}</small>
+                  </span>
+                </button>
+              </div>
+              <div class="member-card__trail">
+                <div
+                  v-for="trail in agentWorkbench(subtask).trail"
+                  :key="trail.id"
+                  class="member-trail"
+                  :class="`member-trail--${trail.tone}`"
+                >
+                  <span class="member-trail__dot"></span>
+                  <div>
+                    <strong>{{ trail.headline }}</strong>
+                    <p>{{ trail.detail }}</p>
+                  </div>
+                </div>
+              </div>
+              <div class="member-card__footer">
+                <span>{{ agentWorkbench(subtask).outputCount }} 个文件</span>
+                <span>{{ agentWorkbench(subtask).statusNote }}</span>
+                <button class="ghost-btn ghost-btn--compact" type="button" @click="openMemberConversation(subtask)">
+                  查看细节
+                </button>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section
+          v-if="selectedTask && needsPlan(selectedTask)"
+          ref="planSectionRef"
+          class="surface plan-console"
+          :class="{ 'plan-console--focus': taskFlowCurrentKey === 'plan' }"
+        >
+          <div class="surface-heading">
+            <div>
+              <p class="eyebrow">拆解计划</p>
+              <h2>应用小呦返回的 JSON</h2>
+            </div>
+            <div class="plan-heading-actions">
+              <button
+                v-if="selectedTask.status === 'failed'"
+                class="ghost-btn"
+                type="button"
+                :disabled="rerunningPlan"
+                @click="rerunPlan"
+              >
+                <i class="ri-restart-line"></i>
+                {{ rerunningPlan ? '重试中' : '重新拆解' }}
+              </button>
+              <button class="ghost-btn" type="button" @click="fillFromCoordinator">
+                <i class="ri-robot-line"></i>
+                使用小呦最新回复
+              </button>
+            </div>
+          </div>
+          <textarea
+            v-model="planDraft"
+            class="field field--plan"
+            placeholder="粘贴小呦返回的结构化 JSON，平台会校验并自动派发子任务。"
+          ></textarea>
+          <div class="plan-actions">
+            <span>状态：{{ statusText(selectedTask.status) }}</span>
+            <button class="primary-btn" type="button" :disabled="applyingPlan || !planDraft.trim()" @click="applyPlan">
+              <i class="ri-node-tree"></i>
+              {{ applyingPlan ? '应用中' : '校验并派发' }}
+            </button>
+          </div>
+        </section>
+
         <section v-if="!selectedTask" class="surface empty-mission">
           <i class="ri-route-line"></i>
           <h2>选择或创建一个任务</h2>
@@ -207,19 +333,40 @@
           <div class="surface-heading">
             <div>
               <p class="eyebrow">事件流</p>
-              <h2>真实进度</h2>
+              <h2>关键动向与文件产出</h2>
             </div>
+            <span class="status-chip">{{ importantEventInsights.length }} 条关键动向</span>
           </div>
-          <div v-if="!selectedTask?.events?.length" class="quiet-state">暂无事件。</div>
-          <div v-else ref="eventListRef" class="event-list">
-            <div v-for="event in selectedTask.events" :key="event.id" class="event-item">
+          <div v-if="importantEventInsights.length === 0" class="quiet-state">暂无关键事件。</div>
+          <div v-else ref="eventListRef" class="event-list event-list--rich">
+            <article
+              v-for="insight in importantEventInsights"
+              :key="insight.id"
+              class="event-item event-item--rich"
+              :class="`event-item--${insight.tone}`"
+            >
               <span class="event-dot"></span>
-              <div>
-                <strong>{{ event.type }}</strong>
-                <p>{{ event.message }}</p>
-                <small>{{ formatTime(event.created_at) }} · {{ event.agent_id || 'system' }}</small>
+              <div class="event-item__body">
+                <div class="event-item__top">
+                  <span class="event-badge">{{ insight.badge }}</span>
+                  <small>{{ formatTime(insight.timestamp) }}</small>
+                </div>
+                <strong>{{ insight.headline }}</strong>
+                <p>{{ insight.detail }}</p>
+                <div class="event-item__meta">
+                  <span>{{ insight.actor }}</span>
+                  <span v-if="insight.fileLabel">{{ insight.fileLabel }}</span>
+                </div>
+                <button
+                  v-if="insight.linkedOutput"
+                  class="ghost-btn ghost-btn--compact"
+                  type="button"
+                  @click="previewOutput(insight.linkedOutput)"
+                >
+                  查看文件
+                </button>
               </div>
-            </div>
+            </article>
           </div>
         </section>
 
@@ -232,37 +379,46 @@
           </div>
           <div v-if="!selectedTask?.outputs?.length" class="quiet-state">暂无绑定成果。</div>
           <button
-            v-for="output in selectedTask?.outputs || []"
+            v-for="output in orderedTaskOutputs"
             :key="output.id"
             type="button"
             class="output-row"
+            :class="{ 'output-row--summary': isSummaryOutput(output) }"
             @click="previewOutput(output)"
           >
             <i :class="fileIcon(output.name)"></i>
-            <span>{{ output.name }}</span>
-            <small>{{ agentName(output.agent_id || '') }}</small>
+            <span class="output-row__content">
+              <strong>{{ output.name }}</strong>
+              <small>{{ agentName(output.agent_id || '') }}</small>
+            </span>
+            <span v-if="isSummaryOutput(output)" class="output-badge">汇总报告</span>
           </button>
         </section>
 
-        <section v-if="selectedTask" class="surface review-panel">
+        <section
+          v-if="selectedTask"
+          ref="reviewPanelRef"
+          class="surface review-panel"
+          :class="{ 'review-panel--focus': taskFlowCurrentKey === 'review' }"
+        >
           <div class="surface-heading">
             <div>
               <p class="eyebrow">汇总验收</p>
               <h2>小呦收口</h2>
             </div>
           </div>
+          <p class="review-hint">{{ reviewHint }}</p>
           <textarea v-model="summaryDraft" class="field field--textarea" placeholder="最终验收备注，可留空。"></textarea>
           <div class="review-actions">
-            <button class="ghost-btn" type="button" :disabled="!canFinalize" @click="finalizeTask">
+            <button class="ghost-btn" type="button" :disabled="!canRequestSummary" @click="finalizeTask">
               <i class="ri-file-list-3-line"></i>
-              请求汇总
+              {{ reviewRequestButtonText }}
             </button>
             <button class="primary-btn" type="button" :disabled="selectedTask.status === 'completed'" @click="completeTask">
               <i class="ri-archive-line"></i>
               验收归档
             </button>
           </div>
-          <p v-if="selectedTask.summary" class="summary-text">{{ selectedTask.summary }}</p>
         </section>
       </aside>
     </div>
@@ -280,7 +436,7 @@
       <div class="dialog-create-form">
         <div class="dialog-create-form__head">
           <span class="agent-pill">ceo</span>
-          <p>任务会先交给小呦拆解，再由平台通过 WebSocket 派发给执行 Agent。</p>
+          <p>任务会先交给小呦拆解，再由 Claude Runtime 队列派发给执行 Agent。</p>
         </div>
         <label>
           <span>任务标题</span>
@@ -315,38 +471,75 @@
         <div class="member-dialog__header" v-if="activeMemberSubtask">
           <span class="member-avatar">{{ agentInitial(activeMemberSubtask.assigned_agent_id) }}</span>
           <div>
-            <p class="eyebrow">成员对话</p>
+            <p class="eyebrow">执行日志</p>
             <h2>{{ agentName(activeMemberSubtask.assigned_agent_id) }} · {{ activeMemberSubtask.title }}</h2>
           </div>
           <span class="status-chip" :class="`status-chip--${activeMemberSubtask.status}`">{{ subtaskStatusText(activeMemberSubtask.status) }}</span>
         </div>
       </template>
       <div v-if="activeMemberSubtask" class="member-chat-shell">
-        <div class="member-task-context">
-          <strong>负责内容</strong>
-          <p>{{ activeMemberSubtask.description }}</p>
-        </div>
-        <div ref="memberChatListRef" class="member-chat-list">
-          <div v-if="activeMemberMessages.length === 0" class="quiet-state">暂无对话。派发任务后，这里会显示平台与 OpenClaw 的问答。</div>
-          <div
-            v-for="message in activeMemberMessages"
-            :key="message.id"
-            class="chat-bubble"
-            :class="`chat-bubble--${message.role}`"
-          >
-            <div class="chat-bubble__meta">
-              <span>{{ message.role === 'user' ? '平台' : message.role === 'assistant' ? agentName(activeMemberSubtask.assigned_agent_id) : '系统' }}</span>
-              <small>{{ formatMsTime(message.timestamp) }}</small>
-            </div>
-            <p>{{ message.content }}</p>
+        <div class="member-terminal">
+          <div class="member-terminal__bar">
+            <span class="member-terminal__pill">claude-runtime</span>
+            <span>status={{ subtaskStatusText(activeMemberSubtask.status) }}</span>
+            <span>progress={{ activeMemberSubtask.progress || 0 }}%</span>
+            <span>run={{ activeMemberRunId || '--' }}</span>
+            <span>session={{ activeMemberSessionId || '--' }}</span>
+            <span>logs={{ activeMemberTerminalLogs.length }}</span>
+            <button class="member-terminal__refresh" type="button" :disabled="memberLogsLoading" @click="fetchMemberRunLogs(activeMemberSubtask.id)">
+              <i class="ri-refresh-line"></i>
+              {{ memberLogsLoading ? 'sync' : 'refresh' }}
+            </button>
+            <span class="member-terminal__context">task={{ activeMemberSubtask.description }}</span>
           </div>
-        </div>
-        <div class="member-followup">
-          <textarea v-model="memberFollowupDraft" class="field" placeholder="继续追问这个成员，例如：请补充风险和文件路径"></textarea>
-          <button class="primary-btn" type="button" :disabled="sendingMemberFollowup || !memberFollowupDraft.trim()" @click="sendMemberFollowup">
-            <i class="ri-send-plane-line"></i>
-            {{ sendingMemberFollowup ? '发送中' : '发送追问' }}
-          </button>
+          <div ref="memberLogListRef" class="member-terminal__screen">
+            <div v-if="memberLogsLoading && activeMemberTerminalLogs.length === 0" class="member-terminal__empty">
+              正在同步 Claude Runtime 日志...
+            </div>
+            <div v-else-if="memberLogsError && activeMemberTerminalLogs.length === 0" class="member-terminal__empty member-terminal__empty--error">
+              {{ memberLogsError }}
+            </div>
+            <div v-else-if="activeMemberTerminalLogs.length === 0" class="member-terminal__empty">
+              暂无执行日志。Claude Runtime 开始运行后，这里会实时显示步骤、工具、文件和结果。
+            </div>
+            <article
+              v-for="log in activeMemberTerminalLogs"
+              :key="log.id"
+              class="terminal-entry"
+              :class="`terminal-entry--${log.tone}`"
+            >
+              <div class="terminal-entry__meta">
+                <span class="terminal-entry__time">{{ formatLogTime(log.timestampMs || log.timestamp * 1000) }}</span>
+                <span class="terminal-entry__prompt">{{ terminalPrompt(log) }}</span>
+                <span v-if="log.runId" class="terminal-entry__run">{{ shortRunId(log.runId) }}</span>
+              </div>
+              <pre
+                v-if="log.sourceType === 'agent.assistant'"
+                class="terminal-entry__content terminal-entry__content--assistant"
+                :class="{ 'terminal-entry__content--expanded': expandedLogIds.has(log.id) }"
+              >{{ log.content }}</pre>
+              <pre v-else class="terminal-entry__content">{{ log.content }}</pre>
+              <button
+                v-if="log.sourceType === 'agent.assistant' && isLongTerminalLog(log)"
+                class="terminal-entry__expand"
+                type="button"
+                @click="toggleTerminalLog(log.id)"
+              >
+                {{ expandedLogIds.has(log.id) ? '收起输出' : '展开完整输出' }}
+              </button>
+              <div v-if="log.fileLabel || log.linkedOutput" class="terminal-entry__footer">
+                <span v-if="log.fileLabel" class="terminal-entry__file">{{ log.fileLabel }}</span>
+                <button
+                  v-if="log.linkedOutput"
+                  class="ghost-btn ghost-btn--compact"
+                  type="button"
+                  @click="previewOutput(log.linkedOutput)"
+                >
+                  打开文件
+                </button>
+              </div>
+            </article>
+          </div>
         </div>
       </div>
     </el-dialog>
@@ -359,12 +552,31 @@ import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import TaskControlBar from '@/components/task-center/TaskControlBar.vue'
+import { taskApi } from '@/api/tasks'
+import type { AgentRunLog } from '@/api/tasks'
 import { useAuthStore } from '@/stores/auth'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
 import { useTasksStore } from '@/stores/tasks'
 import { useThemeStore } from '@/stores/theme'
-import { extractChatText, extractText } from '@/utils/gateway-protocol'
-import type { Subtask, Task, TaskDispatch, TaskOutput, TaskStatus, SubtaskStatus } from '@/types/task'
+import type { Subtask, Task, TaskEvent, TaskOutput, TaskStatus, SubtaskStatus } from '@/types/task'
+
+const TASK_EVENT_LIMIT = 400
+const TASK_SYNC_DEBOUNCE_MS = 1200
+const TASK_POLL_INTERVAL_MS = 20000
+const MEMBER_ACTIVE_WINDOW_MS = 45000
+const MEMBER_CHANGE_WINDOW_MS = 12000
+const EVENT_SYNC_TYPES = new Set([
+  'plan.accepted',
+  'plan.invalid',
+  'task.dispatch.queued',
+  'agent.done',
+  'agent.error',
+  'agent.cancelled',
+  'agent.orphaned',
+  'outputs.bound',
+  'task.completed',
+  'summary.request.queued',
+])
 
 const tasksStore = useTasksStore()
 const multiAgentStore = useMultiAgentChatStore()
@@ -381,7 +593,9 @@ const createForm = reactive({
 const createDialog = ref(false)
 const creating = ref(false)
 const applyingPlan = ref(false)
+const rerunningPlan = ref(false)
 const scanningOutputs = ref(false)
+const finalizingSummary = ref(false)
 const planDraft = ref('')
 const summaryDraft = ref('')
 const currentTimeMs = ref(Date.now())
@@ -393,34 +607,120 @@ const previewLoading = ref(false)
 const previewError = ref<string | null>(null)
 const memberDialog = ref(false)
 const activeMemberSubtaskId = ref('')
-const memberFollowupDraft = ref('')
-const sendingMemberFollowup = ref(false)
+const memberRunLogs = ref<Record<string, AgentRunLog[]>>({})
+const memberLogsLoading = ref(false)
+const memberLogsError = ref('')
+const expandedLogIds = ref(new Set<string>())
 const eventListRef = ref<HTMLElement | null>(null)
-const memberChatListRef = ref<HTMLElement | null>(null)
+const memberLogListRef = ref<HTMLElement | null>(null)
+const taskListScrollRef = ref<HTMLElement | null>(null)
+const planSectionRef = ref<HTMLElement | null>(null)
+const executionSectionRef = ref<HTMLElement | null>(null)
+const reviewPanelRef = ref<HTMLElement | null>(null)
 let clockTimer: ReturnType<typeof setInterval> | null = null
 let refreshTimer: ReturnType<typeof setInterval> | null = null
-type PendingTaskDispatch = { taskId: string; subtaskId: string; agentId: string; sessionKey: string; sentAt: number }
-type GatewayTaskEventType = 'start' | 'assistant' | 'final' | 'done' | 'error'
-const pendingTaskDispatches = ref<Record<string, PendingTaskDispatch>>({})
-const recordedGatewayEvents = new Set<string>()
+let taskEventSource: EventSource | null = null
+let taskSyncTimer: ReturnType<typeof setTimeout> | null = null
+let taskSyncInFlight = false
+let pendingTaskSyncId: string | null = null
+let pendingTaskSyncNeedsEvents = false
+type EventTone = 'neutral' | 'progress' | 'output' | 'success' | 'warning' | 'danger'
+type TimelineInsight = {
+  id: number | string
+  timestamp: number
+  tone: EventTone
+  badge: string
+  headline: string
+  detail: string
+  actor: string
+  fileLabel: string | null
+  linkedOutput: TaskOutput | null
+}
+type AgentWorkbenchSummary = {
+  focus: string
+  trail: TimelineInsight[]
+  latestOutput: TaskOutput | null
+  outputCount: number
+  statusNote: string
+}
+type TerminalLogEntry = {
+  id: string
+  timestamp: number
+  timestampMs: number
+  tone: EventTone
+  label: string
+  content: string
+  fileLabel: string | null
+  linkedOutput: TaskOutput | null
+  sourceType: string
+  runId: string
+}
+type WorkflowTarget = 'plan' | 'execution' | 'review'
+type FlowStepState = 'done' | 'current' | 'pending'
+type TaskFlowStep = {
+  key: 'create' | 'plan' | 'execute' | 'review' | 'archive'
+  title: string
+  description: string
+  state: FlowStepState
+  stateLabel: string
+}
+type TaskFlowCallout = {
+  title: string
+  detail: string
+  actionLabel: string | null
+  target: WorkflowTarget | null
+}
 
 const tasks = computed(() => tasksStore.tasks)
 const selectedTask = computed(() => tasksStore.selectedTask)
+const selectedTaskEvents = computed(() => selectedTask.value?.events || [])
+const selectedTaskOutputs = computed(() => selectedTask.value?.outputs || [])
 const isLight = computed(() => themeStore.isLight)
-const allConnected = computed(() => multiAgentStore.allConnected)
-const anyConnected = computed(() => multiAgentStore.anyConnected)
-const aiStatus = computed<'connected' | 'disconnected' | 'error'>(() => allConnected.value ? 'connected' : anyConnected.value ? 'error' : 'disconnected')
-const aiStatusText = computed(() => allConnected.value ? '全部 Agent 在线' : anyConnected.value ? '部分 Agent 在线' : 'Gateway 未连接')
+const runtimeStatus = ref<{ healthy: boolean; running: number; queued: number; maxConcurrency: number; maxTurns?: number } | null>(null)
+const runtimeStreamConnected = ref(false)
+const allConnected = computed(() => !!runtimeStatus.value?.healthy)
+const anyConnected = computed(() => !!runtimeStatus.value?.healthy)
+const aiStatus = computed<'connected' | 'disconnected' | 'error'>(() => runtimeStatus.value?.healthy ? 'connected' : 'disconnected')
+const aiStatusText = computed(() => {
+  if (!runtimeStatus.value?.healthy) return 'Claude Runtime 未就绪'
+  return `Claude Runtime 就绪 · 运行 ${runtimeStatus.value.running} / 排队 ${runtimeStatus.value.queued} / 并发 ${runtimeStatus.value.maxConcurrency}`
+})
 const timestampText = computed(() => new Date(currentTimeMs.value).toLocaleString('zh-CN', { hour12: false }))
 const currentUserLabel = computed(() => authStore.user?.username || 'Admin')
 const canCreateTask = computed(() => createForm.title.trim().length > 0 && createForm.description.trim().length > 0)
 const canFinalize = computed(() => !!selectedTask.value?.subtasks.length && selectedTask.value.subtasks.every(subtask => subtask.status === 'completed'))
-const activeMemberSubtask = computed(() => selectedTask.value?.subtasks.find(subtask => subtask.id === activeMemberSubtaskId.value) || null)
-const activeMemberMessages = computed(() => {
-  const agentId = activeMemberSubtask.value?.assigned_agent_id
-  if (!agentId) return []
-  return multiAgentStore.agents[agentId]?.messages || []
+const hasReviewSummary = computed(() => !!selectedTask.value?.summary?.trim())
+const canRequestSummary = computed(() =>
+  !!selectedTask.value &&
+  canFinalize.value &&
+  !finalizingSummary.value &&
+  selectedTask.value.status !== 'reviewing' &&
+  selectedTask.value.status !== 'completed' &&
+  !hasReviewSummary.value
+)
+const reviewRequestButtonText = computed(() => {
+  if (finalizingSummary.value) return '请求中'
+  if (selectedTask.value?.status === 'reviewing' || hasReviewSummary.value) return '已请求汇总'
+  return '请求汇总'
 })
+const activeMemberSubtask = computed(() => selectedTask.value?.subtasks.find(subtask => subtask.id === activeMemberSubtaskId.value) || null)
+const activeMemberRunId = computed(() => {
+  const subtask = activeMemberSubtask.value
+  if (!subtask) return ''
+  const latestLog = (memberRunLogs.value[subtask.id] || []).at(-1)
+  const contextRunId = typeof subtask.context_json?.lastRunId === 'string' ? subtask.context_json.lastRunId : ''
+  return latestLog?.run_id || contextRunId
+})
+const activeMemberSessionId = computed(() => {
+  const subtask = activeMemberSubtask.value
+  if (!subtask) return ''
+  const latestLog = [...(memberRunLogs.value[subtask.id] || [])]
+    .reverse()
+    .find(log => runLogString(log, 'sessionId'))
+  const contextSessionId = typeof subtask.context_json?.lastClaudeSessionId === 'string' ? subtask.context_json.lastClaudeSessionId : ''
+  return latestLog ? runLogString(latestLog, 'sessionId') : contextSessionId
+})
+const taskRowRefs: Record<string, HTMLButtonElement | null> = {}
 
 const agentLabels: Record<string, string> = {
   xiaomu: '小呦',
@@ -450,9 +750,663 @@ const subtaskStatusLabels: Record<SubtaskStatus, string> = {
   failed: '失败',
 }
 
+const IMPORTANT_EVENT_TYPES = new Set([
+  'task.created',
+  'plan.request.queued',
+  'plan.accepted',
+  'plan.invalid',
+  'task.dispatch.queued',
+  'subtask.retry.queued',
+  'agent.run.queued',
+  'agent.start',
+  'outputs.bound',
+  'outputs.scanned',
+  'agent.done',
+  'agent.error',
+  'agent.orphaned',
+  'agent.cancelled',
+  'summary.request.queued',
+  'task.completed',
+  'subtask.completed',
+])
+
+const EVENT_BADGES: Record<string, string> = {
+  'task.created': '创建',
+  'plan.request.queued': '拆解请求',
+  'plan.accepted': '拆解完成',
+  'plan.invalid': '计划异常',
+  'task.dispatch.queued': '派发',
+  'subtask.retry.queued': '重试',
+  'agent.run.queued': '排队',
+  'agent.start': '开始',
+  'agent.assistant': '输出',
+  'agent.tool': '工具',
+  'outputs.bound': '文件',
+  'outputs.scanned': '扫描',
+  'agent.done': '完成',
+  'agent.error': '异常',
+  'agent.orphaned': '恢复',
+  'agent.cancelled': '取消',
+  'summary.request.queued': '汇总',
+  'task.completed': '归档',
+  'subtask.completed': '完成',
+}
+
+function cleanText(value: unknown, max = 120) {
+  const normalized = String(value || '').replace(/\s+/g, ' ').trim()
+  if (!normalized) return '暂无细节'
+  return normalized.length > max ? `${normalized.slice(0, max - 1)}…` : normalized
+}
+
+function eventPayload(event: TaskEvent) {
+  return event.payload_json && typeof event.payload_json === 'object'
+    ? event.payload_json
+    : {}
+}
+
+function payloadString(payload: Record<string, unknown>, key: string) {
+  const value = payload[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : ''
+}
+
+function payloadRunId(event: TaskEvent) {
+  return payloadString(eventPayload(event), 'runId')
+}
+
+function fileBaseName(path = '') {
+  return path.split('/').filter(Boolean).at(-1) || path
+}
+
+function isSummaryOutput(output: TaskOutput) {
+  if (!output) return false
+  if (output.agent_id === 'xiaomu' && !output.subtask_id) return true
+  return /汇总|总结|final|summary/i.test(`${output.name || ''} ${output.path || ''}`)
+}
+
+function formatOutputTime(output: TaskOutput) {
+  if (output.mtime) return formatMsTime(output.mtime)
+  return formatTime(output.created_at)
+}
+
+function eventTone(type: string): EventTone {
+  if (['agent.error', 'plan.invalid', 'agent.cancelled'].includes(type)) return 'danger'
+  if (['outputs.bound'].includes(type)) return 'output'
+  if (['agent.done', 'task.completed', 'subtask.completed'].includes(type)) return 'success'
+  if (['subtask.retry.queued', 'agent.run.queued', 'summary.request.queued', 'task.dispatch.queued'].includes(type)) return 'warning'
+  if (['agent.start', 'agent.tool', 'agent.assistant', 'outputs.scanned'].includes(type)) return 'progress'
+  return 'neutral'
+}
+
+function eventPaths(event: TaskEvent) {
+  const payload = eventPayload(event)
+  const values = new Set<string>()
+  const directPath = payloadString(payload, 'path') || payloadString(payload, 'outputPath')
+  if (directPath) values.add(directPath)
+  const files = Array.isArray(payload.files) ? payload.files : []
+  for (const item of files) {
+    if (!item || typeof item !== 'object') continue
+    const path = typeof (item as { path?: unknown }).path === 'string' ? String((item as { path?: unknown }).path) : ''
+    if (path) values.add(path)
+  }
+  return [...values]
+}
+
+function resolveOutputForEvent(event: TaskEvent, outputs: TaskOutput[]) {
+  const paths = eventPaths(event)
+  for (const path of paths) {
+    const matched = outputs.find(output => output.path === path)
+    if (matched) return matched
+  }
+
+  if (['outputs.bound', 'agent.done'].includes(event.type) && event.subtask_id) {
+    return outputs.find(output => output.subtask_id === event.subtask_id) || null
+  }
+
+  return null
+}
+
+function insightHeadline(event: TaskEvent) {
+  switch (event.type) {
+    case 'outputs.bound':
+      return '产生了新的文件成果'
+    case 'agent.done':
+      return 'Agent 已提交阶段结果'
+    case 'agent.error':
+      return '执行过程中出现异常'
+    case 'agent.start':
+      return 'Agent 开始执行'
+    case 'agent.run.queued':
+      return '进入 Claude Runtime 队列'
+    case 'subtask.retry.queued':
+      return '子任务已重新入队'
+    case 'plan.accepted':
+      return '拆解计划通过校验'
+    case 'summary.request.queued':
+      return '最终汇总已入队'
+    case 'task.completed':
+      return '任务已归档'
+    default:
+      return EVENT_BADGES[event.type] || event.type
+  }
+}
+
+function terminalEventLabel(event: TaskEvent) {
+  switch (event.type) {
+    case 'agent.start':
+      return 'START'
+    case 'agent.assistant':
+      return 'CLAUDE'
+    case 'agent.tool':
+      return 'TOOL'
+    case 'outputs.bound':
+      return 'OUTPUT'
+    case 'agent.done':
+      return 'DONE'
+    case 'agent.error':
+      return 'ERROR'
+    case 'subtask.retry.queued':
+      return 'RETRY'
+    case 'agent.run.queued':
+      return 'QUEUE'
+    default:
+      return String(EVENT_BADGES[event.type] || event.type).toUpperCase()
+  }
+}
+
+function terminalEventContent(event: TaskEvent) {
+  const payload = eventPayload(event)
+  if (event.type === 'agent.tool') {
+    const toolName = payloadString(payload, 'toolName')
+    return toolName ? `invoke readonly tool: ${toolName}` : event.message
+  }
+  if (event.type === 'agent.assistant') {
+    return String(event.message || '')
+  }
+  return String(event.message || '').trim()
+}
+
+function mergeAssistantContent(previous: string, incoming: string) {
+  if (!previous) return incoming
+  if (!incoming) return previous
+  if (incoming.startsWith(previous)) return incoming
+  if (previous.endsWith(incoming)) return previous
+  return `${previous}${incoming}`
+}
+
+function runLogPayload(log: AgentRunLog) {
+  return log.payload_json && typeof log.payload_json === 'object'
+    ? log.payload_json
+    : {}
+}
+
+function runLogString(log: AgentRunLog, key: string) {
+  const value = runLogPayload(log)[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : ''
+}
+
+function runLogTone(type: string): EventTone {
+  if (['error', 'cancelled'].includes(type)) return 'danger'
+  if (['done', 'result'].includes(type)) return 'success'
+  if (['output'].includes(type)) return 'output'
+  if (['queue'].includes(type)) return 'warning'
+  if (['start', 'system', 'tool', 'assistant.delta', 'assistant.snapshot'].includes(type)) return 'progress'
+  return 'neutral'
+}
+
+function runLogLabel(type: string) {
+  const labels: Record<string, string> = {
+    queue: 'QUEUE',
+    start: 'START',
+    system: 'SYSTEM',
+    tool: 'TOOL',
+    'assistant.delta': 'CLAUDE',
+    'assistant.snapshot': 'CLAUDE',
+    output: 'OUTPUT',
+    result: 'RESULT',
+    done: 'DONE',
+    error: 'ERROR',
+    cancelled: 'CANCEL',
+  }
+  return labels[type] || type.toUpperCase()
+}
+
+function runLogOutput(log: AgentRunLog, outputs: TaskOutput[]) {
+  const path = runLogString(log, 'path') || runLogString(log, 'outputPath')
+  if (!path) return null
+  return outputs.find(output => output.path === path) || null
+}
+
+function appendMemberRunLog(log: AgentRunLog) {
+  const subtaskId = log.subtask_id || ''
+  if (!subtaskId) return
+  const current = memberRunLogs.value[subtaskId] || []
+  const nextMap = new Map<number, AgentRunLog>()
+  for (const item of current) nextMap.set(Number(item.id), item)
+  nextMap.set(Number(log.id), log)
+  memberRunLogs.value = {
+    ...memberRunLogs.value,
+    [subtaskId]: [...nextMap.values()].sort((a, b) => Number(a.id) - Number(b.id)),
+  }
+}
+
+function normalizeStreamRunLog(value: unknown): AgentRunLog | null {
+  if (!value || typeof value !== 'object') return null
+  const item = value as Partial<AgentRunLog>
+  if (item.id == null || !item.run_id || !item.task_id || !item.type) return null
+  return {
+    id: Number(item.id),
+    run_id: String(item.run_id),
+    task_id: String(item.task_id),
+    subtask_id: item.subtask_id || null,
+    agent_id: item.agent_id || null,
+    type: String(item.type),
+    message: String(item.message || ''),
+    payload_json: item.payload_json || null,
+    created_at: Number(item.created_at || Math.floor(Date.now() / 1000)),
+    created_at_ms: Number(item.created_at_ms || Date.now()),
+  }
+}
+
+function toTimelineInsight(event: TaskEvent, outputs = selectedTaskOutputs.value): TimelineInsight {
+  const output = resolveOutputForEvent(event, outputs)
+  const paths = eventPaths(event)
+  const files = output?.name
+    ? output.name
+    : paths.length > 0
+      ? paths.map(fileBaseName).join(' / ')
+      : null
+
+  return {
+    id: event.id,
+    timestamp: Number(event.created_at || 0),
+    tone: eventTone(event.type),
+    badge: EVENT_BADGES[event.type] || event.type,
+    headline: insightHeadline(event),
+    detail: cleanText(event.message, 160),
+    actor: agentName(event.agent_id || 'system'),
+    fileLabel: files,
+    linkedOutput: output,
+  }
+}
+
+function isImportantEvent(event: TaskEvent) {
+  return IMPORTANT_EVENT_TYPES.has(event.type) || eventPaths(event).length > 0
+}
+
+const importantEventInsights = computed(() =>
+  (() => {
+    const insights = selectedTaskEvents.value
+      .filter(isImportantEvent)
+      .map(event => toTimelineInsight(event))
+
+    const outputInsights = selectedTaskOutputs.value
+      .map((output) => {
+        const pathLabel = output.path ? fileBaseName(output.path) : output.name
+        return {
+          id: `output-${output.id}`,
+          timestamp: outputTimestampMs(output),
+          tone: 'output' as EventTone,
+          badge: '文件',
+          headline: '产生了新的文件成果',
+          detail: `${agentName(output.agent_id || '')} 输出 ${output.name}`,
+          actor: agentName(output.agent_id || 'system'),
+          fileLabel: pathLabel,
+          linkedOutput: output,
+        }
+      })
+      .filter(item => !insights.some(insight => insight.linkedOutput?.id === item.linkedOutput?.id))
+
+    return [...insights, ...outputInsights]
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .slice(-24)
+  })()
+)
+
+const activeMemberTerminalLogs = computed<TerminalLogEntry[]>(() => {
+  const subtask = activeMemberSubtask.value
+  if (!subtask) return []
+
+  const subtaskOutputs = selectedTaskOutputs.value.filter(output => output.subtask_id === subtask.id)
+  const persistedLogs = memberRunLogs.value[subtask.id] || []
+
+  if (persistedLogs.length > 0) {
+    const logs: TerminalLogEntry[] = []
+    for (const log of persistedLogs) {
+      const content = String(log.message || '')
+      if (!content) continue
+
+      const isAssistant = log.type === 'assistant.delta' || log.type === 'assistant.snapshot'
+      const linkedOutput = runLogOutput(log, subtaskOutputs)
+      const fileLabel = linkedOutput?.name || fileBaseName(runLogString(log, 'path') || runLogString(log, 'outputPath'))
+      const previous = logs.at(-1)
+
+      if (
+        isAssistant &&
+        previous &&
+        previous.sourceType === 'agent.assistant' &&
+        previous.runId === log.run_id
+      ) {
+        previous.timestamp = Number(log.created_at || previous.timestamp)
+        previous.timestampMs = Number(log.created_at_ms || previous.timestampMs)
+        previous.content = log.type === 'assistant.snapshot'
+          ? mergeAssistantContent(previous.content, content)
+          : `${previous.content}${content}`
+        continue
+      }
+
+      logs.push({
+        id: `run-log-${log.id}`,
+        timestamp: Number(log.created_at || 0),
+        timestampMs: Number(log.created_at_ms || Number(log.created_at || 0) * 1000),
+        tone: runLogTone(log.type),
+        label: runLogLabel(log.type),
+        content,
+        fileLabel: fileLabel || null,
+        linkedOutput,
+        sourceType: isAssistant ? 'agent.assistant' : log.type,
+        runId: log.run_id,
+      })
+    }
+    return logs
+  }
+
+  const logs: TerminalLogEntry[] = []
+
+  for (const event of selectedTaskEvents.value.filter(item => item.subtask_id === subtask.id)) {
+    const content = terminalEventContent(event)
+    if (!content) continue
+
+    const baseInsight = toTimelineInsight(event, subtaskOutputs)
+    const runId = payloadRunId(event) || String(event.id)
+    const previous = logs.at(-1)
+
+    if (
+      event.type === 'agent.assistant' &&
+      previous &&
+      previous.sourceType === 'agent.assistant' &&
+      previous.runId === runId
+    ) {
+      previous.timestamp = Number(event.created_at || previous.timestamp)
+      previous.content = mergeAssistantContent(previous.content, content)
+      continue
+    }
+
+    logs.push({
+      id: `${event.id}-${event.type}-${runId}`,
+      timestamp: Number(event.created_at || 0),
+      timestampMs: Number(event.created_at || 0) * 1000,
+      tone: baseInsight.tone,
+      label: terminalEventLabel(event),
+      content,
+      fileLabel: baseInsight.fileLabel,
+      linkedOutput: baseInsight.linkedOutput,
+      sourceType: event.type,
+      runId,
+    })
+  }
+
+  return logs
+})
+
+function terminalPrompt(log: TerminalLogEntry) {
+  switch (log.sourceType) {
+    case 'agent.assistant':
+      return 'claude >'
+    case 'queue':
+      return 'queue  >'
+    case 'start':
+    case 'system':
+      return 'system >'
+    case 'tool':
+    case 'agent.tool':
+      return 'tool   >'
+    case 'output':
+    case 'outputs.bound':
+      return 'output >'
+    case 'error':
+    case 'agent.error':
+      return 'error  >'
+    case 'done':
+    case 'result':
+    case 'agent.done':
+      return 'done   >'
+    case 'cancelled':
+      return 'cancel >'
+    default:
+      return `${log.label.toLowerCase().slice(0, 6).padEnd(6, ' ')} >`
+  }
+}
+
+function subtaskActivityTimestampMs(subtask: Subtask) {
+  const latestEvent = [...selectedTaskEvents.value]
+    .reverse()
+    .find(event => event.subtask_id === subtask.id)
+  if (latestEvent?.created_at) return Number(latestEvent.created_at) * 1000
+  return Number(subtask.updated_at || 0) * 1000
+}
+
+function isSubtaskWorking(subtask: Subtask) {
+  return subtask.status === 'running'
+}
+
+function isSubtaskRecentlyUpdated(subtask: Subtask) {
+  return currentTimeMs.value - subtaskActivityTimestampMs(subtask) <= MEMBER_CHANGE_WINDOW_MS
+}
+
+const liveSubtaskCount = computed(() =>
+  selectedTask.value?.subtasks.filter(subtask => isSubtaskWorking(subtask)).length || 0
+)
+
+const recentTeamChangeCount = computed(() =>
+  selectedTask.value?.subtasks.filter(subtask => isSubtaskRecentlyUpdated(subtask)).length || 0
+)
+
+const taskFlowCurrentKey = computed<'create' | 'plan' | 'execute' | 'review' | 'archive'>(() => {
+  const task = selectedTask.value
+  if (!task) return 'create'
+  if (task.status === 'completed') return 'archive'
+  if (task.status === 'reviewing' || hasReviewSummary.value || canFinalize.value) return 'review'
+  if (task.subtasks.length > 0 || ['dispatching', 'running'].includes(task.status)) return 'execute'
+  return 'plan'
+})
+
+const taskFlowSteps = computed<TaskFlowStep[]>(() => {
+  const task = selectedTask.value
+  const order = ['create', 'plan', 'execute', 'review', 'archive']
+  const currentIndex = order.indexOf(taskFlowCurrentKey.value)
+  const blockedCount = task?.subtasks.filter(subtask => ['failed', 'blocked'].includes(subtask.status)).length || 0
+  const runningCount = task?.subtasks.filter(subtask => subtask.status === 'running').length || 0
+
+  const steps: Omit<TaskFlowStep, 'state' | 'stateLabel'>[] = [
+    {
+      key: 'create',
+      title: '创建任务',
+      description: task ? '任务已经创建并进入编排流程。' : '先创建一个任务，系统才会开始协作。',
+    },
+    {
+      key: 'plan',
+      title: '拆解计划',
+      description: task?.subtasks.length
+        ? `小呦已拆解出 ${task.subtasks.length} 个子任务。`
+        : '等待小呦输出 JSON 计划，并在拆解区校验派发。',
+    },
+    {
+      key: 'execute',
+      title: '协同执行',
+      description: blockedCount > 0
+        ? `${blockedCount} 个子任务异常，优先处理重试或阻塞。`
+        : runningCount > 0
+          ? `${runningCount} 名成员正在执行，持续观察现场和事件流。`
+          : task?.subtasks.length
+            ? '任务已分配，等待成员继续推进。'
+            : '拆解完成后，这里进入团队执行阶段。',
+    },
+    {
+      key: 'review',
+      title: '请求验收',
+      description: hasReviewSummary.value
+        ? '汇总结果已经返回，检查后即可归档。'
+        : canFinalize.value
+          ? '所有子任务已完成，现在应先请求汇总。'
+          : '等待全部子任务完成后，再进入验收。',
+    },
+    {
+      key: 'archive',
+      title: task?.status === 'completed' ? '已归档' : '验收归档',
+      description: task?.status === 'completed'
+        ? '任务已经归档，可回看结论和产出。'
+        : '确认汇总无误后，完成最终归档。',
+    },
+  ]
+
+  return steps.map((step, index) => {
+    const state: FlowStepState = index < currentIndex ? 'done' : index === currentIndex ? 'current' : 'pending'
+    return {
+      ...step,
+      state,
+      stateLabel: step.key === 'archive' && task?.status === 'completed'
+        ? '已归档'
+        : state === 'done'
+          ? '已完成'
+          : state === 'current'
+            ? '当前'
+            : '待进行',
+    }
+  })
+})
+
+const taskFlowCallout = computed<TaskFlowCallout>(() => {
+  const task = selectedTask.value
+  if (!task) {
+    return {
+      title: '先创建任务',
+      detail: '从左侧任务入口开始，后续才会进入拆解、执行和验收流程。',
+      actionLabel: null,
+      target: null,
+    }
+  }
+
+  if (taskFlowCurrentKey.value === 'plan') {
+    return {
+      title: '当前处于拆解阶段',
+      detail: '如果小呦已经输出计划，就到拆解区校验并派发；否则先等待拆解结果。',
+      actionLabel: '前往拆解区',
+      target: 'plan',
+    }
+  }
+
+  if (taskFlowCurrentKey.value === 'execute') {
+    const blockedCount = task.subtasks.filter(subtask => ['failed', 'blocked'].includes(subtask.status)).length
+    return {
+      title: blockedCount > 0 ? '当前先处理执行异常' : '当前处于团队执行阶段',
+      detail: blockedCount > 0
+        ? `有 ${blockedCount} 个子任务异常，需要先在执行板处理重试或阻塞。`
+        : '持续观察执行板、协作现场和事件流，等全部子任务完成后再请求验收。',
+      actionLabel: '前往执行区',
+      target: 'execution',
+    }
+  }
+
+  if (taskFlowCurrentKey.value === 'review') {
+    return {
+      title: hasReviewSummary.value ? '现在可以验收归档' : '现在应该请求验收',
+      detail: hasReviewSummary.value
+        ? '右侧汇总验收区已有小呦结论，确认后点击“验收归档”。'
+        : '所有子任务已完成，请先到右侧汇总验收区点击“请求汇总”，不要直接归档。',
+      actionLabel: '前往验收区',
+      target: 'review',
+    }
+  }
+
+  if (taskFlowCurrentKey.value === 'archive') {
+    return {
+      title: '任务已完成归档',
+      detail: '现在可以回看最终结论、成果文件和完整执行记录。',
+      actionLabel: null,
+      target: null,
+    }
+  }
+
+  return {
+    title: '任务已进入流程',
+    detail: '等待进入下一阶段。',
+    actionLabel: null,
+    target: null,
+  }
+})
+
+const reviewHint = computed(() => {
+  if (selectedTask.value?.status === 'completed') return '任务已经归档完成，可在成果资产和事件流中回看最终结果。'
+  if (selectedTask.value?.status === 'reviewing' && !hasReviewSummary.value) return '汇总请求已发出，等待小呦生成最终报告；结果会在成果资产中高亮显示。'
+  if (hasReviewSummary.value) return '汇总报告已生成，请在成果资产里查看高亮的汇总报告，再点击“验收归档”。'
+  if (canFinalize.value) return '当前顺序：先点击“请求汇总”，等待小呦收口后，再点击“验收归档”。'
+  return '进入验收前，需要先等待所有子任务执行完成。'
+})
+
+const taskHeaderTips = computed(() => {
+  const task = selectedTask.value
+  if (!task) return []
+
+  const tips = [
+    cleanText(task.description, 42),
+    `当前 ${statusText(task.status)}`,
+    `${completedCount(task)}/${task.subtasks.length} 子任务完成`,
+  ]
+
+  if (task.outputs.length > 0) {
+    tips.push(`已产出 ${task.outputs.length} 个成果`)
+  }
+
+  return tips.slice(0, 4)
+})
+
+const orderedTaskOutputs = computed(() => {
+  const outputs = [...(selectedTask.value?.outputs || [])]
+  return outputs.sort((a, b) => {
+    const summaryDiff = Number(isSummaryOutput(b)) - Number(isSummaryOutput(a))
+    if (summaryDiff !== 0) return summaryDiff
+    return Number(b.mtime || b.created_at || 0) - Number(a.mtime || a.created_at || 0)
+  })
+})
+
+function agentWorkbench(subtask: Subtask): AgentWorkbenchSummary {
+  const events = selectedTaskEvents.value.filter(event => event.subtask_id === subtask.id)
+  const outputs = selectedTaskOutputs.value.filter(output => output.subtask_id === subtask.id)
+  const recentEvents = events.filter(event => event.type !== 'agent.assistant')
+  const latestEvent = recentEvents.at(-1) || null
+  const latestOutput = outputs[0] || null
+  const focusSource = subtask.error || subtask.result_summary || latestEvent?.message || subtask.description
+  const lastToolEvent = [...events].reverse().find(event => event.type === 'agent.tool')
+  const statusNote = lastToolEvent
+    ? cleanText(lastToolEvent.message.replace('Claude Code 使用只读工具：', '最近工具：'), 48)
+    : latestOutput
+      ? `最新文件 ${latestOutput.name}`
+      : `最近更新 ${formatTime(latestEvent?.created_at || subtask.updated_at)}`
+
+  return {
+    focus: cleanText(focusSource, 140),
+    trail: recentEvents.slice(-3).reverse().map(event => toTimelineInsight(event, outputs)),
+    latestOutput,
+    outputCount: outputs.length,
+    statusNote,
+  }
+}
+
 async function handleRefresh() {
-  await tasksStore.fetchTasks()
+  await Promise.all([
+    tasksStore.fetchTasks(),
+    refreshRuntimeStatus(),
+  ])
   if (tasksStore.error) ElMessage.error(tasksStore.error)
+}
+
+async function refreshRuntimeStatus() {
+  try {
+    const response = await taskApi.runtimeStatus()
+    runtimeStatus.value = response.status
+  } catch {
+    runtimeStatus.value = { healthy: false, running: 0, queued: 0, maxConcurrency: 3, maxTurns: 256 }
+  }
 }
 
 async function selectTask(taskId: string) {
@@ -460,6 +1414,7 @@ async function selectTask(taskId: string) {
     await tasksStore.fetchTask(taskId)
     planDraft.value = ''
     summaryDraft.value = selectedTask.value?.summary || ''
+    await scrollTaskRowIntoView(taskId)
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '加载任务失败')
   }
@@ -474,15 +1429,13 @@ async function createTask() {
       description: createForm.description.trim(),
       priority: createForm.priority,
     })
+    await tasksStore.fetchTask(response.task.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
+    await scrollTaskRowIntoView(response.task.id)
     createForm.title = ''
     createForm.description = ''
     createDialog.value = false
-    const sent = await sendCoordinatorDispatch(response.dispatch, 'plan')
-    if (sent) {
-      ElMessage.success('任务已创建，并已通过 WebSocket 请求小呦拆解')
-    } else {
-      ElMessage.warning('任务已创建，但 WebSocket 派发失败，请先全连 Agent 后重试')
-    }
+    ElMessage.success('任务已创建，小呦拆解已进入 Claude Runtime 队列')
+    await refreshRuntimeStatus()
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '创建任务失败')
   } finally {
@@ -506,12 +1459,10 @@ async function applyPlan() {
   try {
     const response = await tasksStore.applyPlan(selectedTask.value.id, planDraft.value)
     planDraft.value = ''
-    const result = await sendSubtaskDispatches(response.dispatches || [])
-    if (result.failed > 0) {
-      ElMessage.warning(`计划已校验，${result.sent} 个子任务已派发，${result.failed} 个失败：${result.firstError}`)
-    } else {
-      ElMessage.success(`计划已校验，${result.sent} 个子任务已通过 WebSocket 派发`)
-    }
+    const runResponse = await tasksStore.runSubtasks(response.task.id)
+    await tasksStore.fetchTask(response.task.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
+    ElMessage.success(`计划已校验，${runResponse.runs?.length || 0} 个子任务已进入 Claude Runtime 队列`)
+    await refreshRuntimeStatus()
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '计划应用失败')
     await tasksStore.fetchTask(selectedTask.value.id)
@@ -520,15 +1471,27 @@ async function applyPlan() {
   }
 }
 
+async function rerunPlan() {
+  if (!selectedTask.value || rerunningPlan.value) return
+  rerunningPlan.value = true
+  try {
+    const response = await tasksStore.runPlan(selectedTask.value.id)
+    await tasksStore.fetchTask(response.task.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
+    ElMessage.success('小呦拆解已重新进入 Claude Runtime 队列')
+    await refreshRuntimeStatus()
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '重新拆解失败')
+  } finally {
+    rerunningPlan.value = false
+  }
+}
+
 async function retrySubtask(subtaskId: string) {
   try {
     const response = await tasksStore.retrySubtask(subtaskId)
-    const result = response.dispatch ? await sendSubtaskDispatch(response.dispatch) : { ok: false, error: '缺少派发指令' }
-    if (result.ok) {
-      ElMessage.success('子任务已通过 WebSocket 重新派发')
-    } else {
-      ElMessage.warning(`已生成重试指令，但 WebSocket 派发失败：${result.error}`)
-    }
+    await tasksStore.fetchTask(response.task.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
+    ElMessage.success('子任务已进入 Claude Runtime 重试队列')
+    await refreshRuntimeStatus()
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '重试失败')
   }
@@ -536,7 +1499,8 @@ async function retrySubtask(subtaskId: string) {
 
 async function completeSubtask(subtaskId: string) {
   try {
-    await tasksStore.completeSubtask(subtaskId, '由操作员在任务指挥中心确认完成')
+    const response = await tasksStore.completeSubtask(subtaskId, '由操作员在任务指挥中心确认完成')
+    await tasksStore.fetchTask(response.task.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
     ElMessage.success('子任务已标记完成')
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '更新失败')
@@ -548,6 +1512,7 @@ async function scanOutputs() {
   scanningOutputs.value = true
   try {
     await tasksStore.scanOutputs(selectedTask.value.id)
+    await tasksStore.fetchTask(selectedTask.value.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
     ElMessage.success('成果扫描完成')
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '成果扫描失败')
@@ -557,17 +1522,17 @@ async function scanOutputs() {
 }
 
 async function finalizeTask() {
-  if (!selectedTask.value) return
+  if (!selectedTask.value || !canRequestSummary.value) return
+  finalizingSummary.value = true
   try {
-    const response = await tasksStore.finalizeTask(selectedTask.value.id)
-    const sent = await sendCoordinatorDispatch(response.dispatch, 'summary')
-    if (sent) {
-      ElMessage.success('已通过 WebSocket 请求小呦生成最终汇总')
-    } else {
-      ElMessage.warning('已生成汇总请求，但 WebSocket 派发失败，请先连接小呦后重试')
-    }
+    await tasksStore.finalizeTask(selectedTask.value.id)
+    await tasksStore.fetchTask(selectedTask.value.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
+    ElMessage.success('最终汇总已进入 Claude Runtime 队列')
+    await refreshRuntimeStatus()
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '汇总请求失败')
+  } finally {
+    finalizingSummary.value = false
   }
 }
 
@@ -580,7 +1545,9 @@ async function completeTask() {
   }).catch(() => false)
   if (!confirmed) return
   try {
-    await tasksStore.completeTask(selectedTask.value.id, summaryDraft.value.trim())
+    const finalSummary = summaryDraft.value.trim() || selectedTask.value.summary || ''
+    await tasksStore.completeTask(selectedTask.value.id, finalSummary)
+    await tasksStore.fetchTask(selectedTask.value.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
     ElMessage.success('任务已归档')
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '归档失败')
@@ -613,6 +1580,11 @@ function renderPreview() {
   return md.render(previewContent.value)
 }
 
+function outputTimestampMs(output: TaskOutput) {
+  if (output.mtime) return Math.floor(Number(output.mtime) / 1000)
+  return Number(output.created_at || 0)
+}
+
 function completedCount(task: Task) {
   return task.subtasks?.filter(subtask => subtask.status === 'completed').length || 0
 }
@@ -637,283 +1609,66 @@ function agentInitial(agentId: string) {
   return agentName(agentId).slice(0, 1)
 }
 
-function latestAgentMessage(agentId: string) {
-  const messages = multiAgentStore.agents[agentId]?.messages || []
-  return [...messages].reverse().find(message => message.role === 'assistant')?.content || ''
-}
-
-function openMemberConversation(subtask: Subtask) {
+async function openMemberConversation(subtask: Subtask) {
   activeMemberSubtaskId.value = subtask.id
-  memberFollowupDraft.value = ''
   memberDialog.value = true
-  multiAgentStore.selectAgent(subtask.assigned_agent_id)
-  scrollMemberChatToBottom()
+  await fetchMemberRunLogs(subtask.id)
+  scrollMemberChatToBottom(true)
 }
 
-async function sendMemberFollowup() {
-  const subtask = activeMemberSubtask.value
-  const task = selectedTask.value
-  if (!subtask || !task || !memberFollowupDraft.value.trim()) return
-  sendingMemberFollowup.value = true
-  const message = `[OpenClaw Task Follow-up]
-taskId: ${task.id}
-subTaskId: ${subtask.id}
-主任务: ${task.title}
-子任务: ${subtask.title}
-
-用户补充/追问:
-${memberFollowupDraft.value.trim()}
-
-请基于当前子任务上下文继续回答；如果产生文件，请继续写入任务目录。`
+async function fetchMemberRunLogs(subtaskId: string) {
+  memberLogsLoading.value = true
+  memberLogsError.value = ''
   try {
-    multiAgentStore.sendMessage(subtask.assigned_agent_id, message)
-    rememberSubtaskDispatch({
-      taskId: task.id,
-      subtaskId: subtask.id,
-      agentId: subtask.assigned_agent_id,
-      sessionKey: subtask.session_key,
-      message,
-    })
-    await tasksStore.recordSubtaskDispatchResult(subtask.id, {
-      ok: true,
-      payload: {
-        mode: 'member-followup',
-        agentId: subtask.assigned_agent_id,
-        sessionKey: subtask.session_key,
-      },
-    })
-    memberFollowupDraft.value = ''
-    ElMessage.success('已发送给成员')
+    const response = await taskApi.listSubtaskLogs(subtaskId, { limit: 2500 })
+    memberRunLogs.value = {
+      ...memberRunLogs.value,
+      [subtaskId]: response.logs || [],
+    }
   } catch (err) {
-    ElMessage.error(toErrorMessage(err))
+    memberLogsError.value = err instanceof Error ? err.message : '日志同步失败'
   } finally {
-    sendingMemberFollowup.value = false
+    memberLogsLoading.value = false
+    scrollMemberChatToBottom(true)
   }
 }
 
-function loadPendingTaskDispatches() {
-  try {
-    pendingTaskDispatches.value = JSON.parse(localStorage.getItem('task_center_pending_dispatches') || '{}')
-  } catch {
-    pendingTaskDispatches.value = {}
+function setTaskRowRef(taskId: string, el: HTMLButtonElement | null) {
+  if (el) {
+    taskRowRefs[taskId] = el
+    return
+  }
+  delete taskRowRefs[taskId]
+}
+
+async function scrollTaskRowIntoView(taskId: string) {
+  await nextTick()
+  const row = taskRowRefs[taskId]
+  const container = taskListScrollRef.value
+  if (!row || !container) return
+
+  const rowRect = row.getBoundingClientRect()
+  const containerRect = container.getBoundingClientRect()
+  const rowTop = rowRect.top - containerRect.top + container.scrollTop
+  const rowBottom = rowTop + row.offsetHeight
+  const viewTop = container.scrollTop
+  const viewBottom = viewTop + container.clientHeight
+
+  if (rowTop < viewTop) {
+    container.scrollTo({ top: Math.max(rowTop - 10, 0), behavior: 'smooth' })
+  } else if (rowBottom > viewBottom) {
+    container.scrollTo({ top: Math.max(rowBottom - container.clientHeight + 10, 0), behavior: 'smooth' })
   }
 }
 
-function persistPendingTaskDispatches() {
-  localStorage.setItem('task_center_pending_dispatches', JSON.stringify(pendingTaskDispatches.value))
-}
-
-function rememberSubtaskDispatch(dispatch: TaskDispatch) {
-  if (!dispatch.subtaskId) return
-  pendingTaskDispatches.value[dispatch.agentId] = {
-    taskId: dispatch.taskId,
-    subtaskId: dispatch.subtaskId,
-    agentId: dispatch.agentId,
-    sessionKey: dispatch.sessionKey,
-    sentAt: Date.now(),
+async function scrollToWorkflowTarget(target: WorkflowTarget) {
+  await nextTick()
+  const targetMap: Record<WorkflowTarget, HTMLElement | null> = {
+    plan: planSectionRef.value,
+    execution: executionSectionRef.value,
+    review: reviewPanelRef.value,
   }
-  persistPendingTaskDispatches()
-}
-
-function clearSubtaskDispatch(agentId: string, subtaskId: string) {
-  if (pendingTaskDispatches.value[agentId]?.subtaskId === subtaskId) {
-    delete pendingTaskDispatches.value[agentId]
-    persistPendingTaskDispatches()
-  }
-}
-
-function loadedTasks() {
-  const map = new Map<string, Task>()
-  tasks.value.forEach(task => map.set(task.id, task))
-  if (selectedTask.value) map.set(selectedTask.value.id, selectedTask.value)
-  return [...map.values()]
-}
-
-function findSubtaskIdFromText(text: string) {
-  if (!text) return ''
-  const explicit = text.match(/subTaskId\s*[:：]\s*([a-zA-Z0-9_-]+)/i) || text.match(/subtaskId\s*[:：]\s*([a-zA-Z0-9_-]+)/i)
-  if (explicit?.[1]) return explicit[1]
-  for (const task of loadedTasks()) {
-    const match = task.subtasks?.find(subtask => text.includes(subtask.id))
-    if (match) return match.id
-  }
-  return ''
-}
-
-function findSubtaskForGatewayEvent(agentId: string, text: string) {
-  const textSubtaskId = findSubtaskIdFromText(text)
-  if (textSubtaskId) {
-    for (const task of loadedTasks()) {
-      const subtask = task.subtasks?.find(item => item.id === textSubtaskId)
-      if (subtask) return { task, subtaskId: subtask.id }
-    }
-  }
-
-  const pending = pendingTaskDispatches.value[agentId]
-  if (pending) {
-    const task = loadedTasks().find(item => item.id === pending.taskId)
-    if (task?.subtasks?.some(subtask => subtask.id === pending.subtaskId)) {
-      return { task, subtaskId: pending.subtaskId }
-    }
-    return { task: selectedTask.value || undefined, subtaskId: pending.subtaskId }
-  }
-
-  const task = selectedTask.value
-  const active = task?.subtasks?.find(subtask =>
-    subtask.assigned_agent_id === agentId && ['assigned', 'running', 'blocked'].includes(subtask.status)
-  )
-  return active ? { task, subtaskId: active.id } : null
-}
-
-function gatewayEventKind(event: string, payload: any): GatewayTaskEventType | null {
-  if (event === 'chat') {
-    if (payload?.state === 'start') return 'start'
-    if (payload?.state === 'final' || payload?.state === 'committed') return 'final'
-    if (payload?.state === 'error') return 'error'
-    if (payload?.state === 'delta') return 'assistant'
-  }
-  if (event === 'agent') {
-    const stream = payload?.stream
-    const state = payload?.data?.state || payload?.phase
-    if (stream === 'assistant') return 'assistant'
-    if (stream === 'lifecycle' && state === 'start') return 'start'
-    if (stream === 'lifecycle' && (state === 'done' || state === 'final')) return 'done'
-    if (stream === 'lifecycle' && (state === 'error' || payload?.phase === 'error')) return 'error'
-  }
-  return null
-}
-
-function gatewayEventText(event: string, payload: any) {
-  if (event === 'chat') return extractChatText(payload) || payload?.errorMessage || ''
-  if (event === 'agent') return extractText(payload) || payload?.data?.error || payload?.error || ''
-  return ''
-}
-
-async function handleTaskGatewayEvent(agentId: string, event: string, payload: any) {
-  const eventType = gatewayEventKind(event, payload)
-  if (!eventType) return
-
-  const message = gatewayEventText(event, payload)
-  const match = findSubtaskForGatewayEvent(agentId, message)
-  if (!match?.subtaskId) return
-
-  const runId = payload?.runId || payload?.data?.runId || 'default'
-  const eventKey = `${match.subtaskId}:${eventType}:${runId}`
-  if (recordedGatewayEvents.has(eventKey)) return
-  recordedGatewayEvents.add(eventKey)
-
-  try {
-    await tasksStore.recordSubtaskAgentEvent(match.subtaskId, {
-      eventType,
-      message,
-      payload: {
-        gatewayEvent: event,
-        agentId,
-        runId,
-        state: payload?.state,
-        stream: payload?.stream,
-        phase: payload?.phase,
-      },
-    })
-    if (eventType === 'final' || eventType === 'done') {
-      clearSubtaskDispatch(agentId, match.subtaskId)
-      if (match.task?.id) {
-        tasksStore.scanOutputs(match.task.id).catch(() => {})
-        window.setTimeout(() => tasksStore.scanOutputs(match.task!.id).catch(() => {}), 2500)
-      }
-    }
-  } catch (err) {
-    console.error('[TaskCenter2] 写入 Agent 任务事件失败:', err)
-  }
-}
-
-function toErrorMessage(err: unknown) {
-  return err instanceof Error ? err.message : String(err || 'WebSocket 派发失败')
-}
-
-async function sendCoordinatorDispatch(dispatch: TaskDispatch | undefined, phase: 'plan' | 'summary') {
-  if (!dispatch) return false
-  try {
-    multiAgentStore.sendMessage(dispatch.agentId, dispatch.message)
-    await tasksStore.recordTaskDispatchResult(dispatch.taskId, {
-      phase,
-      ok: true,
-      payload: {
-        agentId: dispatch.agentId,
-        sessionKey: dispatch.sessionKey,
-        mode: 'frontend-websocket',
-      },
-    })
-    return true
-  } catch (err) {
-    const error = toErrorMessage(err)
-    try {
-      await tasksStore.recordTaskDispatchResult(dispatch.taskId, {
-        phase,
-        ok: false,
-        error,
-        payload: {
-          agentId: dispatch.agentId,
-          sessionKey: dispatch.sessionKey,
-          mode: 'frontend-websocket',
-        },
-      })
-    } catch (recordErr) {
-      console.error('[TaskCenter2] 记录任务派发失败:', recordErr)
-    }
-    return false
-  }
-}
-
-async function sendSubtaskDispatch(dispatch: TaskDispatch) {
-  try {
-    if (!dispatch.subtaskId) throw new Error('缺少子任务 ID')
-    multiAgentStore.sendMessage(dispatch.agentId, dispatch.message)
-    rememberSubtaskDispatch(dispatch)
-    await tasksStore.recordSubtaskDispatchResult(dispatch.subtaskId, {
-      ok: true,
-      payload: {
-        agentId: dispatch.agentId,
-        sessionKey: dispatch.sessionKey,
-        mode: 'frontend-websocket',
-      },
-    })
-    return { ok: true, error: '' }
-  } catch (err) {
-    const error = toErrorMessage(err)
-    if (dispatch.subtaskId) {
-      try {
-        await tasksStore.recordSubtaskDispatchResult(dispatch.subtaskId, {
-          ok: false,
-          error,
-          payload: {
-            agentId: dispatch.agentId,
-            sessionKey: dispatch.sessionKey,
-            mode: 'frontend-websocket',
-          },
-        })
-      } catch (recordErr) {
-        console.error('[TaskCenter2] 记录子任务派发失败:', recordErr)
-      }
-    }
-    return { ok: false, error }
-  }
-}
-
-async function sendSubtaskDispatches(dispatches: TaskDispatch[] = []) {
-  let sent = 0
-  let failed = 0
-  let firstError = ''
-  for (const dispatch of dispatches) {
-    const result = await sendSubtaskDispatch(dispatch)
-    if (result.ok) {
-      sent += 1
-    } else {
-      failed += 1
-      if (!firstError) firstError = result.error
-    }
-  }
-  return { sent, failed, firstError }
+  targetMap[target]?.scrollIntoView({ block: 'start', behavior: 'smooth' })
 }
 
 function formatTime(value?: number | null) {
@@ -926,18 +1681,47 @@ function formatMsTime(value?: number | null) {
   return new Date(value).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
-async function scrollToBottom(target: { value: HTMLElement | null }) {
+function formatLogTime(value?: number | null) {
+  if (!value) return '--'
+  return new Date(value).toLocaleTimeString('zh-CN', {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+}
+
+function shortRunId(runId = '') {
+  if (!runId) return '--'
+  const parts = runId.split('-')
+  return parts.length >= 3 ? `${parts[0]}-${parts.at(-1)}` : runId.slice(0, 12)
+}
+
+function isLongTerminalLog(log: TerminalLogEntry) {
+  return log.content.length > 900 || log.content.split('\n').length > 16
+}
+
+function toggleTerminalLog(logId: string) {
+  const next = new Set(expandedLogIds.value)
+  if (next.has(logId)) next.delete(logId)
+  else next.add(logId)
+  expandedLogIds.value = next
+}
+
+async function scrollToBottom(target: { value: HTMLElement | null }, force = false) {
   await nextTick()
   if (!target.value) return
+  const distanceFromBottom = target.value.scrollHeight - target.value.scrollTop - target.value.clientHeight
+  if (!force && distanceFromBottom > 140) return
   target.value.scrollTop = target.value.scrollHeight
 }
 
 function scrollEventListToBottom() {
-  scrollToBottom(eventListRef)
+  scrollToBottom(eventListRef, true)
 }
 
-function scrollMemberChatToBottom() {
-  scrollToBottom(memberChatListRef)
+function scrollMemberChatToBottom(force = false) {
+  scrollToBottom(memberLogListRef, force)
 }
 
 function fileIcon(name: string) {
@@ -952,20 +1736,139 @@ function toggleTheme() {
 }
 
 function handleConnectAll() {
-  multiAgentStore.connectAll()
-  ElMessage.success('正在连接所有 Agent')
+  refreshRuntimeStatus()
+  ElMessage.success('已刷新 Claude Runtime 状态')
 }
 
 function handleDisconnectAll() {
-  multiAgentStore.disconnectAll()
-  ElMessage.warning('已断开所有 Agent')
+  ElMessage.warning('Claude Runtime 运行任务请在任务事件中取消')
+}
+
+function closeTaskEventStream() {
+  taskEventSource?.close()
+  taskEventSource = null
+  runtimeStreamConnected.value = false
+}
+
+async function syncTaskDetail(taskId: string, { refreshEvents = false } = {}) {
+  if (taskSyncInFlight) {
+    pendingTaskSyncId = taskId
+    pendingTaskSyncNeedsEvents = pendingTaskSyncNeedsEvents || refreshEvents
+    return
+  }
+
+  taskSyncInFlight = true
+  try {
+    await tasksStore.fetchTask(taskId, {
+      refreshEvents,
+      eventLimit: TASK_EVENT_LIMIT,
+    })
+    await refreshRuntimeStatus()
+  } finally {
+    taskSyncInFlight = false
+    if (pendingTaskSyncId) {
+      const nextTaskId = pendingTaskSyncId
+      const nextNeedsEvents = pendingTaskSyncNeedsEvents
+      pendingTaskSyncId = null
+      pendingTaskSyncNeedsEvents = false
+      scheduleTaskSync(nextTaskId, {
+        delay: TASK_SYNC_DEBOUNCE_MS,
+        refreshEvents: nextNeedsEvents,
+      })
+    }
+  }
+}
+
+function scheduleTaskSync(taskId: string, { delay = TASK_SYNC_DEBOUNCE_MS, refreshEvents = false } = {}) {
+  pendingTaskSyncId = taskId
+  pendingTaskSyncNeedsEvents = pendingTaskSyncNeedsEvents || refreshEvents
+
+  if (taskSyncTimer) return
+
+  taskSyncTimer = setTimeout(() => {
+    const nextTaskId = pendingTaskSyncId
+    const nextNeedsEvents = pendingTaskSyncNeedsEvents
+    taskSyncTimer = null
+    pendingTaskSyncId = null
+    pendingTaskSyncNeedsEvents = false
+    if (nextTaskId) {
+      syncTaskDetail(nextTaskId, { refreshEvents: nextNeedsEvents }).catch(() => {})
+    }
+  }, delay)
+}
+
+function shouldSyncTaskForEvent(type: string) {
+  return EVENT_SYNC_TYPES.has(type)
+}
+
+function shouldRefreshEventsForSync(type: string) {
+  return [
+    'plan.accepted',
+    'plan.invalid',
+    'agent.done',
+    'agent.error',
+    'agent.cancelled',
+    'agent.orphaned',
+    'outputs.bound',
+    'task.completed',
+  ].includes(type)
+}
+
+function ingestRuntimeStreamEvent(taskId: string, data: Record<string, unknown>) {
+  if (data.type === 'agent.log') {
+    const log = normalizeStreamRunLog(data.log)
+    if (log) appendMemberRunLog(log)
+    return
+  }
+
+  tasksStore.ingestRuntimeEvent({
+    type: String(data.type || ''),
+    taskId,
+    subtaskId: typeof data.subtaskId === 'string' ? data.subtaskId : undefined,
+    agentId: typeof data.agentId === 'string' ? data.agentId : undefined,
+    message: typeof data.message === 'string' ? data.message : undefined,
+    created_at: typeof data.created_at === 'number' ? data.created_at : undefined,
+    timestamp: typeof data.timestamp === 'number' ? data.timestamp : undefined,
+    runId: typeof data.runId === 'string' ? data.runId : undefined,
+    kind: typeof data.kind === 'string' ? data.kind : undefined,
+    toolName: typeof data.toolName === 'string' ? data.toolName : undefined,
+    sessionId: typeof data.sessionId === 'string' ? data.sessionId : undefined,
+    outputPath: typeof data.outputPath === 'string' ? data.outputPath : undefined,
+    error: typeof data.error === 'string' ? data.error : undefined,
+  })
+}
+
+function openTaskEventStream(taskId: string) {
+  closeTaskEventStream()
+  taskEventSource = new EventSource(`/api/tasks/${encodeURIComponent(taskId)}/events/stream`)
+  taskEventSource.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data) as Record<string, unknown>
+      if (data.type === 'connected') {
+        runtimeStreamConnected.value = true
+        return
+      }
+      if (data.type === 'ping') return
+
+      ingestRuntimeStreamEvent(taskId, data)
+      const eventType = String(data.type || '')
+      if (shouldSyncTaskForEvent(eventType)) {
+        scheduleTaskSync(taskId, {
+          refreshEvents: shouldRefreshEventsForSync(eventType),
+        })
+      }
+    } catch {
+      // Ignore malformed keepalive messages.
+    }
+  }
+  taskEventSource.onerror = () => {
+    closeTaskEventStream()
+  }
 }
 
 onMounted(async () => {
   authStore.restoreSession()
   multiAgentStore.loadMessages()
-  loadPendingTaskDispatches()
-  multiAgentStore.addEventListener(handleTaskGatewayEvent)
   await handleRefresh()
   if (typeof route.query.task === 'string') {
     await selectTask(route.query.task)
@@ -975,12 +1878,18 @@ onMounted(async () => {
     currentTimeMs.value = Date.now()
   }, 1000)
   refreshTimer = setInterval(() => {
-    if (tasksStore.selectedTaskId) tasksStore.fetchTask(tasksStore.selectedTaskId).catch(() => {})
-  }, 10000)
+    if (!runtimeStreamConnected.value && tasksStore.selectedTaskId) {
+      tasksStore.fetchTask(tasksStore.selectedTaskId, {
+        refreshEvents: false,
+        eventLimit: TASK_EVENT_LIMIT,
+      }).catch(() => {})
+    }
+  }, TASK_POLL_INTERVAL_MS)
 })
 
 onUnmounted(() => {
-  multiAgentStore.removeEventListener(handleTaskGatewayEvent)
+  closeTaskEventStream()
+  if (taskSyncTimer) clearTimeout(taskSyncTimer)
   if (clockTimer) clearInterval(clockTimer)
   if (refreshTimer) clearInterval(refreshTimer)
 })
@@ -988,10 +1897,29 @@ onUnmounted(() => {
 watch(
   () => [
     selectedTask.value?.id,
-    selectedTask.value?.events?.length,
-    selectedTask.value?.events?.at(-1)?.message,
+    selectedTaskEvents.value.length,
+    selectedTaskEvents.value.at(-1)?.message,
   ],
   () => scrollEventListToBottom(),
+  { flush: 'post' }
+)
+
+watch(
+  () => selectedTask.value?.id,
+  (taskId) => {
+    if (taskId) {
+      scrollTaskRowIntoView(taskId)
+    }
+  },
+  { flush: 'post' }
+)
+
+watch(
+  () => selectedTask.value?.id,
+  (taskId) => {
+    if (taskId) openTaskEventStream(taskId)
+    else closeTaskEventStream()
+  },
   { flush: 'post' }
 )
 
@@ -999,8 +1927,8 @@ watch(
   () => [
     memberDialog.value,
     activeMemberSubtaskId.value,
-    activeMemberMessages.value.length,
-    activeMemberMessages.value.at(-1)?.content,
+    activeMemberTerminalLogs.value.length,
+    activeMemberTerminalLogs.value.at(-1)?.content,
   ],
   () => {
     if (memberDialog.value) scrollMemberChatToBottom()
@@ -1011,25 +1939,24 @@ watch(
 
 <style scoped>
 .task-command-page {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  overflow: hidden;
+  display: block;
+  min-height: 100%;
+  width: 100%;
+  min-width: 0;
+  overflow: visible;
+  background: transparent;
 }
 
 .task-command-layout {
-  flex: 1;
-  min-height: 0;
+  min-height: auto;
+  width: 100%;
   display: grid;
   grid-template-columns: minmax(280px, 330px) minmax(420px, 1fr) minmax(300px, 360px);
+  align-items: start;
   gap: 20px;
   padding: 20px;
-  overflow: hidden;
-  background:
-    linear-gradient(135deg, rgba(38, 72, 110, 0.16), transparent 36%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent),
-    var(--bg-primary);
+  overflow: visible;
+  background: transparent;
 }
 
 .task-rail,
@@ -1039,7 +1966,19 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 16px;
-  overflow: auto;
+  overflow: visible;
+}
+
+.task-rail {
+  position: sticky;
+  top: 0;
+  max-height: calc(100vh - 24px);
+  overflow: hidden;
+}
+
+.mission-stage {
+  padding-right: 4px;
+  padding-bottom: 20px;
 }
 
 .surface {
@@ -1054,12 +1993,48 @@ watch(
   padding-bottom: 14px;
 }
 
+.task-list {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: calc(100vh - 174px);
+  overflow: hidden;
+}
+
+.task-list .surface-heading {
+  flex: 0 0 auto;
+}
+
+.task-list__body {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+.task-list__body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.task-list__body::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(var(--color-primary-rgb), 0.32);
+}
+
 .surface-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 14px;
+}
+
+.surface-heading__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .surface-heading h2,
@@ -1164,6 +2139,18 @@ watch(
   justify-content: space-between;
   gap: 10px;
   margin-top: 12px;
+}
+
+.plan-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.plan-heading-actions .ghost-btn {
+  white-space: nowrap;
 }
 
 .primary-btn,
@@ -1376,6 +2363,14 @@ watch(
   background: rgba(var(--color-primary-rgb), 0.12);
 }
 
+.status-chip--live {
+  animation: chipLivePulse 1.4s ease-in-out infinite;
+}
+
+.status-chip--pulse {
+  animation: chipChangePulse 1.2s ease-in-out infinite;
+}
+
 .status-chip--completed {
   color: var(--color-success);
   background: rgba(46, 160, 67, 0.14);
@@ -1394,27 +2389,249 @@ watch(
   background: rgba(245, 158, 11, 0.14);
 }
 
+.mission-flow {
+  display: grid;
+  gap: 12px;
+  border-color: rgba(var(--color-primary-rgb), 0.24);
+  background:
+    linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.14), transparent 42%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent),
+    color-mix(in srgb, var(--bg-panel) 94%, transparent);
+}
+
+.mission-flow--compact {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.mission-flow__compact-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mission-flow__rail {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.mission-flow__rail--compact {
+  flex: 1;
+  gap: 8px;
+}
+
+.flow-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 108px;
+  padding: 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.flow-step--done {
+  border-color: rgba(74, 222, 128, 0.28);
+  background: rgba(74, 222, 128, 0.08);
+}
+
+.flow-step--current {
+  border-color: rgba(var(--color-primary-rgb), 0.62);
+  background:
+    radial-gradient(circle at top right, rgba(var(--color-primary-rgb), 0.18), transparent 42%),
+    rgba(var(--color-primary-rgb), 0.1);
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--color-primary-rgb), 0.12),
+    0 14px 32px rgba(var(--color-primary-rgb), 0.12);
+  transform: translateY(-2px);
+}
+
+.flow-step--pending {
+  opacity: 0.72;
+}
+
+.flow-step__marker {
+  display: inline-flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.flow-step__marker span {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.flow-step--done .flow-step__marker span {
+  color: #052814;
+  background: #86efac;
+}
+
+.flow-step--current .flow-step__marker span {
+  color: #08111f;
+  background: var(--color-primary);
+  box-shadow: 0 0 18px rgba(var(--color-primary-rgb), 0.22);
+}
+
+.flow-step__body {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.flow-step__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.flow-step__top strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.flow-step__state {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.flow-step--current .flow-step__state {
+  color: var(--color-primary);
+}
+
+.flow-step--done .flow-step__state {
+  color: var(--color-success);
+}
+
+.flow-step p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.flow-step--compact {
+  min-height: 0;
+  padding: 10px 12px;
+  grid-template-columns: 26px minmax(0, 1fr);
+  border-radius: 10px;
+}
+
+.flow-step--compact .flow-step__marker span {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.flow-step--compact .flow-step__body {
+  display: flex;
+  align-items: center;
+}
+
+.flow-step--compact .flow-step__body strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.mission-flow__hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 10px 12px;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.16);
+  border-radius: 10px;
+  background: rgba(7, 16, 28, 0.22);
+}
+
+.mission-flow__label {
+  display: inline-flex;
+  color: var(--color-primary);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  flex: 0 0 auto;
+}
+
+.mission-flow__hint strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  flex: 0 0 auto;
+}
+
+.mission-flow__hint p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  min-width: 0;
+}
+
+.mission-flow__jump {
+  flex: 0 0 auto;
+}
+
 .mission-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 24px;
+  gap: 14px;
   align-items: start;
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+
+.mission-hero__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  grid-column: 1 / -1;
+}
+
+.mission-hero__tips {
+  grid-column: 1 / 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .mission-hero h1 {
-  font-size: 26px;
+  font-size: 24px;
 }
 
-.mission-hero p {
+.mission-tip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
   color: var(--text-secondary);
-  margin: 10px 0 0;
-  line-height: 1.65;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .mission-hero__metrics {
   display: grid;
   grid-template-columns: repeat(3, 88px);
   gap: 10px;
+  justify-self: end;
 }
 
 .mission-hero__metrics div {
@@ -1443,32 +2660,143 @@ watch(
   gap: 12px;
 }
 
+.plan-console--focus,
+.review-panel--focus {
+  border-color: rgba(var(--color-primary-rgb), 0.46);
+  box-shadow:
+    0 0 0 1px rgba(var(--color-primary-rgb), 0.14),
+    0 18px 38px rgba(var(--color-primary-rgb), 0.12);
+}
+
+.review-hint {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.18);
+  border-radius: 10px;
+  color: var(--text-secondary);
+  background: rgba(var(--color-primary-rgb), 0.08);
+  line-height: 1.6;
+}
+
+.team-live {
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.team-live--active {
+  border-color: rgba(var(--color-primary-rgb), 0.28);
+  box-shadow:
+    0 0 0 1px rgba(var(--color-primary-rgb), 0.14),
+    0 10px 30px rgba(var(--color-primary-rgb), 0.08);
+}
+
+.team-live--changed {
+  box-shadow:
+    0 0 0 1px rgba(var(--color-primary-rgb), 0.16),
+    0 0 28px rgba(var(--color-primary-rgb), 0.1);
+}
+
 .member-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   border: 1px solid var(--border-default);
-  border-radius: 8px;
-  padding: 12px;
-  background: color-mix(in srgb, var(--bg-card) 88%, var(--color-primary) 5%);
+  border-radius: 14px;
+  padding: 14px;
+  background:
+    radial-gradient(circle at top right, rgba(var(--color-primary-rgb), 0.14), transparent 34%),
+    color-mix(in srgb, var(--bg-card) 92%, var(--color-primary) 4%);
   color: var(--text-primary);
   text-align: left;
-  cursor: pointer;
-  min-height: 154px;
+  min-height: 280px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  gap: 12px;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.member-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(115deg, transparent 0%, rgba(255, 255, 255, 0.12) 50%, transparent 100%);
+  opacity: 0;
+  transform: translateX(-120%);
+  z-index: 0;
+}
+
+.member-card > * {
+  position: relative;
+  z-index: 1;
 }
 
 .member-card:hover {
   transform: translateY(-1px);
   border-color: rgba(var(--color-primary-rgb), 0.62);
-  background: rgba(var(--color-primary-rgb), 0.1);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.18);
+}
+
+.member-card--active {
+  border-color: rgba(var(--color-primary-rgb), 0.52);
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--color-primary-rgb), 0.08),
+    0 0 24px rgba(var(--color-primary-rgb), 0.12);
+  animation: memberWorkingPulse 2.6s ease-in-out infinite;
+}
+
+.member-card--active::before {
+  opacity: 1;
+  animation: memberSignalSweep 2.8s ease-in-out infinite;
+}
+
+.member-card--changed {
+  border-color: rgba(var(--color-primary-rgb), 0.68);
+  animation: memberChangedFlash 1.4s ease-in-out infinite;
 }
 
 .member-card__top {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 18px;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
+}
+
+.member-card__signals {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-tertiary);
+}
+
+.member-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  color: #08111f;
+  background: #5eead4;
+  font-size: 11px;
+  font-weight: 800;
+  box-shadow: 0 0 16px rgba(94, 234, 212, 0.24);
+}
+
+.member-live-badge--changed {
+  color: #08111f;
+  background: #93c5fd;
+  box-shadow: 0 0 16px rgba(147, 197, 253, 0.24);
+}
+
+.member-live-badge__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #08111f;
+  animation: liveDotPulse 1s ease-in-out infinite;
 }
 
 .member-avatar {
@@ -1508,7 +2836,32 @@ watch(
   font-size: 12px;
 }
 
-.member-card p {
+.member-card__label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  width: fit-content;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.member-card__focus {
+  display: grid;
+  gap: 8px;
+}
+
+.member-card__focus--muted {
+  padding-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.member-card p,
+.member-trail p {
   margin: 0;
   color: var(--text-secondary);
   font-size: 13px;
@@ -1517,6 +2870,105 @@ watch(
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.member-card__file {
+  margin-top: auto;
+}
+
+.member-file-pill {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.26);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(var(--color-primary-rgb), 0.1);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.member-file-pill span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.member-file-pill strong,
+.member-file-pill small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.member-file-pill small {
+  color: var(--text-tertiary);
+}
+
+.member-card__trail {
+  display: grid;
+  gap: 8px;
+}
+
+.member-trail {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.member-trail__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-top: 6px;
+  background: currentColor;
+  opacity: 0.85;
+}
+
+.member-trail--neutral {
+  color: var(--text-secondary);
+}
+
+.member-trail--progress {
+  color: var(--color-primary);
+}
+
+.member-trail--output {
+  color: var(--color-secondary);
+}
+
+.member-trail--success {
+  color: var(--color-success);
+}
+
+.member-trail--warning {
+  color: var(--color-warning);
+}
+
+.member-trail--danger {
+  color: var(--color-error);
+}
+
+.member-trail strong,
+.event-item strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.member-card__footer,
+.event-item__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: var(--text-tertiary);
+  font-size: 12px;
 }
 
 .subtask-grid {
@@ -1567,10 +3019,42 @@ watch(
   scroll-behavior: smooth;
 }
 
+.outputs-panel {
+  max-height: 320px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
 .event-item {
   display: grid;
   grid-template-columns: 12px 1fr;
   gap: 10px;
+}
+
+.event-list--rich {
+  gap: 12px;
+}
+
+.event-item--rich {
+  padding: 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-card);
+}
+
+.event-item--output {
+  border-color: rgba(var(--color-primary-rgb), 0.48);
+  background:
+    linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.18), transparent 58%),
+    color-mix(in srgb, var(--bg-card) 90%, var(--color-primary) 5%);
+  box-shadow: inset 0 0 0 1px rgba(var(--color-primary-rgb), 0.1);
+}
+
+.event-item--output .event-badge {
+  color: #08111f;
+  font-weight: 800;
+  background: var(--color-primary);
 }
 
 .event-dot {
@@ -1581,9 +3065,43 @@ watch(
   background: var(--color-primary);
 }
 
-.event-item strong {
-  color: var(--text-primary);
-  font-size: 12px;
+.event-item--danger .event-dot {
+  background: var(--color-error);
+}
+
+.event-item--warning .event-dot {
+  background: var(--color-warning);
+}
+
+.event-item--success .event-dot {
+  background: var(--color-success);
+}
+
+.event-item--output .event-dot {
+  background: var(--color-secondary);
+}
+
+.event-item__body {
+  display: grid;
+  gap: 8px;
+}
+
+.event-item__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.event-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb), 0.12);
 }
 
 .event-item p {
@@ -1593,8 +3111,14 @@ watch(
   line-height: 1.45;
 }
 
-.event-item small {
+.event-item small,
+.event-item__meta {
   color: var(--text-tertiary);
+}
+
+.event-item__meta span:last-child {
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .output-row {
@@ -1611,14 +3135,42 @@ watch(
   text-align: left;
 }
 
+.output-row--summary {
+  border-color: rgba(var(--color-primary-rgb), 0.58);
+  background:
+    linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.16), transparent 62%),
+    var(--bg-card);
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--color-primary-rgb), 0.1),
+    0 10px 24px rgba(var(--color-primary-rgb), 0.12);
+}
+
+.output-row__content {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.output-row__content strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .output-row small {
   color: var(--text-tertiary);
 }
 
-.summary-text {
-  margin: 12px 0 0;
-  color: var(--text-secondary);
-  line-height: 1.55;
+.output-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: #08111f;
+  font-size: 11px;
+  font-weight: 800;
+  background: var(--color-primary);
 }
 
 .quiet-state,
@@ -1785,117 +3337,538 @@ watch(
   background: var(--bg-panel);
 }
 
+:deep(.member-dialog .el-dialog) {
+  width: min(960px, calc(100vw - 32px)) !important;
+  max-width: calc(100vw - 32px);
+  height: min(760px, 84vh);
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+:deep(.member-dialog .el-dialog__body) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+}
+
 .member-dialog__header {
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) auto;
-  gap: 12px;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 10px;
   align-items: center;
   padding-right: 28px;
 }
 
 .member-dialog__header h2 {
   margin: 2px 0 0;
-  font-size: 17px;
+  max-width: 560px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
 }
 
 .member-chat-shell {
-  display: grid;
-  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  overflow: hidden;
 }
 
-.member-task-context {
-  border: 1px solid var(--border-default);
+.member-terminal {
+  border: 1px solid rgba(var(--color-primary-rgb), 0.22);
   border-radius: 8px;
-  padding: 12px;
-  background: rgba(var(--color-primary-rgb), 0.08);
-}
-
-.member-task-context strong {
-  display: block;
-  color: var(--text-primary);
-  font-size: 13px;
-}
-
-.member-task-context p {
-  margin: 6px 0 0;
-  color: var(--text-secondary);
-  line-height: 1.55;
-}
-
-.member-chat-list {
-  min-height: 260px;
-  max-height: 46vh;
-  overflow: auto;
+  overflow: hidden;
+  background: #0a0f16;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 18px 40px rgba(0, 0, 0, 0.28);
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-primary) 82%, transparent);
+  min-height: 0;
+  height: 100%;
 }
 
-.chat-bubble {
-  max-width: 86%;
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
-  padding: 10px 12px;
-  background: var(--bg-card);
-}
-
-.chat-bubble--user {
-  align-self: flex-end;
-  border-color: rgba(var(--color-primary-rgb), 0.45);
-  background: rgba(var(--color-primary-rgb), 0.12);
-}
-
-.chat-bubble--assistant {
-  align-self: flex-start;
-}
-
-.chat-bubble--system {
-  align-self: center;
-  max-width: 94%;
-  color: var(--text-tertiary);
-}
-
-.chat-bubble__meta {
+.member-terminal__bar {
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 7px;
-  color: var(--text-tertiary);
-  font-size: 12px;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  min-height: 40px;
+  padding: 7px 10px;
+  border-bottom: 1px solid rgba(var(--color-primary-rgb), 0.18);
+  background:
+    linear-gradient(180deg, rgba(18, 30, 46, 0.98), rgba(10, 16, 24, 0.98));
+  color: #7f93aa;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
 }
 
-.chat-bubble__meta span {
-  color: var(--text-primary);
+.member-terminal__bar > span {
+  flex: 0 0 auto;
+}
+
+.member-terminal__bar::-webkit-scrollbar {
+  height: 5px;
+}
+
+.member-terminal__bar::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(94, 234, 212, 0.26);
+}
+
+.member-terminal__pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  color: #08111f;
+  background: #5eead4;
   font-weight: 700;
 }
 
-.chat-bubble p {
+.member-terminal__context {
+  flex: 1 1 auto;
+  min-width: 180px;
+  max-width: 360px;
+  color: #9fb0c4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.member-terminal__refresh {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 22px;
+  border: 1px solid rgba(94, 234, 212, 0.2);
+  border-radius: 6px;
+  padding: 0 8px;
+  background: rgba(94, 234, 212, 0.06);
+  color: #cfe9e5;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.member-terminal__refresh:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.member-terminal__screen {
+  flex: 1 1 auto;
+  height: 0;
+  min-height: min(360px, 48vh);
+  overflow: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  padding: 10px;
+  background:
+    linear-gradient(180deg, rgba(94, 234, 212, 0.035), transparent 24%),
+    repeating-linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.012) 0,
+      rgba(255, 255, 255, 0.012) 1px,
+      transparent 1px,
+      transparent 28px
+    ),
+    #0a0f16;
+}
+
+.member-terminal__screen::-webkit-scrollbar,
+.terminal-entry__content--assistant::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+.member-terminal__screen::-webkit-scrollbar-track,
+.terminal-entry__content--assistant::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.035);
+  border-radius: 999px;
+}
+
+.member-terminal__screen::-webkit-scrollbar-thumb,
+.terminal-entry__content--assistant::-webkit-scrollbar-thumb {
+  border: 2px solid rgba(7, 12, 18, 0.92);
+  border-radius: 999px;
+  background: rgba(94, 234, 212, 0.36);
+}
+
+.member-terminal__screen::-webkit-scrollbar-thumb:hover,
+.terminal-entry__content--assistant::-webkit-scrollbar-thumb:hover {
+  background: rgba(94, 234, 212, 0.58);
+}
+
+.member-terminal__empty {
+  color: #7f93aa;
+  font-family: var(--font-mono);
+  line-height: 1.7;
+}
+
+.member-terminal__empty--error {
+  color: #fca5a5;
+}
+
+.terminal-entry {
+  border-left: 2px solid rgba(94, 234, 212, 0.18);
+  padding: 1px 0 1px 10px;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.terminal-entry--warning {
+  border-left-color: rgba(245, 158, 11, 0.76);
+}
+
+.terminal-entry--danger {
+  border-left-color: rgba(248, 113, 113, 0.86);
+}
+
+.terminal-entry--success {
+  border-left-color: rgba(74, 222, 128, 0.78);
+}
+
+.terminal-entry--output {
+  border-left-color: rgba(94, 234, 212, 0.96);
+}
+
+.terminal-entry__meta {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 68px 72px minmax(0, 1fr);
+  align-items: center;
+  color: #7f93aa;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.terminal-entry__time {
+  color: #6f8398;
+}
+
+.terminal-entry__prompt {
+  color: #5eead4;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.terminal-entry__run {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #647991;
+}
+
+.terminal-entry__content {
   margin: 0;
-  color: var(--text-secondary);
-  line-height: 1.6;
+  min-width: 0;
+  max-width: 100%;
+  color: #d4deea;
+  font-size: 12px;
+  line-height: 1.62;
   white-space: pre-wrap;
   word-break: break-word;
+  font-family: var(--font-mono);
+  background: transparent;
+  overflow-x: auto;
 }
 
-.member-followup {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+.terminal-entry__content--assistant {
+  max-height: 180px;
+  overflow: hidden;
+  padding: 8px 10px;
+  border: 1px solid rgba(94, 234, 212, 0.1);
+  border-radius: 7px;
+  background: rgba(7, 12, 18, 0.62);
+  color: #d9e6f2;
+}
+
+.terminal-entry__content--expanded {
+  max-height: min(460px, 46vh);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.terminal-entry__expand {
+  justify-self: flex-start;
+  border: 0;
+  border-radius: 6px;
+  padding: 3px 8px;
+  background: rgba(94, 234, 212, 0.08);
+  color: #8ef1df;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.terminal-entry__expand:hover {
+  background: rgba(94, 234, 212, 0.14);
+}
+
+.terminal-entry__rendered {
+  color: #d4deea;
+  font-size: 14px;
+  line-height: 1.75;
+  padding: 12px 14px;
+  border: 1px solid rgba(94, 234, 212, 0.12);
+  border-radius: 10px;
+  background: rgba(7, 12, 18, 0.72);
+}
+
+.terminal-entry__rendered--stream {
+  position: relative;
+}
+
+.terminal-entry__rendered--stream::before {
+  content: 'stream';
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  color: rgba(94, 234, 212, 0.78);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.terminal-entry__rendered:deep(h1),
+.terminal-entry__rendered:deep(h2),
+.terminal-entry__rendered:deep(h3),
+.terminal-entry__rendered:deep(h4) {
+  color: #f3f7fb;
+  line-height: 1.35;
+  margin: 18px 0 10px;
+}
+
+.terminal-entry__rendered:deep(h1) {
+  font-size: 22px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(94, 234, 212, 0.18);
+}
+
+.terminal-entry__rendered:deep(h2) {
+  font-size: 18px;
+}
+
+.terminal-entry__rendered:deep(h3) {
+  font-size: 16px;
+}
+
+.terminal-entry__rendered:deep(p) {
+  margin: 10px 0;
+}
+
+.terminal-entry__rendered:deep(ul),
+.terminal-entry__rendered:deep(ol) {
+  margin: 10px 0;
+  padding-left: 22px;
+}
+
+.terminal-entry__rendered:deep(li + li) {
+  margin-top: 6px;
+}
+
+.terminal-entry__rendered:deep(blockquote) {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-left: 3px solid rgba(94, 234, 212, 0.62);
+  background: rgba(94, 234, 212, 0.06);
+  color: #b6c4d5;
+}
+
+.terminal-entry__rendered:deep(code) {
+  border: 1px solid rgba(94, 234, 212, 0.14);
+  border-radius: 6px;
+  padding: 2px 5px;
+  background: rgba(94, 234, 212, 0.06);
+  color: #8ef1df;
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.terminal-entry__rendered:deep(pre) {
+  overflow: auto;
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid rgba(94, 234, 212, 0.14);
+  border-radius: 10px;
+  background: rgba(7, 12, 18, 0.86);
+}
+
+.terminal-entry__rendered:deep(pre code) {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #d6dee7;
+  white-space: pre;
+}
+
+.terminal-entry__rendered:deep(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0;
+  border: 1px solid rgba(94, 234, 212, 0.14);
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.terminal-entry__rendered:deep(th),
+.terminal-entry__rendered:deep(td) {
+  border: 1px solid rgba(94, 234, 212, 0.1);
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.terminal-entry__rendered:deep(th) {
+  color: #f3f7fb;
+  background: rgba(94, 234, 212, 0.08);
+}
+
+.terminal-entry__rendered:deep(a) {
+  color: #5eead4;
+}
+
+.terminal-entry__rendered:deep(hr) {
+  border: 0;
+  border-top: 1px solid rgba(94, 234, 212, 0.14);
+  margin: 18px 0;
+}
+
+.terminal-entry__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  align-items: end;
+  flex-wrap: wrap;
 }
 
-.member-followup textarea {
-  min-height: 70px;
-  resize: vertical;
+.terminal-entry__file {
+  color: #5eead4;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.terminal-entry .ghost-btn {
+  border-color: rgba(94, 234, 212, 0.32);
+  background: rgba(94, 234, 212, 0.08);
+  color: #d6dee7;
+}
+
+@keyframes teamLiveSweep {
+  0% {
+    transform: translateX(-34%);
+  }
+  100% {
+    transform: translateX(34%);
+  }
+}
+
+@keyframes teamLivePulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgba(var(--color-primary-rgb), 0.14),
+      0 0 22px rgba(var(--color-primary-rgb), 0.08);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(var(--color-primary-rgb), 0.24),
+      0 0 34px rgba(var(--color-primary-rgb), 0.18);
+  }
+}
+
+@keyframes memberWorkingPulse {
+  0%, 100% {
+    transform: translateY(0);
+    box-shadow:
+      inset 0 0 0 1px rgba(var(--color-primary-rgb), 0.08),
+      0 0 16px rgba(var(--color-primary-rgb), 0.08);
+  }
+  50% {
+    transform: translateY(-2px);
+    box-shadow:
+      inset 0 0 0 1px rgba(var(--color-primary-rgb), 0.14),
+      0 0 28px rgba(var(--color-primary-rgb), 0.18);
+  }
+}
+
+@keyframes memberSignalSweep {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes memberChangedFlash {
+  0%, 100% {
+    box-shadow: 0 0 0 rgba(var(--color-primary-rgb), 0);
+  }
+  50% {
+    box-shadow: 0 0 24px rgba(var(--color-primary-rgb), 0.22);
+  }
+}
+
+@keyframes liveDotPulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.38;
+    transform: scale(0.7);
+  }
+}
+
+@keyframes chipLivePulse {
+  0%, 100% {
+    box-shadow: 0 0 0 rgba(var(--color-primary-rgb), 0);
+  }
+  50% {
+    box-shadow: 0 0 18px rgba(var(--color-primary-rgb), 0.18);
+  }
+}
+
+@keyframes chipChangePulse {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1px);
+    box-shadow: 0 0 14px rgba(var(--color-primary-rgb), 0.16);
+  }
 }
 
 @media (max-width: 1180px) {
   .task-command-layout {
     grid-template-columns: 300px minmax(0, 1fr);
+  }
+
+  .mission-flow__rail {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mission-flow__compact-head,
+  .mission-flow__hint {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .task-inspector {
@@ -1908,13 +3881,22 @@ watch(
 @media (max-width: 820px) {
   .task-command-layout {
     grid-template-columns: 1fr;
-    overflow: auto;
+    overflow: visible;
   }
 
   .task-rail,
   .mission-stage,
   .task-inspector {
     overflow: visible;
+  }
+
+  .task-rail {
+    position: static;
+    max-height: none;
+  }
+
+  .task-list {
+    max-height: min(420px, 56vh);
   }
 
   .task-inspector {
@@ -1925,16 +3907,26 @@ watch(
     grid-template-columns: 1fr;
   }
 
+  .mission-hero__head,
+  .mission-hero__tips {
+    grid-column: auto;
+  }
+
+  .mission-hero__metrics {
+    justify-self: start;
+  }
+
+  .mission-flow__rail {
+    grid-template-columns: 1fr;
+  }
+
+  .flow-step {
+    min-height: auto;
+  }
+
   .mission-hero__metrics {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .member-followup {
-    grid-template-columns: 1fr;
-  }
-
-  .member-followup .primary-btn {
-    width: 100%;
-  }
 }
 </style>

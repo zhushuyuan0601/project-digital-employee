@@ -42,10 +42,6 @@
           <div class="obs-workflow-hero__copy">
             <h2 class="obs-card__title obs-card__title--workflow">Agent 协作流程</h2>
             <p class="obs-workflow-hero__subtitle">从任务接收、需求分析到结果验证与交付的全链路编排</p>
-            <div class="obs-workflow-hero__accent">
-              <span></span>
-              <i></i>
-            </div>
           </div>
         </div>
         <div class="obs-workflow">
@@ -232,6 +228,7 @@ import {
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
 import { storeToRefs } from 'pinia'
 import { getActivities, getDashboard, type ActivityItem } from '@/api/dashboard'
+import { taskApi } from '@/api/tasks'
 
 const multiAgentStore = useMultiAgentChatStore()
 const { anyConnected } = storeToRefs(multiAgentStore)
@@ -263,10 +260,12 @@ onUnmounted(() => {
 
 // ─── Gateway Status ─────────────────────────────────────
 const gatewayStatus = computed(() =>
-  anyConnected.value ? 'connected' : 'disconnected'
+  runtimeStatus.value?.healthy || anyConnected.value ? 'connected' : 'disconnected'
 )
 const gatewayStatusText = computed(() =>
-  gatewayStatus.value === 'connected' ? '系统运行正常' : '连接中断'
+  runtimeStatus.value?.healthy
+    ? `Claude Runtime 就绪 · 运行 ${runtimeStatus.value.running} / 排队 ${runtimeStatus.value.queued}`
+    : gatewayStatus.value === 'connected' ? '系统运行正常' : '连接中断'
 )
 
 // ─── Stats (reactive) ───────────────────────────────────
@@ -279,6 +278,7 @@ const stats = ref({
   systemLoad: '65%',
 })
 const dataSource = ref<'workspace' | 'database' | 'mock' | 'mixed' | ''>('')
+const runtimeStatus = ref<{ healthy: boolean; running: number; queued: number; maxConcurrency: number } | null>(null)
 const dataSourceLabel = computed(() => {
   if (!dataSource.value) return ''
   const labels = {
@@ -291,9 +291,10 @@ const dataSourceLabel = computed(() => {
 })
 
 async function loadDashboardData() {
-  const [dashboardResult, activitiesResult] = await Promise.allSettled([
+  const [dashboardResult, activitiesResult, runtimeResult] = await Promise.allSettled([
     getDashboard(),
     getActivities(5),
+    taskApi.runtimeStatus(),
   ])
 
   if (dashboardResult.status === 'fulfilled' && dashboardResult.value.success) {
@@ -314,6 +315,16 @@ async function loadDashboardData() {
     recentLogs.value = activitiesResult.value.activities.slice(0, 5).map(formatActivityLog)
     if (activitiesResult.value.dataSource === 'mixed' || dataSource.value === 'mock') {
       dataSource.value = activitiesResult.value.dataSource || dataSource.value
+    }
+  }
+
+  if (runtimeResult.status === 'fulfilled') {
+    runtimeStatus.value = runtimeResult.value.status
+    stats.value = {
+      ...stats.value,
+      activeAgents: runtimeResult.value.status.running,
+      activeTasks: Math.max(Number(stats.value.activeTasks || 0), runtimeResult.value.status.queued + runtimeResult.value.status.running),
+      systemLoad: `${Math.min(100, Math.round((runtimeResult.value.status.running / Math.max(1, runtimeResult.value.status.maxConcurrency)) * 100))}%`,
     }
   }
 }
@@ -674,38 +685,35 @@ const recentLogs = ref([
 /* ── Workflow ─────────────────────────────────────────── */
 .obs-workflow-hero {
   display: flex;
-  align-items: flex-start;
-  gap: 18px;
-  margin-bottom: 26px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 72%, transparent);
 }
 
 .obs-workflow-hero__badge {
   display: grid;
   place-items: center;
-  width: 70px;
-  height: 70px;
+  width: 38px;
+  height: 38px;
   flex-shrink: 0;
-  border-radius: 22px;
-  color: #9ecbff;
-  background:
-    linear-gradient(180deg, rgba(34, 59, 110, 0.72), rgba(12, 22, 43, 0.92)),
-    rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(105, 166, 255, 0.32);
-  box-shadow:
-    inset 0 0 0 1px rgba(173, 215, 255, 0.12),
-    0 0 30px rgba(44, 118, 255, 0.12);
+  border-radius: 10px;
+  color: color-mix(in oklab, var(--accent-blue) 82%, var(--text-primary));
+  background: color-mix(in oklab, var(--accent-blue) 11%, transparent);
+  border: 1px solid color-mix(in oklab, var(--accent-blue) 22%, var(--border));
 }
 
 .obs-workflow-hero__badge :deep(svg) {
-  width: 30px;
-  height: 30px;
+  width: 18px;
+  height: 18px;
 }
 
 .obs-card__title--workflow {
   margin: 0;
-  font-size: 2.35rem;
-  letter-spacing: 0.04em;
-  line-height: 1.08;
+  font-size: 1.05rem;
+  letter-spacing: 0;
+  line-height: 1.25;
 }
 
 .obs-workflow-hero__copy {
@@ -713,86 +721,44 @@ const recentLogs = ref([
 }
 
 .obs-workflow-hero__subtitle {
-  margin: 8px 0 0;
-  max-width: 56ch;
-  color: color-mix(in oklab, var(--text-secondary) 88%, #dbeafe);
-  font-size: 0.96rem;
-  line-height: 1.6;
-}
-
-.obs-workflow-hero__accent {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 16px;
-}
-
-.obs-workflow-hero__accent span {
-  width: 88px;
-  height: 4px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, rgba(40, 133, 255, 0.96), rgba(70, 172, 255, 0.2));
-  box-shadow: 0 0 18px rgba(52, 140, 255, 0.45);
-}
-
-.obs-workflow-hero__accent i {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #2f81f7;
-  box-shadow: 0 0 18px rgba(47, 129, 247, 0.85);
+  margin: 3px 0 0;
+  max-width: 58ch;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.5;
 }
 
 .obs-workflow {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(6, minmax(210px, 1fr));
-  gap: 34px;
-  overflow-x: auto;
-  padding: 26px 12px 14px;
-  position: relative;
+  grid-template-columns: repeat(6, minmax(104px, 1fr));
+  gap: 10px;
+  overflow: visible;
+  padding: 2px 0 0;
 }
 
 .obs-workflow__rail {
   position: absolute;
-  top: 164px;
-  left: 112px;
-  right: 112px;
-  height: 6px;
+  top: 43px;
+  left: 52px;
+  right: 52px;
+  height: 1px;
   border-radius: 999px;
-  background:
-    linear-gradient(90deg, rgba(116, 185, 255, 0.5), rgba(89, 162, 255, 0.1));
-  box-shadow:
-    0 0 0 1px rgba(98, 162, 255, 0.08),
-    0 0 22px rgba(47, 129, 247, 0.16);
+  background: color-mix(in oklab, var(--accent-blue) 24%, var(--border));
   pointer-events: none;
-  overflow: hidden;
 }
 
 .obs-workflow__rail::after {
-  content: '';
-  position: absolute;
-  inset: -6px auto -6px -18%;
-  width: 26%;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(190, 230, 255, 0.9), rgba(255, 255, 255, 0));
-  filter: blur(10px);
-  opacity: 0.9;
-  animation: workflowScan 5.4s linear infinite;
+  display: none;
 }
 
 .obs-workflow__step-card {
   position: relative;
-  min-height: 548px;
-  padding: 28px 24px 30px;
-  border-radius: 30px;
-  border: 1px solid rgba(88, 138, 215, 0.28);
-  background:
-    linear-gradient(180deg, rgba(22, 35, 69, 0.84), rgba(10, 19, 40, 0.96)),
-    radial-gradient(circle at 50% 12%, rgba(69, 134, 255, 0.2), transparent 34%);
-  box-shadow:
-    inset 0 0 0 1px rgba(162, 211, 255, 0.08),
-    0 30px 55px rgba(4, 10, 24, 0.34),
-    0 0 26px rgba(42, 121, 255, 0.08);
+  min-height: 138px;
+  padding: 14px 10px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in oklab, var(--border) 82%, transparent);
+  background: color-mix(in oklab, #fff 2.4%, transparent);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -801,163 +767,110 @@ const recentLogs = ref([
 }
 
 .obs-workflow__step-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background:
-    linear-gradient(180deg, rgba(147, 205, 255, 0.14), transparent 22%),
-    radial-gradient(circle at 50% 100%, rgba(60, 129, 255, 0.18), transparent 30%);
-  pointer-events: none;
+  display: none;
 }
 
 .obs-workflow__step-card::after {
   content: '';
-  position: absolute;
-  left: 14px;
-  right: 14px;
-  bottom: -1px;
-  height: 6px;
+  width: 22px;
+  height: 2px;
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(36, 110, 255, 0), rgba(64, 151, 255, 0.95), rgba(36, 110, 255, 0));
-  box-shadow: 0 0 16px rgba(61, 146, 255, 0.45);
-  pointer-events: none;
+  background: color-mix(in oklab, var(--accent-blue) 48%, transparent);
+  margin-top: 10px;
+  order: 10;
 }
 
 .obs-workflow__node {
   position: relative;
-  margin-top: 8px;
-  margin-bottom: 34px;
+  margin-bottom: 10px;
 }
 
 .obs-workflow__orbit {
   position: relative;
   display: grid;
   place-items: center;
-  width: 182px;
-  height: 182px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
-  border: 1px solid rgba(120, 170, 255, 0.34);
-  background: radial-gradient(circle at center, rgba(67, 132, 255, 0.18), rgba(13, 27, 58, 0.18) 70%, transparent 72%);
-  box-shadow:
-    inset 0 0 0 1px rgba(173, 213, 255, 0.08),
-    0 0 30px rgba(47, 129, 247, 0.18);
-  animation: orbitPulse 3.8s ease-in-out infinite;
+  border: 1px solid color-mix(in oklab, var(--accent-blue) 25%, var(--border));
+  background: color-mix(in oklab, var(--accent-blue) 8%, var(--card-bg));
 }
 
 .obs-workflow__orbit::before {
-  content: '';
-  position: absolute;
-  inset: 12px;
-  border-radius: 50%;
-  border: 1px dashed rgba(157, 201, 255, 0.3);
+  display: none;
 }
 
 .obs-workflow__orbit::after {
-  content: '';
-  position: absolute;
-  inset: -10px;
-  border-radius: 50%;
-  border: 1px solid rgba(130, 195, 255, 0.14);
-  box-shadow: 0 0 36px rgba(69, 143, 255, 0.16);
+  display: none;
 }
 
 .obs-workflow__circle {
   position: relative;
-  width: 138px;
-  height: 138px;
+  width: 42px;
+  height: 42px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 800;
-  font-size: 4.25rem;
-  letter-spacing: 0.04em;
-  color: #f8fbff;
-  background:
-    radial-gradient(circle at 30% 20%, rgba(177, 223, 255, 0.7), rgba(177, 223, 255, 0) 24%),
-    linear-gradient(180deg, #67b0ff 0%, #2d79ff 30%, #1147c8 100%);
-  border: 3px solid rgba(192, 230, 255, 0.54);
-  box-shadow:
-    inset 0 2px 8px rgba(255, 255, 255, 0.42),
-    0 12px 28px rgba(17, 71, 200, 0.52),
-    0 0 28px rgba(65, 143, 255, 0.4);
-  animation: corePulse 2.8s ease-in-out infinite;
+  font-size: 1rem;
+  letter-spacing: 0;
+  color: color-mix(in oklab, var(--text-primary) 82%, var(--accent-blue));
+  background: color-mix(in oklab, var(--accent-blue) 13%, var(--card-bg));
+  border: 1px solid color-mix(in oklab, var(--accent-blue) 28%, var(--border));
 }
 
 .obs-workflow__circle::after {
-  content: '';
-  position: absolute;
-  inset: -10px;
-  border-radius: 50%;
-  border: 1px solid rgba(186, 228, 255, 0.28);
-  opacity: 0.75;
-  filter: blur(2px);
+  display: none;
 }
 
 .obs-workflow__connector {
   position: absolute;
   top: 50%;
-  left: calc(100% + 16px);
+  left: calc(100% + 8px);
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 6px;
   transform: translateY(-50%);
-  width: 82px;
+  width: 30px;
   pointer-events: none;
 }
 
 .obs-workflow__connector-line {
   flex: 1;
-  height: 6px;
+  height: 1px;
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(161, 212, 255, 0.84), rgba(78, 156, 255, 0.32));
-  box-shadow: 0 0 18px rgba(68, 145, 255, 0.38);
+  background: color-mix(in oklab, var(--accent-blue) 34%, var(--border));
   position: relative;
-  overflow: hidden;
 }
 
 .obs-workflow__connector-line::after {
-  content: '';
-  position: absolute;
-  inset: -8px auto -8px -30%;
-  width: 45%;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(193, 233, 255, 0.92), rgba(255, 255, 255, 0));
-  filter: blur(8px);
-  animation: connectorScan 2.8s linear infinite;
+  display: none;
 }
 
 .obs-workflow__connector-dot {
-  width: 22px;
-  height: 22px;
+  width: 5px;
+  height: 5px;
   flex-shrink: 0;
   border-radius: 50%;
-  border: 3px solid rgba(180, 223, 255, 0.82);
-  background: radial-gradient(circle, #8ed0ff 0%, #3b85ff 58%, #0e3eaf 100%);
-  box-shadow: 0 0 18px rgba(76, 154, 255, 0.7);
-  animation: connectorPulse 2.2s ease-in-out infinite;
+  border: 0;
+  background: color-mix(in oklab, var(--accent-blue) 58%, var(--text-secondary));
 }
 
 .obs-workflow__step-index {
   position: relative;
-  margin-bottom: 16px;
-  padding: 0 32px;
-  color: #4aa2ff;
+  margin-bottom: 7px;
+  padding: 0;
+  color: var(--text-secondary);
   font-family: var(--font-mono);
-  font-size: 2.15rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
 .obs-workflow__step-index::before,
 .obs-workflow__step-index::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  width: 16px;
-  height: 2px;
-  border-radius: 999px;
-  background: rgba(74, 162, 255, 0.55);
+  display: none;
 }
 
 .obs-workflow__step-index::before {
@@ -969,16 +882,16 @@ const recentLogs = ref([
 }
 
 .obs-workflow__name {
-  font-size: 2.35rem;
-  font-weight: 900;
-  line-height: 1.14;
-  letter-spacing: 0.02em;
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0;
   color: var(--text-primary);
 }
 
 .obs-workflow__role {
-  margin-top: 12px;
-  font-size: 1.38rem;
+  margin-top: 4px;
+  font-size: 0.74rem;
   font-weight: 500;
   color: var(--text-secondary);
 }
@@ -986,89 +899,17 @@ const recentLogs = ref([
 .obs-workflow__glyph {
   display: grid;
   place-items: center;
-  margin-top: auto;
-  width: 76px;
-  height: 76px;
-  border-radius: 24px;
-  color: #2f81f7;
-  background: linear-gradient(180deg, rgba(22, 44, 88, 0.68), rgba(10, 19, 40, 0.52));
-  box-shadow:
-    inset 0 0 0 1px rgba(112, 177, 255, 0.12),
-    0 0 18px rgba(47, 129, 247, 0.08);
+  margin-top: 9px;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  color: color-mix(in oklab, var(--accent-blue) 70%, var(--text-secondary));
+  background: color-mix(in oklab, var(--accent-blue) 7%, transparent);
 }
 
 .obs-workflow__glyph :deep(svg) {
-  width: 38px;
-  height: 38px;
-}
-
-@keyframes corePulse {
-  0%, 100% {
-    transform: scale(1);
-    box-shadow:
-      inset 0 2px 8px rgba(255, 255, 255, 0.42),
-      0 12px 28px rgba(17, 71, 200, 0.52),
-      0 0 28px rgba(65, 143, 255, 0.4);
-  }
-  50% {
-    transform: scale(1.035);
-    box-shadow:
-      inset 0 2px 10px rgba(255, 255, 255, 0.52),
-      0 16px 32px rgba(17, 71, 200, 0.6),
-      0 0 40px rgba(96, 176, 255, 0.62);
-  }
-}
-
-@keyframes orbitPulse {
-  0%, 100% {
-    box-shadow:
-      inset 0 0 0 1px rgba(173, 213, 255, 0.08),
-      0 0 30px rgba(47, 129, 247, 0.18);
-  }
-  50% {
-    box-shadow:
-      inset 0 0 0 1px rgba(173, 213, 255, 0.14),
-      0 0 42px rgba(76, 154, 255, 0.28);
-  }
-}
-
-@keyframes connectorPulse {
-  0%, 100% {
-    transform: scale(1);
-    box-shadow: 0 0 18px rgba(76, 154, 255, 0.7);
-  }
-  50% {
-    transform: scale(1.12);
-    box-shadow: 0 0 28px rgba(132, 203, 255, 0.95);
-  }
-}
-
-@keyframes connectorScan {
-  0% {
-    transform: translateX(0%);
-    opacity: 0;
-  }
-  12% {
-    opacity: 1;
-  }
-  100% {
-    transform: translateX(260%);
-    opacity: 0;
-  }
-}
-
-@keyframes workflowScan {
-  0% {
-    transform: translateX(0%);
-    opacity: 0;
-  }
-  12% {
-    opacity: 0.95;
-  }
-  100% {
-    transform: translateX(470%);
-    opacity: 0;
-  }
+  width: 14px;
+  height: 14px;
 }
 
 /* ── Chart ────────────────────────────────────────────── */
@@ -1346,7 +1187,8 @@ const recentLogs = ref([
   }
 
   .obs-workflow {
-    grid-template-columns: repeat(3, minmax(220px, 1fr));
+    grid-template-columns: repeat(3, minmax(118px, 1fr));
+    gap: 10px;
   }
 
   .obs-workflow__rail,
@@ -1355,19 +1197,19 @@ const recentLogs = ref([
   }
 
   .obs-card__title--workflow {
-    font-size: 1.9rem;
+    font-size: 1.05rem;
   }
 
   .obs-workflow__step-card {
-    min-height: 420px;
+    min-height: 136px;
   }
 
   .obs-workflow__name {
-    font-size: 1.7rem;
+    font-size: 0.95rem;
   }
 
   .obs-workflow__role {
-    font-size: 1.05rem;
+    font-size: 0.74rem;
   }
 }
 
@@ -1392,37 +1234,67 @@ const recentLogs = ref([
   }
 
   .obs-card__title--workflow {
-    font-size: 1.5rem;
+    font-size: 1rem;
   }
 
   .obs-workflow {
     grid-template-columns: 1fr;
-    gap: 18px;
+    gap: 8px;
     padding-inline: 0;
   }
 
   .obs-workflow__step-card {
     min-height: auto;
-    padding: 20px;
+    padding: 12px 14px;
+    display: grid;
+    grid-template-columns: 46px minmax(0, 1fr) 24px;
+    grid-template-areas:
+      "node index glyph"
+      "node name glyph"
+      "node role glyph";
+    align-items: center;
+    column-gap: 10px;
+    text-align: left;
+  }
+
+  .obs-workflow__step-card::after {
+    display: none;
+  }
+
+  .obs-workflow__node {
+    grid-area: node;
+    margin: 0;
+  }
+
+  .obs-workflow__step-index {
+    grid-area: index;
+    margin-bottom: 2px;
   }
 
   .obs-workflow__orbit {
-    width: 126px;
-    height: 126px;
+    width: 44px;
+    height: 44px;
   }
 
   .obs-workflow__circle {
-    width: 96px;
-    height: 96px;
-    font-size: 2.8rem;
+    width: 34px;
+    height: 34px;
+    font-size: 0.84rem;
   }
 
   .obs-workflow__name {
-    font-size: 1.45rem;
+    grid-area: name;
+    font-size: 0.92rem;
   }
 
   .obs-workflow__role {
-    font-size: 0.98rem;
+    grid-area: role;
+    font-size: 0.72rem;
+  }
+
+  .obs-workflow__glyph {
+    grid-area: glyph;
+    margin-top: 0;
   }
 }
 </style>

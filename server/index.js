@@ -14,12 +14,14 @@ import skillsRouter from './routes/skills.js'
 import agentChatRouter, { initAgentChatRoutes } from './routes/agent-chat.js'
 import taskRouter from './routes/tasks.js'
 import analysisRouter from './routes/analysis.js'
+import groupChatRouter from './routes/group-chat.js'
 import { createAutomationRouter } from './routes/automation.js'
 import { createOpsRouter } from './routes/ops.js'
 import { initializeSchema } from './db/index.js'
 import { initializeAgentChatSchema } from './db/agent-chat.js'
 import { initializeTaskSchema } from './db/tasks.js'
 import { initializeAnalysisSchema } from './db/analysis.js'
+import { cleanupOrphanAgentRunsOnStartup } from './claude-runtime/index.js'
 import Database from 'better-sqlite3'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -1527,6 +1529,10 @@ function getActivityStatus(type) {
 initializeAgentChatSchema()
 initializeTaskSchema()
 initializeAnalysisSchema()
+const runtimeRecovery = cleanupOrphanAgentRunsOnStartup()
+if (runtimeRecovery.cleaned > 0) {
+  console.log(`[Claude Runtime] Startup recovery cleaned ${runtimeRecovery.cleaned} orphan queued/running runs`)
+}
 // 初始化默认 Agents
 initAgentChatRoutes()
 
@@ -1534,6 +1540,7 @@ app.use('/api', createOpsRouter({ proxyToGateway }))
 app.use('/api', createAutomationRouter({ proxyToGateway }))
 app.use('/api', agentChatRouter)
 app.use('/api', taskRouter)
+app.use('/api', groupChatRouter)
 app.use('/api/analysis', analysisRouter)
 
 // 启动服务器

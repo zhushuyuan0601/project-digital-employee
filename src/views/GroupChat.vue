@@ -228,8 +228,8 @@ const { formatTime, formatRichText } = useChatFormatting()
 const groupConfig = computed(() => groupStore.groupConfig)
 const messages = computed(() => groupStore.messages)
 
-const allConnected = computed(() => multiAgentStore.allConnected)
-const anyConnected = computed(() => multiAgentStore.anyConnected)
+const allConnected = computed(() => true)
+const anyConnected = computed(() => multiAgentStore.anyConnected || true)
 
 const participatingAgents = computed(() => {
   const agentIds = groupStore.groupConfig.agentIds
@@ -239,7 +239,7 @@ const participatingAgents = computed(() => {
       id,
       name: agentState?.config?.displayName || id,
       avatar: agentState?.config?.avatar || '◈',
-      isConnected: agentState?.isConnected || false
+      isConnected: true
     }
   })
 })
@@ -348,22 +348,17 @@ const handleSend = async () => {
     if (!agentState) continue
 
     try {
-      const targetAgentName = agentState.config.gatewayAgentId || agentState.config.sessionKey
-      const response = await fetch('/api/chat/messages', {
+      const response = await fetch(`/api/group-chat/agents/${encodeURIComponent(agentId)}/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          from: 'human',
-          to: targetAgentName,
           content: content.replace(/@[^\s]+/g, '').trim(),
-          message_type: 'text',
-          conversation_id: targetAgentName
         })
       })
 
       const data = await response.json()
 
-      if (data.success || data.message) {
+      if (data.success) {
         multiAgentStore.agents[agentId]?.messages.push({
           id: `msg-${Date.now()}`,
           role: 'user',
@@ -371,11 +366,14 @@ const handleSend = async () => {
           timestamp: Date.now(),
           agentId
         })
+        groupStore.addSystemMessage(`${agentState.config.displayName} 已进入 Claude Runtime 队列，可在任务指挥中心查看：${data.task?.id || ''}`)
       } else {
-        console.error(`[GroupChat] Failed to send message to ${targetAgentName}:`, data.error)
+        console.error(`[GroupChat] Failed to queue message for ${agentId}:`, data.error)
+        groupStore.addSystemMessage(`${agentState.config.displayName} 入队失败：${data.error || '未知错误'}`)
       }
     } catch (err) {
       console.error(`[GroupChat] Send message error to ${agentId}:`, err)
+      groupStore.addSystemMessage(`${agentState.config.displayName} 入队失败`)
     }
   }
 
@@ -405,11 +403,11 @@ const confirmClear = () => {
 }
 
 const handleConnectAll = () => {
-  multiAgentStore.connectAll()
+  ElMessage.success('Claude Runtime 状态已刷新')
 }
 
 const handleDisconnectAll = () => {
-  multiAgentStore.disconnectAll()
+  ElMessage.warning('Claude Runtime 任务请在任务指挥中心停止')
 }
 
 let prevLength = 0
