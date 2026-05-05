@@ -5,8 +5,11 @@
     <div class="app-shell__glow app-shell__glow--left"></div>
     <div class="app-shell__glow app-shell__glow--right"></div>
 
-    <div class="app-frame">
-      <TheSidebar />
+    <div :class="['app-frame', { 'app-frame--sidebar-collapsed': sidebarCollapsed }]">
+      <TheSidebar
+        :collapsed="sidebarCollapsed"
+        @toggle-collapse="toggleSidebar"
+      />
 
       <main class="app-stage">
         <section class="stage-content">
@@ -18,7 +21,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import TheSidebar from '@/components/TheSidebar.vue'
 import { useAppInit } from '@/composables/useAppInit'
@@ -26,9 +29,25 @@ import { useAppInit } from '@/composables/useAppInit'
 const route = useRoute()
 const { initializeApp } = useAppInit()
 const isBlankLayout = computed(() => route.meta.layout === 'blank')
+const sidebarCollapsed = ref(false)
+
+function readSidebarCollapsed() {
+  if (typeof localStorage === 'undefined') return false
+  return localStorage.getItem('app_sidebar_collapsed') === 'true'
+}
+
+function toggleSidebar() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+}
 
 onMounted(() => {
+  sidebarCollapsed.value = readSidebarCollapsed()
   initializeApp()
+})
+
+watch(sidebarCollapsed, (value) => {
+  if (typeof localStorage === 'undefined') return
+  localStorage.setItem('app_sidebar_collapsed', String(value))
 })
 </script>
 
@@ -73,6 +92,11 @@ onMounted(() => {
   align-items: start;
   gap: 0;
   min-height: calc(100vh - 24px);
+  transition: grid-template-columns 0.22s ease;
+}
+
+.app-frame--sidebar-collapsed {
+  grid-template-columns: 72px minmax(0, 1fr);
 }
 
 .app-stage {
@@ -100,6 +124,10 @@ onMounted(() => {
 
 @media (max-width: 1180px) {
   .app-frame {
+    grid-template-columns: 1fr;
+  }
+
+  .app-frame--sidebar-collapsed {
     grid-template-columns: 1fr;
   }
 

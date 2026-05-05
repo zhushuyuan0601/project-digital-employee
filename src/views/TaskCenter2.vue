@@ -4466,7 +4466,7 @@ watch(
 
 @container task-command (max-width: 1260px) {
   .task-command-layout {
-    grid-template-columns: minmax(220px, 270px) minmax(0, 1fr);
+    grid-template-columns: minmax(210px, 240px) minmax(0, 1fr) minmax(240px, 280px);
     gap: 14px;
     padding: 14px;
   }
@@ -4480,13 +4480,27 @@ watch(
   }
 
   .task-inspector {
-    grid-column: 1 / -1;
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    position: sticky;
+    top: 0;
+    grid-column: auto;
+    display: flex;
+    max-height: calc(100vh - 28px);
+    gap: 12px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding-right: 2px;
   }
 
   .surface {
-    padding: 14px;
+    padding: 12px;
+  }
+
+  .task-create {
+    padding-bottom: 12px;
+  }
+
+  .task-row {
+    padding: 10px;
   }
 
   .mission-hero {
@@ -4542,6 +4556,33 @@ watch(
   .subtask-grid {
     grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   }
+
+  .event-list {
+    max-height: 300px;
+  }
+
+  .outputs-panel {
+    max-height: 260px;
+  }
+
+  .event-item--rich {
+    padding: 10px;
+  }
+
+  .event-item p {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+  }
+
+  .output-row {
+    grid-template-columns: 20px minmax(0, 1fr);
+  }
+
+  .output-badge {
+    display: none;
+  }
 }
 
 @container task-command (max-width: 980px) {
@@ -4559,6 +4600,12 @@ watch(
   .task-rail {
     position: static;
     max-height: none;
+  }
+
+  .task-inspector {
+    position: static;
+    max-height: none;
+    padding-right: 0;
   }
 
   .task-list {

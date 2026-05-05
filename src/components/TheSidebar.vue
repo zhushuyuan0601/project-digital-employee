@@ -1,5 +1,5 @@
 <template>
-  <aside class="app-sidebar">
+  <aside :class="['app-sidebar', { 'app-sidebar--collapsed': collapsed }]">
     <div class="brand-panel">
       <div class="brand-mark">
         <div class="brand-mark__orb">U</div>
@@ -7,6 +7,16 @@
           <strong>Digital Employee</strong>
           <span>联通多Agent 协作管理平台</span>
         </div>
+        <button
+          type="button"
+          class="sidebar-collapse"
+          :title="collapsed ? '展开菜单' : '收起菜单'"
+          :aria-label="collapsed ? '展开菜单' : '收起菜单'"
+          @click="emit('toggle-collapse')"
+        >
+          <Expand v-if="collapsed" />
+          <Fold v-else />
+        </button>
       </div>
     </div>
 
@@ -28,6 +38,7 @@
           <button
             type="button"
             :class="['nav-link', { 'is-active': isActive }]"
+            :title="collapsed ? `${item.label}：${item.meta}` : undefined"
             @click="navigate"
           >
             <span class="nav-link__icon">
@@ -59,7 +70,12 @@
         <span class="sidebar-build">Build v1.0.0</span>
       </div>
 
-      <button type="button" class="theme-toggle" @click="toggleTheme">
+      <button
+        type="button"
+        class="theme-toggle"
+        :title="collapsed ? themeLabel : undefined"
+        @click="toggleTheme"
+      >
         <span class="theme-toggle__icon">
           <Sunny v-if="isLight" />
           <MoonNight v-else />
@@ -70,7 +86,12 @@
         </span>
       </button>
 
-      <button type="button" class="logout-btn" @click="logout">
+      <button
+        type="button"
+        class="logout-btn"
+        :title="collapsed ? '退出登录' : undefined"
+        @click="logout"
+      >
         退出登录
       </button>
     </div>
@@ -80,7 +101,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowRight, MoonNight, Sunny } from '@element-plus/icons-vue'
+import { ArrowRight, Expand, Fold, MoonNight, Sunny } from '@element-plus/icons-vue'
 import { storeToRefs } from 'pinia'
 import { navigationSections } from '@/config/navigation'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
@@ -93,6 +114,14 @@ const themeStore = useThemeStore()
 const authStore = useAuthStore()
 const notification = useNotification()
 const router = useRouter()
+
+defineProps<{
+  collapsed?: boolean
+}>()
+
+const emit = defineEmits<{
+  (event: 'toggle-collapse'): void
+}>()
 
 const { currentTheme, isLight } = storeToRefs(themeStore)
 const multiAgentRefs = storeToRefs(multiAgentStore)
@@ -152,6 +181,14 @@ function logout() {
   border-radius: 0;
   background: var(--bg-panel);
   box-shadow: none;
+  width: 100%;
+  min-width: 0;
+  transition: padding 0.22s ease;
+}
+
+.app-sidebar--collapsed {
+  padding: 16px 10px;
+  align-items: stretch;
 }
 
 .brand-panel {
@@ -164,6 +201,7 @@ function logout() {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
 .brand-mark__orb {
@@ -183,6 +221,7 @@ function logout() {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .brand-copy strong {
@@ -197,6 +236,30 @@ function logout() {
   color: var(--text-secondary);
   font-size: 0.82rem;
   line-height: 1.35;
+}
+
+.sidebar-collapse {
+  margin-left: auto;
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card) 88%, transparent);
+  color: var(--text-secondary);
+  transition: all 0.18s ease;
+}
+
+.sidebar-collapse:hover {
+  border-color: rgba(var(--color-primary-rgb), 0.42);
+  color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb), 0.1);
+}
+
+.sidebar-collapse :deep(svg) {
+  width: 1rem;
+  height: 1rem;
 }
 
 .nav-scroll {
@@ -447,6 +510,92 @@ function logout() {
   border-color: color-mix(in oklab, var(--color-error) 45%, var(--border-default));
 }
 
+.app-sidebar--collapsed .brand-panel {
+  padding: 0 0 16px;
+}
+
+.app-sidebar--collapsed .brand-mark {
+  justify-content: center;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.app-sidebar--collapsed .brand-mark__orb {
+  width: 2.4rem;
+  height: 2.4rem;
+}
+
+.app-sidebar--collapsed .brand-copy,
+.app-sidebar--collapsed .nav-section__label,
+.app-sidebar--collapsed .nav-link__body,
+.app-sidebar--collapsed .nav-link__arrow,
+.app-sidebar--collapsed .sidebar-user,
+.app-sidebar--collapsed .sidebar-build,
+.app-sidebar--collapsed .theme-toggle__text,
+.app-sidebar--collapsed .logout-btn {
+  display: none;
+}
+
+.app-sidebar--collapsed .sidebar-collapse {
+  margin-left: 0;
+}
+
+.app-sidebar--collapsed .nav-scroll {
+  padding-right: 0;
+  overflow-x: hidden;
+}
+
+.app-sidebar--collapsed .nav-section + .nav-section {
+  margin-top: 12px;
+}
+
+.app-sidebar--collapsed .nav-link {
+  display: flex;
+  justify-content: center;
+  padding: 10px 0;
+}
+
+.app-sidebar--collapsed .nav-link__icon {
+  width: 2.25rem;
+  height: 2.25rem;
+}
+
+.app-sidebar--collapsed .sidebar-footer {
+  display: grid;
+  gap: 10px;
+  padding: 14px 0 0;
+}
+
+.app-sidebar--collapsed .sidebar-status {
+  justify-content: center;
+  margin-bottom: 0;
+}
+
+.app-sidebar--collapsed .status-chip {
+  width: 2.5rem;
+  height: 2.5rem;
+  justify-content: center;
+  padding: 0;
+}
+
+.app-sidebar--collapsed .status-chip span:last-child {
+  display: none;
+}
+
+.app-sidebar--collapsed .theme-toggle {
+  justify-content: center;
+  padding: 0;
+  width: 2.5rem;
+  height: 2.5rem;
+  margin: 0 auto;
+}
+
+.app-sidebar--collapsed .theme-toggle__icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 8px;
+}
+
 @media (max-width: 1180px) {
   .app-sidebar {
     position: static;
@@ -455,6 +604,35 @@ function logout() {
     gap: 18px;
     border-right: none;
     border-bottom: 1px solid var(--border-default);
+  }
+
+  .app-sidebar--collapsed {
+    padding: 12px;
+  }
+
+  .app-sidebar--collapsed .brand-mark {
+    justify-content: flex-start;
+    flex-direction: row;
+  }
+
+  .app-sidebar--collapsed .brand-copy,
+  .app-sidebar--collapsed .nav-section__label,
+  .app-sidebar--collapsed .nav-link__body,
+  .app-sidebar--collapsed .nav-link__arrow,
+  .app-sidebar--collapsed .sidebar-user,
+  .app-sidebar--collapsed .theme-toggle__text,
+  .app-sidebar--collapsed .logout-btn {
+    display: none;
+  }
+
+  .app-sidebar--collapsed .nav-section {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .app-sidebar--collapsed .nav-link {
+    width: auto;
+    padding: 8px;
   }
 
   .nav-scroll {
