@@ -10,9 +10,9 @@
         <div v-if="dataSourceLabel" class="obs-header__source">
           {{ dataSourceLabel }}
         </div>
-        <div class="obs-header__status" :class="gatewayStatus">
+        <div class="obs-header__status" :class="runtimeHeaderStatus">
           <span class="obs-header__dot"></span>
-          {{ gatewayStatusText }}
+          {{ runtimeHeaderStatusText }}
         </div>
         <div class="obs-header__time">{{ currentTime }}</div>
       </div>
@@ -280,13 +280,8 @@ import {
   Select,
   CircleCheck,
 } from '@element-plus/icons-vue'
-import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
-import { storeToRefs } from 'pinia'
 import { getActivities, getDashboard, type ActivityItem } from '@/api/dashboard'
 import { taskApi, type AgentRun, type RuntimeAgentStat } from '@/api/tasks'
-
-const multiAgentStore = useMultiAgentChatStore()
-const { anyConnected } = storeToRefs(multiAgentStore)
 
 // ─── Clock ──────────────────────────────────────────────
 const currentTime = ref('')
@@ -313,14 +308,14 @@ onUnmounted(() => {
   window.clearInterval(timerId)
 })
 
-// ─── Gateway Status ─────────────────────────────────────
-const gatewayStatus = computed(() =>
-  runtimeStatus.value?.healthy || anyConnected.value ? 'connected' : 'disconnected'
+// ─── Runtime Status ─────────────────────────────────────
+const runtimeHeaderStatus = computed(() =>
+  runtimeStatus.value?.healthy ? 'connected' : 'disconnected'
 )
-const gatewayStatusText = computed(() =>
+const runtimeHeaderStatusText = computed(() =>
   runtimeStatus.value?.healthy
     ? `Claude Runtime 就绪 · 运行 ${runtimeStatus.value.running} / 排队 ${runtimeStatus.value.queued}`
-    : gatewayStatus.value === 'connected' ? '系统运行正常' : '连接中断'
+    : '连接中断'
 )
 
 // ─── Stats (reactive) ───────────────────────────────────

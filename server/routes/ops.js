@@ -86,14 +86,14 @@ function generateMemoryData() {
     },
     files,
     nodes: [
-      { id: 'n1', name: 'OpenClaw', type: 'entity', description: 'AI Agent 编排平台', connections: [{ targetId: 'n2', type: 'related', weight: 0.9 }, { targetId: 'n3', type: 'related', weight: 0.8 }] },
+      { id: 'n1', name: 'Claude Runtime', type: 'entity', description: 'AI Agent 编排运行时', connections: [{ targetId: 'n2', type: 'related', weight: 0.9 }, { targetId: 'n3', type: 'related', weight: 0.8 }] },
       { id: 'n2', name: 'Mission Control', type: 'concept', description: '多 Agent 管理系统', connections: [{ targetId: 'n1', type: 'related', weight: 0.9 }] },
       { id: 'n3', name: '数字员工', type: 'entity', description: '自动化办公 Agent', connections: [{ targetId: 'n1', type: 'related', weight: 0.8 }] },
-      { id: 'n4', name: 'API Gateway', type: 'concept', description: '统一 API 网关', connections: [{ targetId: 'n1', type: 'related', weight: 0.7 }] }
+      { id: 'n4', name: 'Runtime API', type: 'concept', description: '统一运行时 API', connections: [{ targetId: 'n1', type: 'related', weight: 0.7 }] }
     ],
     activities: [
-      { id: 'a1', type: 'create', nodeId: 'n4', nodeName: 'API Gateway', timestamp: new Date().toISOString(), description: '创建新节点' },
-      { id: 'a2', type: 'update', nodeId: 'n1', nodeName: 'OpenClaw', timestamp: new Date().toISOString(), description: '更新节点信息' },
+      { id: 'a1', type: 'create', nodeId: 'n4', nodeName: 'Runtime API', timestamp: new Date().toISOString(), description: '创建新节点' },
+      { id: 'a2', type: 'update', nodeId: 'n1', nodeName: 'Claude Runtime', timestamp: new Date().toISOString(), description: '更新节点信息' },
       { id: 'a3', type: 'connect', nodeId: 'n2', nodeName: 'Mission Control', timestamp: new Date().toISOString(), description: '建立关联' }
     ]
   }
@@ -110,7 +110,7 @@ function generateSecurityData() {
       totalChecks: 45
     },
     secrets: [
-      { id: 's1', type: 'api_key', location: '~/.openclaw/config.json', severity: 'medium', detectedAt: new Date().toISOString(), status: 'resolved' },
+      { id: 's1', type: 'api_key', location: '~/.claude/config.json', severity: 'medium', detectedAt: new Date().toISOString(), status: 'resolved' },
       { id: 's2', type: 'token', location: '~/logs/agent.log', severity: 'low', detectedAt: new Date().toISOString(), status: 'pending' }
     ],
     mcpServers: [
@@ -135,13 +135,11 @@ function generateSecurityData() {
   }
 }
 
-export function createOpsRouter({ proxyToGateway }) {
+export function createOpsRouter() {
   const router = express.Router()
 
   router.get('/tokens/stats', async (_req, res) => {
     try {
-      const gatewayData = await proxyToGateway('/api/tokens/stats').catch(() => null)
-      if (gatewayData?.success) return res.json(gatewayData)
       res.json({ success: true, dataSource: 'mock', ...generateTokenData() })
     } catch (err) {
       res.status(500).json({ success: false, error: err.message })
@@ -165,8 +163,6 @@ export function createOpsRouter({ proxyToGateway }) {
 
   router.get('/memory', async (_req, res) => {
     try {
-      const gatewayData = await proxyToGateway('/api/memory').catch(() => null)
-      if (gatewayData?.success) return res.json(gatewayData)
       res.json({ success: true, dataSource: 'mock', ...generateMemoryData() })
     } catch (err) {
       res.status(500).json({ success: false, error: err.message })
@@ -175,8 +171,6 @@ export function createOpsRouter({ proxyToGateway }) {
 
   router.get('/security/audit', async (_req, res) => {
     try {
-      const gatewayData = await proxyToGateway('/api/security/audit').catch(() => null)
-      if (gatewayData?.success) return res.json(gatewayData)
       res.json({ success: true, dataSource: 'mock', ...generateSecurityData() })
     } catch (err) {
       res.status(500).json({ success: false, error: err.message })

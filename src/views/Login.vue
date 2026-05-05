@@ -4,7 +4,7 @@
       <div class="login-brand">
         <div class="login-brand__mark">U</div>
         <div>
-          <h1>OpenClaw Unicom</h1>
+          <h1>Digital Employee</h1>
           <p>联通多 Agent 协作管理平台登录</p>
         </div>
       </div>

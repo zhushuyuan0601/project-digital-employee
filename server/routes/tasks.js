@@ -1,5 +1,6 @@
 import express from 'express'
 import { promises as fs } from 'fs'
+import { accessSync, constants, existsSync } from 'fs'
 import { homedir } from 'os'
 import { join, resolve } from 'path'
 import {
@@ -20,6 +21,7 @@ import {
   updateTaskOutput,
   upsertTaskOutput,
 } from '../db/tasks.js'
+import { getDatabasePath } from '../db/index.js'
 import {
   cancelRun,
   enqueuePlanRun,
@@ -34,17 +36,33 @@ import {
 import { getClaudeRuntimeConfig } from '../claude-runtime/config.js'
 import { claudeRuntimeEvents } from '../claude-runtime/event-bus.js'
 import { RUNTIME_AGENT_MAP } from '../claude-runtime/plan-utils.js'
+import { PROJECT_ROOT } from '../config/defaults.js'
 
 const router = express.Router()
 const HOME_DIR = process.env.HOME || process.env.USERPROFILE || homedir()
 const DEFAULT_EVENT_LIMIT = 100
+const RUNTIME_ENV_KEYS = [
+  'PORT',
+  'DB_PATH',
+  'CORS_ORIGIN',
+  'AGENT_RUNTIME',
+  'CLAUDE_AGENT_MAX_CONCURRENCY',
+  'CLAUDE_AGENT_MAX_TURNS',
+  'CLAUDE_REPORT_ONLY',
+  'CLAUDE_RUNTIME_CWD',
+  'CLAUDE_WORKSPACE_ISOLATION',
+  'CLAUDE_WORKSPACE_ROOT',
+  'CLAUDE_ALLOWED_TOOLS',
+  'CLAUDE_OUTPUT_ROOT',
+  'CLAUDE_RUNTIME_MOCK',
+]
 
 const AGENT_MAP = {
-  xiaomu: { name: '小呦', gatewayAgentId: 'ceo', sessionKey: 'agent:ceo:main', roleId: 'ceo' },
-  xiaoyan: { name: '研究员', gatewayAgentId: 'researcher', sessionKey: 'agent:researcher:main', roleId: 'researcher' },
-  xiaochan: { name: '产品经理', gatewayAgentId: 'pm', sessionKey: 'agent:pm:main', roleId: 'pm' },
-  xiaokai: { name: '研发工程师', gatewayAgentId: 'tech-lead', sessionKey: 'agent:tech-lead:main', roleId: 'tech-lead' },
-  xiaoce: { name: '测试员', gatewayAgentId: 'team-qa', sessionKey: 'agent:team-qa:main', roleId: 'team-qa' },
+  xiaomu: { name: '小呦', runtimeAgentId: 'ceo', sessionKey: 'claude:xiaomu:main', roleId: 'ceo' },
+  xiaoyan: { name: '研究员', runtimeAgentId: 'researcher', sessionKey: 'claude:xiaoyan:main', roleId: 'researcher' },
+  xiaochan: { name: '产品经理', runtimeAgentId: 'pm', sessionKey: 'claude:xiaochan:main', roleId: 'pm' },
+  xiaokai: { name: '研发工程师', runtimeAgentId: 'tech-lead', sessionKey: 'claude:xiaokai:main', roleId: 'tech-lead' },
+  xiaoce: { name: '测试员', runtimeAgentId: 'team-qa', sessionKey: 'claude:xiaoce:main', roleId: 'team-qa' },
 }
 
 function resolvePath(path) {
@@ -73,6 +91,38 @@ function parsePositiveInt(value, fallback) {
   const parsed = Number(value)
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback
   return Math.floor(parsed)
+}
+
+function canWritePath(path) {
+  try {
+    accessSync(path, constants.W_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function runtimeDiagnostics() {
+  const config = getClaudeRuntimeConfig()
+  let sdkAvailable = false
+  try {
+    await import('@anthropic-ai/claude-agent-sdk')
+    sdkAvailable = true
+  } catch {}
+
+  return {
+    dbPath: getDatabasePath(),
+    dbWritable: canWritePath(join(getDatabasePath(), '..')) || canWritePath(resolve(getDatabasePath(), '..')),
+    cwdExists: existsSync(config.cwd),
+    outputRootWritable: existsSync(config.outputRoot) && canWritePath(config.outputRoot),
+    workspaceRootWritable: existsSync(config.workspaceRoot) && canWritePath(config.workspaceRoot),
+    sdkAvailable,
+    hasEnvFile: existsSync(join(PROJECT_ROOT, '.env')),
+    configSource: existsSync(join(PROJECT_ROOT, '.env')) ? 'defaults + .env overrides' : 'built-in defaults',
+    envOverrides: Object.fromEntries(
+      RUNTIME_ENV_KEYS.map((key) => [key, process.env[key] != null && process.env[key] !== ''])
+    ),
+  }
 }
 
 async function scanFiles(basePath, startTime = null, endTime = null, limit = 200) {
@@ -194,8 +244,7 @@ JSON 格式:
 }
 
 function subtaskPrompt(task, subtask) {
-  const taskWorkspace = `~/.openclaw/shared-workspace/daily-intel/tasks/${task.id}/${subtask.id}/`
-  return `你正在执行 OpenClaw 多 Agent 协作任务中的一个子任务。
+  return `你正在执行 Claude Runtime 多 Agent 协作任务中的一个子任务。
 
 taskId: ${task.id}
 subTaskId: ${subtask.id}
@@ -207,10 +256,7 @@ ${subtask.description}
 期望产出:
 ${subtask.expected_output || '请输出清晰的执行结果、关键依据和下一步建议。'}
 
-请将所有文件产出写入:
-${taskWorkspace}
-
-如果你还会写入角色目录，平台会按时间窗口兜底归档，但任务目录是首选。完成后请用简短小结说明产出文件和结论。`
+请只输出 Markdown 报告内容，不要直接修改项目源码。报告会由后端写入受控成果目录。`
 }
 
 function finalPrompt(task) {
@@ -314,9 +360,9 @@ router.post('/tasks', (req, res) => {
   }
 })
 
-router.get('/runtime/status', (_req, res) => {
+router.get('/runtime/status', async (_req, res) => {
   try {
-    res.json({ success: true, status: getRuntimeStatus() })
+    res.json({ success: true, status: { ...getRuntimeStatus(), ...(await runtimeDiagnostics()) } })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }
@@ -607,10 +653,10 @@ router.post('/subtasks/:id/dispatch-result', (req, res) => {
       taskId: subtask.task_id,
       subtaskId: subtask.id,
       agentId: subtask.assigned_agent_id,
-      type: ok ? 'subtask.dispatched' : 'gateway.error',
+      type: ok ? 'subtask.dispatched' : 'runtime.dispatch.error',
       message: ok
-        ? `前端已通过 WebSocket 派发给 ${AGENT_MAP[subtask.assigned_agent_id]?.name || subtask.assigned_agent_id}`
-        : (error || '前端 WebSocket 派发失败'),
+        ? `子任务已派发给 ${AGENT_MAP[subtask.assigned_agent_id]?.name || subtask.assigned_agent_id}`
+        : (error || 'Runtime 派发失败'),
       payload: payload || { sessionKey: subtask.session_key, error },
     })
     res.json({ success: true, task: getTaskDetail(subtask.task_id) })
@@ -733,21 +779,16 @@ router.post('/tasks/:id/outputs/scan', async (req, res) => {
     const task = getTaskDetail(req.params.id)
     if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
 
+    const config = getClaudeRuntimeConfig()
     const discovered = []
-    for (const subtask of task.subtasks) {
-      const taskPath = `~/.openclaw/shared-workspace/daily-intel/tasks/${task.id}/${subtask.id}`
-      const taskFiles = await scanFiles(taskPath)
-      for (const file of taskFiles) {
-        discovered.push({ ...file, subtaskId: subtask.id, agentId: subtask.assigned_agent_id })
-      }
-
-      const agent = AGENT_MAP[subtask.assigned_agent_id]
-      const date = new Date((subtask.started_at || task.started_at || task.created_at) * 1000).toISOString().split('T')[0]
-      const rolePath = `~/.openclaw/shared-workspace/daily-intel/roles/${agent.roleId}/${date}`
-      const roleFiles = await scanFiles(rolePath, (subtask.started_at || task.created_at) * 1000)
-      for (const file of roleFiles) {
-        discovered.push({ ...file, subtaskId: subtask.id, agentId: subtask.assigned_agent_id })
-      }
+    const outputFiles = await scanFiles(join(config.outputRoot, task.id))
+    for (const file of outputFiles) {
+      const subtask = task.subtasks.find(item => file.path.includes(`/${item.id}/`))
+      discovered.push({
+        ...file,
+        subtaskId: subtask?.id || null,
+        agentId: subtask?.assigned_agent_id || task.coordinator_agent_id,
+      })
     }
 
     for (const file of discovered) {

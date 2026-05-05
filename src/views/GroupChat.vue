@@ -221,7 +221,6 @@ import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useGroupChatStore } from '@/stores/groupChat'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { extractText } from '@/utils/gateway-protocol'
 import ChatMessageBubble from '@/components/chat/ChatMessageBubble.vue'
 import { useChatFormatting } from '@/composables/useChatFormatting'
 
@@ -526,24 +525,6 @@ const setupAgentStatusWatcher = () => {
   )
 }
 
-const setupMessageListener = () => {
-  const listener = (agentId: string, event: string, payload: any) => {
-    if (event === 'agent') {
-      const stream = payload?.stream
-      if (stream === 'assistant') {
-        const text = extractText(payload)
-        if (text) {
-          groupStore.updateAgentReply(agentId, text)
-          nextTick(() => scrollToBottom())
-        }
-      }
-    }
-  }
-
-  multiAgentStore.addEventListener(listener)
-  return () => multiAgentStore.removeEventListener(listener)
-}
-
 const handleSend = async () => {
   if (!inputContent.value.trim()) return
 
@@ -577,13 +558,6 @@ const handleSend = async () => {
       if (data.success) {
         upsertActiveRun(data.run?.id)
         setAgentRunState(agentId, 'queued')
-        multiAgentStore.agents[agentId]?.messages.push({
-          id: `msg-${Date.now()}`,
-          role: 'user',
-          content: content.replace(/@[^\s]+/g, '').trim(),
-          timestamp: Date.now(),
-          agentId
-        })
       } else {
         console.error(`[GroupChat] Failed to queue message for ${agentId}:`, data.error)
         ElMessage.error(`${agentState.config.displayName} 入队失败：${data.error || '未知错误'}`)
@@ -677,7 +651,6 @@ const checkScroll = setInterval(() => {
 }, 500)
 
 const stopAgentWatch = setupAgentStatusWatcher()
-const cleanupListener = setupMessageListener()
 let cleanupRuntimeStream: (() => void) | null = null
 
 onMounted(() => {
@@ -692,7 +665,6 @@ onMounted(() => {
 onUnmounted(() => {
   clearInterval(checkScroll)
   stopAgentWatch()
-  cleanupListener()
   cleanupRuntimeStream?.()
 })
 </script>

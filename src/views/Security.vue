@@ -173,14 +173,14 @@
             <div class="hook-item">
               <div class="hook-info">
                 <strong>Pre-Execute Hook</strong>
-                <span>~/.openclaw/hooks/pre-execute.js</span>
+                <span>server/claude-runtime/events.js</span>
               </div>
               <span class="hook-status active"></span>
             </div>
             <div class="hook-item">
               <div class="hook-info">
                 <strong>Post-Execute Hook</strong>
-                <span>~/.openclaw/hooks/post-execute.js</span>
+                <span>server/claude-runtime/report-writer.js</span>
               </div>
               <span class="hook-status active"></span>
             </div>

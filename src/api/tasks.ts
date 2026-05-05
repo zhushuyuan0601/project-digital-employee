@@ -90,6 +90,15 @@ interface RuntimeStatusResponse {
     agentStats?: RuntimeAgentStat[]
     failureReasons?: Array<{ reason: string; count: number }>
     recentRuns?: AgentRun[]
+    dbPath?: string
+    dbWritable?: boolean
+    cwdExists?: boolean
+    outputRootWritable?: boolean
+    workspaceRootWritable?: boolean
+    sdkAvailable?: boolean
+    hasEnvFile?: boolean
+    configSource?: string
+    envOverrides?: Record<string, boolean>
     healthy: boolean
   }
 }

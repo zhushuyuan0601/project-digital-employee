@@ -1,9 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Agent, AgentRole, AgentStatus } from '@/types/agent'
-import { AGENT_DEFINITIONS, AGENT_TO_GATEWAY_MAP } from '@/config/agents'
+import { AGENT_DEFINITIONS, AGENT_TO_RUNTIME_MAP } from '@/config/agents'
 
-export { AGENT_TO_GATEWAY_MAP }
+export { AGENT_TO_RUNTIME_MAP }
 
 // localStorage key
 const AGENT_STATS_KEY = 'agent_completed_tasks'
@@ -125,7 +125,7 @@ export const useAgentsStore = defineStore('agents', () => {
       status: 'idle',
       completedTasks: savedStats[agent.id] || 0,
       description: agent.description,
-      gatewayAgentId: agent.gatewayAgentId,
+      runtimeAgentId: agent.runtimeAgentId,
     }))
   }
 

@@ -4,7 +4,7 @@
       <div class="brand-mark">
         <div class="brand-mark__orb">U</div>
         <div class="brand-copy">
-          <strong>OpenClaw Unicom</strong>
+          <strong>Digital Employee</strong>
           <span>联通多Agent 协作管理平台</span>
         </div>
       </div>

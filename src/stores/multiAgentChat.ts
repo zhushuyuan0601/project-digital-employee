@@ -1,12 +1,6 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { computed, ref } from 'vue'
 import { getMultiAgentStoreConfigs } from '@/config/agents'
-import { useGatewayConnection } from '@/composables/useGatewayConnection'
-import {
-  buildConnectRequest,
-  extractChatText,
-  extractText,
-} from '@/utils/gateway-protocol'
 
 export interface AgentConfig {
   id: string
@@ -14,7 +8,7 @@ export interface AgentConfig {
   displayName: string
   role: string
   avatar: string
-  gatewayAgentId?: string  // Gateway Agent ID
+  runtimeAgentId?: string
 }
 
 export interface ChatMessage {
@@ -22,12 +16,12 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
   content: string
   timestamp: number
-  agentId?: string  // 关联的 Agent ID
+  agentId?: string
 }
 
 export interface AgentConnection {
   config: AgentConfig
-  ws: WebSocket | null
+  ws: null
   isConnected: boolean
   isConnecting: boolean
   isTyping: boolean
@@ -36,389 +30,43 @@ export interface AgentConnection {
   currentAssistantMsgId: string | null
 }
 
-export interface ConnectionSettings {
-  wsUrl: string
-  token: string
-  autoConnect: boolean
-}
+type EventListener = (agentId: string, event: string, payload: any) => void
 
 export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
-  // 更新或创建消息（非流式模式，直接显示完整内容）
-  function updateOrCreateMessage(agentId: string, role: 'assistant', content: string, runId?: string) {
-    const agent = agents.value[agentId]
-    if (!agent) return
-
-    // 非流式模式，直接更新
-    if (runId && runId !== agent.currentAssistantMsgId) {
-      agent.currentAssistantMsgId = runId
-      agent.messages.push({
-        id: `msg-${runId}`,
-        role,
-        content,
-        timestamp: Date.now(),
-        agentId
-      })
-      console.log(`[MultiAgentChat] [${agentId}] [msg] 新消息 (runId: ${runId}), 共 ${agent.messages.length} 条`)
-    } else {
-      const lastMessage = agent.messages[agent.messages.length - 1]
-      if (lastMessage && lastMessage.role === role) {
-        lastMessage.content = content
-      } else {
-        const msgId = `msg-${Date.now()}`
-        agent.messages.push({
-          id: msgId,
-          role,
-          content,
-          timestamp: Date.now(),
-          agentId
-        })
-        console.log(`[MultiAgentChat] [${agentId}] [msg] 新消息 (无runId), 共 ${agent.messages.length} 条`)
-      }
-    }
-    saveMessages(agentId)
-  }
-
-  // 配置的 Agent 列表 - 与任务指挥页面保持一致
-  const agentConfigs: AgentConfig[] = getMultiAgentStoreConfigs() as AgentConfig[]
-
-  // 当前选中的 Agent ID
+  const agentConfigs: AgentConfig[] = getMultiAgentStoreConfigs().map((agent) => ({
+    ...agent,
+    runtimeAgentId: agent.runtimeAgentId,
+  }))
   const selectedAgentId = ref<string>('xiaomu')
-
-  // 设置 - 直接连接 Gateway，不走 Vite 代理
-  // 这样 Gateway 能正确识别为本地连接，避免 scopes 被清空
-  const { settings, resolveSocketUrl } = useGatewayConnection()
-
-  console.log('[MultiAgentChat] 初始化 - wsUrl:', settings.value.wsUrl, 'hasToken:', !!settings.value.token)
-
-  // 每个 Agent 的连接状态和消息
   const agents = ref<Record<string, AgentConnection>>({})
+  const eventListeners = ref<EventListener[]>([])
 
-  // 重连定时器引用
-  const reconnectTimers = ref<Record<string, ReturnType<typeof setTimeout>>>({})
-
-  // 初始化 Agent 连接
-  agentConfigs.forEach(config => {
+  agentConfigs.forEach((config) => {
     agents.value[config.id] = {
       config,
       ws: null,
-      isConnected: false,
+      isConnected: true,
       isConnecting: false,
       isTyping: false,
       typingStartTime: null,
       messages: [],
-      currentAssistantMsgId: null
+      currentAssistantMsgId: null,
     }
   })
 
-  // 事件监听器回调
-  type EventListener = (agentId: string, event: string, payload: any) => void
-  const eventListeners = ref<EventListener[]>([])
-
-  // 添加/移除事件监听器
-  function addEventListener(listener: EventListener) {
-    eventListeners.value.push(listener)
-  }
-
-  function removeEventListener(listener: EventListener) {
-    const index = eventListeners.value.indexOf(listener)
-    if (index > -1) {
-      eventListeners.value.splice(index, 1)
-    }
-  }
-
-  // Computed
   const selectedAgent = computed(() => agents.value[selectedAgentId.value])
   const selectedMessages = computed(() => agents.value[selectedAgentId.value]?.messages || [])
+  const allConnected = computed(() => true)
+  const anyConnected = computed(() => true)
 
-  // 连接状态
-  const allConnected = computed(() => {
-    return agentConfigs.every(config => agents.value[config.id]?.isConnected)
-  })
-  const anyConnected = computed(() => {
-    return agentConfigs.some(config => agents.value[config.id]?.isConnected)
-  })
-
-  function addSystemMessage(agentId: string, content: string) {
-    const agent = agents.value[agentId]
-    if (!agent) return
-    agent.messages.push({
-      id: `sys-${Date.now()}`,
-      role: 'system',
-      content,
-      timestamp: Date.now(),
-      agentId
-    })
-    saveMessages(agentId)
-  }
-
-  // 处理 WebSocket 消息
-  // 追踪 request id 对应的方法，用于解析 res 响应
-  const pendingRequests = ref<Record<string, { method: string; agentId: string }>>({})
-
-  function handleAgentMessage(agentId: string, msg: any) {
-    console.log(`[MultiAgentChat] [${agentId}] handleAgentMessage 入口:`, msg.type, msg.id ? msg.id.slice(0, 30) : '')
-
-    if (msg.type === 'res') {
-      // Gateway res 没有 method 字段，通过 request id 匹配
-      const pending = pendingRequests.value[msg.id]
-      const methodLabel = pending ? pending.method : 'unknown'
-
-      // 所有 res 消息都打印完整详情
-      console.log(`[MultiAgentChat] [${agentId}] res [${methodLabel}]:`, JSON.stringify({
-        resId: msg.id,
-        ok: msg.ok,
-        payload: msg.payload,
-        error: msg.error,
-      }, null, 2))
-
-      if (methodLabel === 'connect') {
-        const agent = agents.value[agentId]
-        if (!msg.ok) {
-          console.error(`[MultiAgentChat] [${agentId}] 连接握手失败! error=`, JSON.stringify(msg.error))
-          if (agent) {
-            agent.isConnected = false
-            agent.isConnecting = false
-          }
-        } else {
-          // connect 握手成功，设置 isConnected = true
-          if (agent) {
-            agent.isConnected = true
-            agent.isConnecting = false
-          }
-          // 打印服务端实际授予的 scopes（hello-ok 响应）
-          const payload = msg.payload || msg.result || {}
-          console.log(`[MultiAgentChat] [${agentId}] 连接握手成功 (hello-ok):`, JSON.stringify(payload, null, 2))
-          const grantedScopes = payload.scopes || payload.grantedScopes || payload.granted_scopes
-          if (grantedScopes) {
-            console.log(`[MultiAgentChat] [${agentId}] 服务端授予的 scopes:`, JSON.stringify(grantedScopes))
-            if (!grantedScopes.includes('operator.write')) {
-              console.error(`[MultiAgentChat] [${agentId}] ⚠️ 缺少 operator.write scope！写入操作将被拒绝。请检查 Gateway token 权限。`)
-            }
-          }
-        }
-      } else if (methodLabel === 'agent') {
-        if (!msg.ok) {
-          console.error(`[MultiAgentChat] [${agentId}] agent 请求失败! error=`, JSON.stringify(msg.error))
-        }
-      } else if (methodLabel === 'chat.send') {
-        if (!msg.ok) {
-          console.error(`[MultiAgentChat] [${agentId}] chat.send 请求失败! error=`, JSON.stringify(msg.error))
-        }
-      }
-
-      // 清理已匹配的 pending
-      if (pending) delete pendingRequests.value[msg.id]
-      return
-    }
-
-    if (msg.type === 'event') {
-      // 使用 agent 名称匹配，而不是严格的 sessionKey 匹配
-      // 因为使用 'agent' 方法发送消息时，Gateway 会创建新的 session
-      const payloadSessionKey = extractSessionKeyFromPayload(msg.payload)
-      const payloadAgentId = extractAgentIdFromPayload(msg.payload)
-
-      // 从 sessionKey 中提取 agent 名称
-      const sessionAgentName = extractAgentNameFromKey(payloadSessionKey || '')
-      const currentAgent = agents.value[agentId]
-      const myAgentName = extractAgentNameFromKey(currentAgent?.config.sessionKey || '')
-      const myGatewayAgentId = normalizeGatewayAgentId(currentAgent?.config.gatewayAgentId || '')
-
-      // 检查是否匹配：通过 agent 名称或 gatewayAgentId
-      // 消息应该只传递给对应的 Agent
-      const isMatch = !payloadSessionKey ||
-                      sessionAgentName === myAgentName ||
-                      sessionAgentName === myGatewayAgentId ||
-                      payloadAgentId === myGatewayAgentId ||
-                      payloadAgentId === agentId
-
-      if (!isMatch) {
-        return
-      }
-
-      handleEvent(agentId, msg.event, msg.payload)
-    }
-  }
-
-  // 从 sessionKey 中提取 agent 名称
-  // 例如: "agent:ceo:main" -> "ceo", "agent:researcher:main" -> "researcher"
-  function extractAgentNameFromKey(key: string): string {
-    if (!key) return ''
-    const parts = key.split(':')
-    // 格式可能是 "agent:ceo:main" 或 "ceo:main" 或直接 "ceo"
-    if (parts.length >= 2 && parts[0] === 'agent') {
-      return parts[1].toLowerCase()
-    }
-    if (parts.length >= 1) {
-      return parts[0].toLowerCase().replace(/main$/, '').replace(/_main$/, '')
-    }
-    return key.toLowerCase()
-  }
-
-  // 从 payload 中提取 sessionKey
-  function extractSessionKeyFromPayload(payload: any): string | null {
-    if (!payload) return null
-    // 检查多个可能的位置
-    if (payload.data?.sessionKey) return payload.data.sessionKey
-    if (payload.sessionKey) return payload.sessionKey
-    if (payload.context?.sessionKey) return payload.context.sessionKey
-    if (payload.runData?.sessionKey) return payload.runData.sessionKey
-    return null
-  }
-
-  // 从 payload 中提取 agentId
-  function extractAgentIdFromPayload(payload: any): string | null {
-    if (!payload) return null
-    // 检查多个可能的位置
-    if (payload.agentId) return payload.agentId
-    if (payload.data?.agentId) return payload.data.agentId
-    if (payload.agent?.id) return payload.agent.id
-    if (payload.context?.agentId) return payload.context.agentId
-    return null
-  }
-
-  function handleEvent(agentId: string, event: string, payload: any) {
-    console.log(`[MultiAgentChat] [${agentId}] 处理事件:`, event, { stream: payload?.stream, state: payload?.state, runId: payload?.runId })
-
-    // 通知事件监听器
-    eventListeners.value.forEach(listener => {
-      try {
-        listener(agentId, event, payload)
-      } catch (e) {
-        console.error('[Event] Listener error:', e)
-      }
-    })
-
-    if (event === 'connect.challenge') {
-      console.log(`[MultiAgentChat] [${agentId}] 收到 connect.challenge，已忽略；Gateway token 认证由 connect 请求完成`)
-      return
-    }
-
-    // Agent 事件
-    if (event === 'agent') {
-      handleAgentEvent(agentId, payload)
-      return
-    }
-
-    // Chat 事件
-    if (event === 'chat') {
-      handleChatEvent(agentId, payload)
-      return
-    }
-
-    // Presence 事件 - 移除，避免频繁添加系统消息
-    if (event === 'presence') {
-      // 不添加系统消息，避免刷屏
-      return
-    }
-
-    // Health 事件
-    if (event === 'health') {
-      return
-    }
-
-    // Tick 事件
-    if (event === 'tick') {
-      return
-    }
-
-    // 未知事件
-    console.warn(`[MultiAgentChat] [${agentId}] 未处理的事件类型:`, event, JSON.stringify(payload).slice(0, 300))
-  }
-
-  function handleAgentEvent(agentId: string, payload: any) {
-    const agent = agents.value[agentId]
-    if (!agent) return
-
-    const stream = payload?.stream
-    const runId = payload?.runId
-
-    if (stream === 'assistant') {
-      const text = extractText(payload)
-      if (text) {
-        agent.isTyping = false
-        agent.typingStartTime = null
-        console.log(`[MultiAgentChat] [${agentId}] [assistant] 收到回复 (runId: ${runId}):`, text.slice(0, 80))
-        updateOrCreateMessage(agentId, 'assistant', text, runId)
-      }
-    } else if (stream === 'lifecycle') {
-      const state = payload?.data?.state || payload?.phase
-      console.log(`[MultiAgentChat] [${agentId}] [lifecycle] 状态:`, state)
-      if (state === 'start') {
-        // 开始处理，清空旧消息
-        console.log(`[MultiAgentChat] [${agentId}] [lifecycle] 清空旧消息`)
-        agent.isTyping = true
-        agent.typingStartTime = Date.now()
-        agent.messages = []
-        saveMessages(agentId)
-      } else if (state === 'error' || payload?.phase === 'error') {
-        const error = payload?.data?.error || payload?.error || '未知错误'
-        agent.isTyping = false
-        agent.typingStartTime = null
-        console.error(`[MultiAgentChat] [${agentId}] [lifecycle] 错误:`, error)
-        addSystemMessage(agentId, `AI 错误：${error}`)
-      } else if (state === 'done' || state === 'final') {
-        agent.isTyping = false
-        agent.typingStartTime = null
-        console.log(`[MultiAgentChat] [${agentId}] [lifecycle] 处理完成`)
-      }
-    } else if (stream === 'tool') {
-      // 工具事件处理
-      const data = payload?.data || {}
-      const phase = data.phase || data.type
-      console.log(`[MultiAgentChat] [${agentId}] [tool] 阶段:`, phase, '名称:', data.name || '')
-    } else if (stream === 'compaction') {
-      console.log(`[MultiAgentChat] [${agentId}] [compaction] 阶段:`, payload?.phase)
-    } else if (stream === 'fallback') {
-      console.log(`[MultiAgentChat] [${agentId}] [fallback] 阶段:`, payload?.phase)
-    } else {
-      console.warn(`[MultiAgentChat] [${agentId}] [agent] 未处理的 stream:`, stream)
-    }
-  }
-
-  function handleChatEvent(agentId: string, payload: any) {
-    const agent = agents.value[agentId]
-    if (!agent) return
-
-    const state = payload?.state
-    const runId = payload?.runId
-
-    if (state === 'start') {
-      console.log(`[MultiAgentChat] [${agentId}] [chat] 开始处理 (runId: ${runId})，清空旧消息`)
-      // 开始处理，清空旧消息
-      agent.isTyping = true
-      agent.typingStartTime = Date.now()
-      agent.messages = []
-      saveMessages(agentId)
-    } else if (state === 'delta' || state === 'final' || state === 'committed') {
-      const text = extractChatText(payload)
-      if (text) {
-        if (state === 'final' || state === 'committed') {
-          agent.isTyping = false
-          agent.typingStartTime = null
-        }
-        console.log(`[MultiAgentChat] [${agentId}] [chat] 收到回复 (${state}, runId: ${runId}):`, text.slice(0, 80))
-        updateOrCreateMessage(agentId, 'assistant', text, runId)
-      }
-    } else if (state === 'error') {
-      agent.isTyping = false
-      agent.typingStartTime = null
-      console.error(`[MultiAgentChat] [${agentId}] [chat] 错误:`, payload?.errorMessage || '未知错误')
-      addSystemMessage(agentId, `错误：${payload?.errorMessage || '未知错误'}`)
-    } else {
-      console.warn(`[MultiAgentChat] [${agentId}] [chat] 未处理的 state:`, state)
-    }
-  }
-
-  // Actions
   function loadMessages() {
-    agentConfigs.forEach(config => {
+    agentConfigs.forEach((config) => {
       const saved = localStorage.getItem(`chat_messages_${config.id}`)
-      if (saved) {
-        try {
-          agents.value[config.id].messages = JSON.parse(saved)
-        } catch (e) {
-          console.error(`Failed to load messages for ${config.id}:`, e)
-        }
+      if (!saved || !agents.value[config.id]) return
+      try {
+        agents.value[config.id].messages = JSON.parse(saved)
+      } catch (err) {
+        console.error(`Failed to load messages for ${config.id}:`, err)
       }
     })
   }
@@ -431,221 +79,42 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
       const agent = agents.value[agentId]
       if (!agent) return
       localStorage.setItem(`chat_messages_${agentId}`, JSON.stringify(agent.messages))
-    }, 2000)
+    }, 500)
   }
 
   function connect(agentId: string) {
     const agent = agents.value[agentId]
     if (!agent) return
-
-    console.log(`[MultiAgentChat] [${agentId}] 开始连接...`, {
-      wsUrl: settings.value.wsUrl,
-      hasToken: !!settings.value.token,
-      alreadyConnected: agent.isConnected,
-      isConnecting: agent.isConnecting
-    })
-
-    // 如果已经连接或正在连接，不重复连接
-    if (agent.isConnected || agent.isConnecting) {
-      console.log(`[MultiAgentChat] [${agentId}] 跳过连接 - 已连接=${agent.isConnected}, 连接中=${agent.isConnecting}`)
-      return
-    }
-
-    // 清除已有重连定时器
-    if (reconnectTimers.value[agentId]) {
-      clearTimeout(reconnectTimers.value[agentId])
-      delete reconnectTimers.value[agentId]
-    }
-
-    // 关闭旧连接
-    if (agent.ws) {
-      console.log(`[MultiAgentChat] [${agentId}] 关闭旧连接`)
-      agent.ws.onopen = null
-      agent.ws.onclose = null
-      agent.ws.onerror = null
-      agent.ws.onmessage = null
-      agent.ws.close()
-      agent.ws = null
-    }
-
-    agent.isConnecting = true
-    agent.isConnected = false
-
-    // 构建 WebSocket URL，只使用 token 参数
-    const wsUrl = resolveSocketUrl()
-
-    console.log(`[MultiAgentChat] [${agentId}] 正在连接: ${wsUrl.replace(/\?.*/, '?token=***')}`)
-
-    try {
-      const ws = new WebSocket(wsUrl)
-      agent.ws = ws
-
-      ws.onopen = () => {
-        console.log(`[MultiAgentChat] [${agentId}] WebSocket 已打开，等待 connect 握手响应`)
-        // 注意：isConnected 在收到 connect 响应 (hello-ok) 后才设置为 true
-        agent.isConnecting = false
-        sendConnectRequest(agentId)
-      }
-
-      ws.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data)
-          console.log(`[MultiAgentChat] [${agentId}] 收到消息:`, msg.type, msg.event || '', msg.method || '')
-          handleAgentMessage(agentId, msg)
-        } catch (e) {
-          console.error(`[MultiAgentChat] [${agentId}] 解析消息失败:`, e)
-        }
-      }
-
-      ws.onclose = (event) => {
-        console.warn(`[MultiAgentChat] [${agentId}] 连接关闭:`, {
-          code: event.code,
-          reason: event.reason,
-          wasClean: event.wasClean
-        })
-        agent.isConnected = false
-        agent.isConnecting = false
-        agent.ws = null
-
-        // 非用户主动断开时自动重连
-        if (event.code !== 1000) {
-          scheduleReconnect(agentId)
-        }
-      }
-
-      ws.onerror = (error) => {
-        console.error(`[MultiAgentChat] [${agentId}] WebSocket 错误:`, error)
-        agent.isConnecting = false
-        agent.isConnected = false
-      }
-    } catch (e) {
-      console.error(`[MultiAgentChat] [${agentId}] 创建连接失败:`, e)
-      agent.isConnecting = false
-      agent.isConnected = false
-    }
-  }
-
-  // 重连策略：指数退避，800ms -> 1360ms -> 2312ms -> ... -> 最大 30s
-  const reconnectBackoffMs = ref<Record<string, number>>({})
-
-  function scheduleReconnect(agentId: string) {
-    const agent = agents.value[agentId]
-    if (!agent || agent.isConnected || agent.isConnecting) return
-
-    if (!reconnectBackoffMs.value[agentId]) {
-      reconnectBackoffMs.value[agentId] = 800
-    }
-
-    const delay = reconnectBackoffMs.value[agentId]
-    reconnectBackoffMs.value[agentId] = Math.min(delay * 1.7, 30000)
-
-    console.log(`[MultiAgentChat] [${agentId}] ${delay}ms 后自动重连...`)
-    reconnectTimers.value[agentId] = setTimeout(() => {
-      connect(agentId)
-    }, delay)
+    agent.isConnected = true
+    agent.isConnecting = false
   }
 
   function disconnect(agentId: string) {
     const agent = agents.value[agentId]
-    if (!agent || !agent.ws) return
-
-    agent.ws.close(1000, 'User disconnected')
-    agent.ws = null
-    agent.isConnected = false
+    if (!agent) return
+    agent.isConnected = true
+    agent.isConnecting = false
   }
 
   function connectAll() {
-    console.log(`[MultiAgentChat] 全连 - 共 ${agentConfigs.length} 个 Agent`)
-    agentConfigs.forEach(config => {
-      connect(config.id)
-    })
+    agentConfigs.forEach((config) => connect(config.id))
   }
 
   function disconnectAll() {
-    agentConfigs.forEach(config => {
-      // 清除重连定时器
-      if (reconnectTimers.value[config.id]) {
-        clearTimeout(reconnectTimers.value[config.id])
-        delete reconnectTimers.value[config.id]
-      }
-      delete reconnectBackoffMs.value[config.id]
-      disconnect(config.id)
-    })
-  }
-
-  function sendConnectRequest(agentId: string) {
-    const agent = agents.value[agentId]
-    if (!agent || !agent.ws) return
-
-    // Gateway 协议版本（与服务端保持一致）
-    const PROTOCOL_VERSION = 3
-
-    const msg = buildConnectRequest({
-      token: settings.value.token,
-      client: {
-        id: 'openclaw-control-ui',
-        displayName: agent.config.displayName,
-      },
-      minProtocol: PROTOCOL_VERSION,
-      maxProtocol: PROTOCOL_VERSION,
-    })
-    console.log(`[MultiAgentChat] [${agentId}] 发送连接请求 (protocol v${PROTOCOL_VERSION}):`, JSON.stringify(msg.params.client, null, 2))
-    pendingRequests.value[msg.id] = { method: 'connect', agentId }
-    agent.ws.send(JSON.stringify(msg))
+    agentConfigs.forEach((config) => disconnect(config.id))
   }
 
   function sendMessage(agentId: string, text: string) {
     const agent = agents.value[agentId]
-    if (!agent) {
-      console.error(`[MultiAgentChat] [${agentId}] sendMessage - Agent 不存在`)
-      return
-    }
-
-    if (!text.trim()) return
-
-    if (!agent.ws || !agent.isConnected) {
-      console.error(`[MultiAgentChat] [${agentId}] sendMessage - 未连接 (ws=${!!agent.ws}, connected=${agent.isConnected})`)
-      throw new Error(`${agent.config.displayName} 未连接，请先点击全连按钮`)
-    }
-
-    // 检查 WebSocket 就绪状态
-    if (agent.ws.readyState !== WebSocket.OPEN) {
-      const stateMap: Record<number, string> = { 0: 'CONNECTING', 1: 'OPEN', 2: 'CLOSING', 3: 'CLOSED' }
-      console.error(`[MultiAgentChat] [${agentId}] sendMessage - WebSocket 状态不是 OPEN: ${stateMap[agent.ws.readyState] || agent.ws.readyState}`)
-      throw new Error(`${agent.config.displayName} 连接未就绪，请重试`)
-    }
-
-    const userMessage: ChatMessage = {
-      id: `msg-${Date.now()}`,
+    if (!agent || !text.trim()) return
+    agent.messages.push({
+      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       role: 'user',
       content: text.trim(),
       timestamp: Date.now(),
-      agentId
-    }
-    agent.messages.push(userMessage)
-    agent.isTyping = true
-    agent.typingStartTime = Date.now()
+      agentId,
+    })
     saveMessages(agentId)
-
-    // 使用 Gateway 文档约定的 chat.send + sessionKey，避免新版 Gateway 拒绝短 agentId。
-    const msg = {
-      type: 'req',
-      id: `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      method: 'chat.send',
-      params: {
-        sessionKey: agent.config.sessionKey,
-        message: text.trim(),
-        idempotencyKey: `ik-${Date.now()}`,
-      },
-    }
-    console.log(`[MultiAgentChat] [${agentId}] 发送消息:`, JSON.stringify(msg.params, null, 2))
-    pendingRequests.value[msg.id] = { method: 'chat.send', agentId }
-    agent.ws.send(JSON.stringify(msg))
-  }
-
-  function normalizeGatewayAgentId(value: string): string {
-    if (!value) return ''
-    return value.includes(':') ? extractAgentNameFromKey(value) : value.toLowerCase()
   }
 
   function clearMessages(agentId: string) {
@@ -659,43 +128,30 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
 
   function resetChat(agentId: string) {
     clearMessages(agentId)
-    const agent = agents.value[agentId]
-    if (agent && agent.ws) {
-      const msg = {
-        type: 'req',
-        id: `req-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        method: 'chat.send',
-        params: {
-          sessionKey: agent.config.sessionKey,
-          message: '/new',
-          idempotencyKey: `ik-${Date.now()}`,
-        },
-      }
-      pendingRequests.value[msg.id] = { method: 'chat.send', agentId }
-      agent.ws.send(JSON.stringify(msg))
-    }
   }
 
   function selectAgent(agentId: string) {
     selectedAgentId.value = agentId
   }
 
-  function updateSettings(newSettings: Partial<ConnectionSettings>) {
-    settings.value = { ...settings.value, ...newSettings }
+  function addEventListener(listener: EventListener) {
+    eventListeners.value.push(listener)
+  }
+
+  function removeEventListener(listener: EventListener) {
+    const index = eventListeners.value.indexOf(listener)
+    if (index >= 0) eventListeners.value.splice(index, 1)
   }
 
   return {
-    // State
     agents,
     selectedAgentId,
-    settings,
+    settings: ref({ autoConnect: false, wsUrl: '', token: '' }),
     agentConfigs,
-    // Computed
     selectedAgent,
     selectedMessages,
     allConnected,
     anyConnected,
-    // Actions
     loadMessages,
     connect,
     disconnect,
@@ -705,7 +161,7 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
     clearMessages,
     resetChat,
     selectAgent,
-    updateSettings,
+    updateSettings: () => {},
     addEventListener,
     removeEventListener,
   }

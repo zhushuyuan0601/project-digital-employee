@@ -9,7 +9,7 @@ export interface AgentDefinition {
   icon: string
   chatAvatar: string
   description: string
-  gatewayAgentId: string
+  runtimeAgentId: string
   sessionKey: string
 }
 
@@ -19,7 +19,7 @@ export interface MultiAgentStoreConfig {
   displayName: string
   role: string
   avatar: string
-  gatewayAgentId: string
+  runtimeAgentId: string
 }
 
 export const AGENT_DEFINITIONS: AgentDefinition[] = [
@@ -31,8 +31,8 @@ export const AGENT_DEFINITIONS: AgentDefinition[] = [
     icon: '/avatars/avatar-xiaomu.jpeg',
     chatAvatar: '◈',
     description: '项目统筹 - 任务调度、分配、汇报',
-    gatewayAgentId: 'ceo',
-    sessionKey: 'agent:ceo:main',
+    runtimeAgentId: 'ceo',
+    sessionKey: 'claude:xiaomu:main',
   },
   {
     id: 'xiaokai',
@@ -42,8 +42,8 @@ export const AGENT_DEFINITIONS: AgentDefinition[] = [
     icon: '/avatars/avatar-xiaokai.jpeg',
     chatAvatar: '💻',
     description: '技术开发 - 技术规划&研发管理',
-    gatewayAgentId: 'tech-lead',
-    sessionKey: 'agent:tech-lead:main',
+    runtimeAgentId: 'tech-lead',
+    sessionKey: 'claude:xiaokai:main',
   },
   {
     id: 'xiaochan',
@@ -53,8 +53,8 @@ export const AGENT_DEFINITIONS: AgentDefinition[] = [
     icon: '/avatars/avatar-xiaochan.jpeg',
     chatAvatar: '📝',
     description: '产品设计 - 产品需求分析',
-    gatewayAgentId: 'pm',
-    sessionKey: 'agent:pm:main',
+    runtimeAgentId: 'pm',
+    sessionKey: 'claude:xiaochan:main',
   },
   {
     id: 'xiaoyan',
@@ -64,8 +64,8 @@ export const AGENT_DEFINITIONS: AgentDefinition[] = [
     icon: '/avatars/avatar-xiaoyan.jpeg',
     chatAvatar: '🔍',
     description: '调研分析 - 市场调研',
-    gatewayAgentId: 'researcher',
-    sessionKey: 'agent:researcher:main',
+    runtimeAgentId: 'researcher',
+    sessionKey: 'claude:xiaoyan:main',
   },
   {
     id: 'xiaoce',
@@ -75,8 +75,8 @@ export const AGENT_DEFINITIONS: AgentDefinition[] = [
     icon: '/avatars/avatar-xiaoce.jpeg',
     chatAvatar: '🛡️',
     description: '质量检查 - 测试验证&质量保障',
-    gatewayAgentId: 'team-qa',
-    sessionKey: 'agent:team-qa:main',
+    runtimeAgentId: 'team-qa',
+    sessionKey: 'claude:xiaoce:main',
   },
 ]
 
@@ -84,8 +84,8 @@ export const AGENT_DEFINITION_MAP = Object.fromEntries(
   AGENT_DEFINITIONS.map((agent) => [agent.id, agent])
 ) as Record<AgentId, AgentDefinition>
 
-export const AGENT_TO_GATEWAY_MAP = Object.fromEntries(
-  AGENT_DEFINITIONS.map((agent) => [agent.id, agent.gatewayAgentId])
+export const AGENT_TO_RUNTIME_MAP = Object.fromEntries(
+  AGENT_DEFINITIONS.map((agent) => [agent.id, agent.runtimeAgentId])
 ) as Record<AgentId, string>
 
 export const DEFAULT_AGENT_IDS = AGENT_DEFINITIONS.map((agent) => agent.id)
@@ -105,6 +105,6 @@ export function getMultiAgentStoreConfigs(agentIds: AgentId[] = DEFAULT_AGENT_ID
       displayName: agent.name,
       role: agent.roleLabel,
       avatar: agent.chatAvatar,
-      gatewayAgentId: agent.gatewayAgentId,
+      runtimeAgentId: agent.runtimeAgentId,
     }))
 }

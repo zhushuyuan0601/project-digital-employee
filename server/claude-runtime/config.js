@@ -1,42 +1,25 @@
-import { join, resolve } from 'path'
-import { fileURLToPath } from 'url'
-import { dirname } from 'path'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-const PROJECT_ROOT = resolve(__dirname, '../..')
-
-function boolValue(value, fallback = false) {
-  if (value == null || value === '') return fallback
-  return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase())
-}
-
-function listValue(value, fallback = []) {
-  if (!value) return fallback
-  return String(value)
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-}
-
-function intValue(value, fallback) {
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed)) return fallback
-  return Math.floor(parsed)
-}
+import { resolve } from 'path'
+import {
+  DEFAULT_CLAUDE_RUNTIME_CONFIG,
+  envBoolean,
+  envInteger,
+  envList,
+  envString,
+  resolveProjectPath,
+} from '../config/defaults.js'
 
 export function getClaudeRuntimeConfig() {
-  const maxConcurrency = Math.max(1, Number(process.env.CLAUDE_AGENT_MAX_CONCURRENCY || 3))
-  const maxTurns = Math.max(1, intValue(process.env.CLAUDE_AGENT_MAX_TURNS, 256))
-  const reportOnly = boolValue(process.env.CLAUDE_REPORT_ONLY, true)
-  const cwd = resolve(process.env.CLAUDE_RUNTIME_CWD || PROJECT_ROOT)
-  const allowedTools = listValue(process.env.CLAUDE_ALLOWED_TOOLS, ['Read', 'Glob', 'Grep'])
-  const outputRoot = resolve(process.env.CLAUDE_OUTPUT_ROOT || join(PROJECT_ROOT, 'server/data/task-outputs'))
-  const workspaceIsolation = boolValue(process.env.CLAUDE_WORKSPACE_ISOLATION, true)
-  const workspaceRoot = resolve(process.env.CLAUDE_WORKSPACE_ROOT || join(PROJECT_ROOT, 'server/data/runtime-workspaces'))
+  const maxConcurrency = Math.max(1, envInteger('CLAUDE_AGENT_MAX_CONCURRENCY', DEFAULT_CLAUDE_RUNTIME_CONFIG.maxConcurrency))
+  const maxTurns = Math.max(1, envInteger('CLAUDE_AGENT_MAX_TURNS', DEFAULT_CLAUDE_RUNTIME_CONFIG.maxTurns))
+  const reportOnly = envBoolean('CLAUDE_REPORT_ONLY', DEFAULT_CLAUDE_RUNTIME_CONFIG.reportOnly)
+  const cwd = resolve(envString('CLAUDE_RUNTIME_CWD', DEFAULT_CLAUDE_RUNTIME_CONFIG.cwd))
+  const allowedTools = envList('CLAUDE_ALLOWED_TOOLS', DEFAULT_CLAUDE_RUNTIME_CONFIG.allowedTools)
+  const outputRoot = resolveProjectPath(envString('CLAUDE_OUTPUT_ROOT', DEFAULT_CLAUDE_RUNTIME_CONFIG.outputRoot))
+  const workspaceIsolation = envBoolean('CLAUDE_WORKSPACE_ISOLATION', DEFAULT_CLAUDE_RUNTIME_CONFIG.workspaceIsolation)
+  const workspaceRoot = resolveProjectPath(envString('CLAUDE_WORKSPACE_ROOT', DEFAULT_CLAUDE_RUNTIME_CONFIG.workspaceRoot))
 
   return {
-    runtime: process.env.AGENT_RUNTIME || 'claude-code',
+    runtime: envString('AGENT_RUNTIME', DEFAULT_CLAUDE_RUNTIME_CONFIG.runtime),
     maxConcurrency,
     maxTurns,
     reportOnly,
@@ -45,7 +28,7 @@ export function getClaudeRuntimeConfig() {
     workspaceRoot,
     allowedTools,
     outputRoot,
-    model: process.env.CLAUDE_AGENT_MODEL || '',
-    mock: boolValue(process.env.CLAUDE_RUNTIME_MOCK, false),
+    model: envString('CLAUDE_AGENT_MODEL', DEFAULT_CLAUDE_RUNTIME_CONFIG.model),
+    mock: envBoolean('CLAUDE_RUNTIME_MOCK', DEFAULT_CLAUDE_RUNTIME_CONFIG.mock),
   }
 }

@@ -384,7 +384,7 @@ export function createSubtasksFromPlan(taskId, plan, agentMap) {
         subtask.description,
         subtask.expectedOutput || '',
         subtask.assignedAgentId,
-        agent.gatewayAgentId,
+        agent.runtimeAgentId,
         agent.sessionKey,
         JSON.stringify({
           expectedOutput: subtask.expectedOutput || '',

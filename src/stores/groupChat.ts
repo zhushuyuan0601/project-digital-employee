@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { DEFAULT_AGENT_IDS } from '@/config/agents'
-import { getDefaultGatewayConnectionSettings } from '@/config/gateway'
 
 // 群聊消息
 export interface GroupChatMessage {
@@ -38,9 +37,6 @@ export const useGroupChatStore = defineStore('groupChat', () => {
 
   // Agent 连接状态（从外部注入）
   const agentConnections = ref<Record<string, { isConnected: boolean; avatar: string; displayName: string }>>({})
-
-  // 设置
-  const settings = ref(getDefaultGatewayConnectionSettings())
 
   // 计算属性：获取所有参与的 Agent
   const participatingAgents = computed(() => {
@@ -224,7 +220,6 @@ export const useGroupChatStore = defineStore('groupChat', () => {
     // State
     groupConfig,
     messages,
-    settings,
     // Getters
     participatingAgents,
     // Actions

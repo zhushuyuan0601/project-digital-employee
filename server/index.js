@@ -1,7 +1,7 @@
 /**
  * 文件扫描 API 服务
  * 用于扫描指定目录并返回文件列表
- * 同时作为 Gateway API 的代理层
+ * 提供本地文件、任务、成果和 Claude Runtime API。
  */
 
 import express from 'express'
@@ -9,33 +9,28 @@ import cors from 'cors'
 import { promises as fs, existsSync, readdirSync, statSync, readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join, resolve } from 'path'
-import http from 'http'
 import skillsRouter from './routes/skills.js'
-import agentChatRouter, { initAgentChatRoutes } from './routes/agent-chat.js'
 import taskRouter from './routes/tasks.js'
 import analysisRouter from './routes/analysis.js'
 import groupChatRouter from './routes/group-chat.js'
 import { createAutomationRouter } from './routes/automation.js'
 import { createOpsRouter } from './routes/ops.js'
 import { initializeSchema } from './db/index.js'
-import { initializeAgentChatSchema } from './db/agent-chat.js'
 import { initializeTaskSchema } from './db/tasks.js'
+import { listTaskEvents, listTaskOutputs, listTasks } from './db/tasks.js'
 import { initializeAnalysisSchema } from './db/analysis.js'
 import { cleanupOrphanAgentRunsOnStartup } from './claude-runtime/index.js'
-import Database from 'better-sqlite3'
+import { getClaudeRuntimeConfig } from './claude-runtime/config.js'
+import { DEFAULT_SERVER_CONFIG, ensureDir, envString } from './config/defaults.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 const app = express()
-const PORT = process.env.PORT || 18888
-
-// Gateway 服务地址
-const GATEWAY_HOST = process.env.GATEWAY_HOST || '127.0.0.1'
-const GATEWAY_PORT = process.env.GATEWAY_PORT || 18789
+const PORT = envString('PORT', String(DEFAULT_SERVER_CONFIG.port))
 
 // 中间件
-const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:5173'
+const CORS_ORIGIN = envString('CORS_ORIGIN', DEFAULT_SERVER_CONFIG.corsOrigin)
 app.use(cors({ origin: CORS_ORIGIN.split(',').map(s => s.trim()) }))
 app.use(express.json())
 
@@ -52,37 +47,6 @@ app.use('/api', requireAuth)
 // 用户主目录
 const HOME_DIR = process.env.HOME || process.env.USERPROFILE || ''
 
-// 初始化 SQLite 数据库连接（用于 ClaudeCode 会话）
-// 使用 mission-control 的数据库，里面包含 claude_sessions 表
-let claudeDb = null
-const CLAUDE_DB_PATHS = [
-  // 优先使用环境变量指定的路径
-  process.env.MISSION_CONTROL_DB_PATH,
-  // 正确的 mission-control 数据库路径
-  join(HOME_DIR, '.openclaw/shared-workspace/projects/mission-control/.data/mission-control.db'),
-  // 旧的路径（可能已废弃）
-  join(HOME_DIR, '.openclaw/shared-workspace/projects/multi-agent-management/app/.data/mission-control.db'),
-  // 备用路径
-  join(HOME_DIR, '.openclaw/workspace-projects/mission-control/.data/mission-control.db'),
-  // 其他可能的路径
-  join(HOME_DIR, '.openclaw/shared-workspace/projects/project-digital-employee/kanban-full-managed/mission-control.db')
-]
-
-for (const dbPath of CLAUDE_DB_PATHS) {
-  if (!dbPath) continue
-  try {
-    claudeDb = new Database(dbPath, { readonly: true, fileMustExist: true })
-    console.log('[DB] Claude sessions database connected:', dbPath)
-    break
-  } catch (err) {
-    console.log('[DB] Claude sessions database not available at:', dbPath)
-  }
-}
-
-if (!claudeDb) {
-  console.log('[DB] No Claude sessions database found, ClaudeCode panel will not show sessions')
-}
-
 /**
  * 解析路径，支持 ~ 开头的路径
  */
@@ -98,11 +62,15 @@ function resolvePath(path) {
 }
 
 // 文件访问路径白名单
-const FILE_ROOTS = (process.env.FILE_ROOTS || '')
+const FILE_ROOTS = envString('FILE_ROOTS', DEFAULT_SERVER_CONFIG.fileRoots)
   .split(',')
   .map(p => p.trim())
   .filter(Boolean)
   .map(p => resolvePath(p))
+
+const bootRuntimeConfig = getClaudeRuntimeConfig()
+ensureDir(bootRuntimeConfig.workspaceRoot)
+ensureDir(bootRuntimeConfig.outputRoot)
 
 function isPathAllowed(resolvedPath) {
   if (FILE_ROOTS.length === 0) return true
@@ -272,56 +240,6 @@ app.get('/health', (req, res) => {
 })
 
 /**
- * 代理请求到 Gateway 服务
- */
-function proxyToGateway(path, method = 'GET', body = null) {
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: GATEWAY_HOST,
-      port: parseInt(GATEWAY_PORT),
-      path: path,
-      method: method,
-      headers: {
-        'Content-Type': 'application/json',
-      }
-    }
-
-    const req = http.request(options, (res) => {
-      let data = ''
-      res.on('data', (chunk) => { data += chunk })
-      res.on('end', () => {
-        try {
-          resolve(JSON.parse(data))
-        } catch (e) {
-          resolve({ raw: data })
-        }
-      })
-    })
-
-    req.on('error', (e) => {
-      reject(e)
-    })
-
-    if (body) {
-      req.write(JSON.stringify(body))
-    }
-    req.end()
-  })
-}
-
-/**
- * 检查 Gateway 服务是否可用
- */
-async function isGatewayAvailable() {
-  try {
-    await proxyToGateway('/health')
-    return true
-  } catch (e) {
-    return false
-  }
-}
-
-/**
  * 扫描目录 API
  * GET /api/files/scan?path=xxx&startTime=xxx&endTime=xxx
  */
@@ -453,8 +371,8 @@ app.get('/api/files/role', async (req, res) => {
       })
     }
 
-    // 构建角色目录路径
-    const basePath = `~/.openclaw/shared-workspace/daily-intel/roles/${roleId}/${date || new Date().toISOString().split('T')[0]}`
+    // Claude Runtime 报告由后端统一写入成果目录，这里从成果根目录读取。
+    const basePath = getClaudeRuntimeConfig().outputRoot
 
     console.log(`[API] Role files request: roleId=${roleId}, date=${date}, basePath=${basePath}`)
 
@@ -463,21 +381,7 @@ app.get('/api/files/role', async (req, res) => {
       endTime ? parseInt(endTime) : null
     )
 
-    // 对于 tech-lead 角色，尝试查找 git 仓库信息
-    let gitUrl = null
-    if (roleId === 'tech-lead') {
-      // 尝试读取 .git 配置
-      try {
-        const gitConfigPath = join(HOME_DIR, '.openclaw/shared-workspace/.git/config')
-        const gitConfig = await fs.readFile(gitConfigPath, 'utf-8')
-        const remoteMatch = gitConfig.match(/url\s*=\s*(https?:\/\/github\.com\/[^\s]+)/)
-        if (remoteMatch) {
-          gitUrl = remoteMatch[1]
-        }
-      } catch (err) {
-        console.log('[API] No git config found')
-      }
-    }
+    const gitUrl = null
 
     res.json({
       success: true,
@@ -806,7 +710,7 @@ async function parseProjectStatus(filePath) {
  * 扫描所有项目状态
  */
 async function scanProjects() {
-  const projectsBasePath = resolvePath('~/.openclaw/shared-workspace/projects')
+  const projectsBasePath = resolvePath(process.env.PROJECT_STATUS_ROOT || getClaudeRuntimeConfig().outputRoot)
   const projects = []
 
   try {
@@ -890,169 +794,6 @@ function formatAge(timestamp) {
   if (hours > 0) return `${hours}h`
   return `${mins}m`
 }
-
-/**
- * 获取本地 ClaudeCode 会话
- */
-function getLocalClaudeSessions() {
-  if (!claudeDb) return []
-
-  try {
-    const rows = claudeDb.prepare(
-      'SELECT * FROM claude_sessions ORDER BY last_message_at DESC LIMIT 50'
-    ).all()
-
-    return rows.map(s => {
-      const total = (s.input_tokens || 0) + (s.output_tokens || 0)
-      const lastMsg = s.last_message_at ? new Date(s.last_message_at).getTime() : 0
-      const derivedActive = lastMsg > 0 && (Date.now() - lastMsg) < LOCAL_SESSION_ACTIVE_WINDOW_MS
-      const isActive = s.is_active === 1 || derivedActive
-      const effectiveLastActivity = isActive ? Date.now() : lastMsg
-
-      return {
-        id: s.session_id,
-        key: s.project_slug || s.session_id,
-        agent: s.project_slug || 'local',
-        kind: 'claude-code',
-        age: isActive ? 'now' : formatAge(lastMsg),
-        model: s.model || 'unknown',
-        tokens: `${formatTokens(s.input_tokens || 0)}/${formatTokens(s.output_tokens || 0)}`,
-        totalTokens: total,
-        channel: 'local',
-        flags: s.git_branch ? [s.git_branch] : [],
-        active: isActive,
-        startTime: s.first_message_at ? new Date(s.first_message_at).getTime() : 0,
-        lastActivity: effectiveLastActivity,
-        source: 'local',
-        userMessages: s.user_messages || 0,
-        assistantMessages: s.assistant_messages || 0,
-        toolUses: s.tool_uses || 0,
-        estimatedCost: s.estimated_cost || 0,
-        lastUserPrompt: s.last_user_prompt || null,
-        workingDir: s.project_path || null
-      }
-    })
-  } catch (err) {
-    console.error('[API] Failed to read Claude sessions:', err.message)
-    return []
-  }
-}
-
-/**
- * ClaudeCode Sessions API - 获取活跃的 ClaudeCode 会话
- * GET /api/claude-sessions
- */
-app.get('/api/claude-sessions', async (req, res) => {
-  try {
-    console.log('[API] ClaudeCode sessions request')
-
-    const sessions = getLocalClaudeSessions()
-
-    // 只返回活跃的会话
-    const activeSessions = sessions.filter(s => s.active)
-
-    res.json({
-      success: true,
-      sessions: activeSessions,
-      total: activeSessions.length,
-      timestamp: new Date().toISOString()
-    })
-  } catch (err) {
-    console.error('[API] ClaudeCode sessions error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message,
-      sessions: []
-    })
-  }
-})
-
-/**
- * ClaudeCode Transcript API - 获取会话消息记录
- * GET /api/claude-sessions/:id/transcript
- */
-app.get('/api/claude-sessions/:id/transcript', async (req, res) => {
-  try {
-    const sessionId = req.params.id
-    const limit = Math.min(parseInt(req.query.limit) || 50, 200)
-
-    console.log(`[API] ClaudeCode transcript request: sessionId=${sessionId}, limit=${limit}`)
-
-    // 读取 ClaudeCode transcript 文件
-    const messages = readClaudeTranscript(sessionId, limit)
-
-    res.json({
-      success: true,
-      sessionId,
-      messages,
-      total: messages.length
-    })
-  } catch (err) {
-    console.error('[API] ClaudeCode transcript error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message,
-      messages: []
-    })
-  }
-})
-
-/**
- * ClaudeCode Send Message API - 发送消息到会话
- * POST /api/claude-sessions/:id/send
- */
-app.post('/api/claude-sessions/:id/send', async (req, res) => {
-  try {
-    const sessionId = req.params.id
-    const { message } = req.body
-
-    if (!message || typeof message !== 'string') {
-      return res.status(400).json({
-        success: false,
-        error: 'Message is required'
-      })
-    }
-
-    console.log(`[API] ClaudeCode send message: sessionId=${sessionId}, message=${message.slice(0, 50)}...`)
-
-    // 检查会话是否存在
-    if (!claudeDb) {
-      return res.status(503).json({
-        success: false,
-        error: 'Database not available'
-      })
-    }
-
-    const session = claudeDb.prepare(
-      'SELECT * FROM claude_sessions WHERE session_id = ?'
-    ).get(sessionId)
-
-    if (!session) {
-      return res.status(404).json({
-        success: false,
-        error: 'Session not found'
-      })
-    }
-
-    // 通过 Gateway 发送消息
-    // 由于 ClaudeCode 会话是通过 Gateway 管理的，我们需要调用 Gateway API
-    // 这里我们返回一个提示，告诉用户消息已接收，实际发送需要 Gateway 支持
-    const result = await sendMessageToClaudeSession(sessionId, message, session.project_path)
-
-    res.json({
-      success: true,
-      sessionId,
-      message: 'Message sent to ClaudeCode session',
-      result
-    })
-  } catch (err) {
-    console.error('[API] ClaudeCode send message error:', err)
-    res.status(500).json({
-      success: false,
-      error: err.message
-    })
-  }
-})
 
 /**
  * 读取 ClaudeCode transcript
@@ -1211,61 +952,6 @@ function listRecentFiles(root, ext, limit) {
 }
 
 /**
- * 发送消息到 ClaudeCode 会话
- * 通过 Gateway API 发送消息
- */
-async function sendMessageToClaudeSession(sessionId, message, projectPath) {
-  // 尝试通过 Gateway 发送消息
-  const gatewayHost = process.env.GATEWAY_HOST || '127.0.0.1'
-  const gatewayPort = process.env.GATEWAY_PORT || '18789'
-
-  return new Promise((resolve, reject) => {
-    const payload = JSON.stringify({
-      sessionId,
-      message,
-      projectPath
-    })
-
-    const options = {
-      hostname: gatewayHost,
-      port: parseInt(gatewayPort),
-      path: '/api/claude/send',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload)
-      },
-      timeout: 10000
-    }
-
-    const req = http.request(options, (res) => {
-      let data = ''
-      res.on('data', (chunk) => { data += chunk })
-      res.on('end', () => {
-        try {
-          resolve(JSON.parse(data))
-        } catch {
-          resolve({ raw: data, status: res.statusCode })
-        }
-      })
-    })
-
-    req.on('error', (err) => {
-      console.log('[Send] Gateway not available, message stored locally:', err.message)
-      resolve({ status: 'stored_locally', error: err.message })
-    })
-
-    req.on('timeout', () => {
-      req.destroy()
-      resolve({ status: 'timeout', error: 'Request timeout' })
-    })
-
-    req.write(payload)
-    req.end()
-  })
-}
-
-/**
  * Dashboard API - 获取数字员工监控中心数据
  * GET /api/dashboard
  */
@@ -1273,67 +959,61 @@ app.get('/api/dashboard', async (req, res) => {
   try {
     console.log('[API] Dashboard request')
 
-    // 扫描所有项目状态
-    const projects = await scanProjects()
-    const stats = getProjectStats(projects)
-
-    // 角色 ID 映射（与 TaskCenter2 一致）
-    const roleMapping = {
-      xiaomu: 'ceo',
-      xiaokai: 'tech-lead',
-      xiaochan: 'pm',
-      xiaoyan: 'researcher',
-      xiaoce: 'team-qa'
+    const tasks = listTasks({ limit: 200 })
+    const allOutputs = listTaskOutputs()
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+    const todaySeconds = Math.floor(todayStart.getTime() / 1000)
+    const agentNames = {
+      xiaomu: '小呦',
+      xiaokai: '研发工程师',
+      xiaochan: '产品经理',
+      xiaoyan: '研究员',
+      xiaoce: '测试员'
     }
 
-    // 扫描所有角色的产出文件（最近 7 天）
-    const roles = ['xiaomu', 'xiaokai', 'xiaochan', 'xiaoyan', 'xiaoce']
-    const today = new Date().toISOString().split('T')[0]
-    const allOutputs = []
+    const projects = tasks.map((task) => ({
+      id: task.id,
+      name: task.title,
+      description: task.description,
+      status: task.status,
+      progress: task.progress,
+      updatedAt: task.updated_at,
+      createdAt: task.created_at,
+      subtaskCount: task.subtasks?.length || 0,
+      outputCount: task.outputs?.length || 0
+    }))
 
-    // 获取最近 7 天的日期列表
-    const dates = []
-    for (let i = 0; i < 7; i++) {
-      const d = new Date()
-      d.setDate(d.getDate() - i)
-      dates.push(d.toISOString().split('T')[0])
+    const stats = {
+      totalProjects: tasks.length,
+      inProgress: tasks.filter(task => ['planning', 'dispatching', 'running', 'reviewing'].includes(task.status)).length,
+      notStarted: tasks.filter(task => ['draft', 'planning'].includes(task.status)).length,
+      todayCommits: allOutputs.filter(output => Number(output.created_at || output.mtime || 0) >= todaySeconds).length
     }
-    console.log(`[Dashboard] Scanning dates: ${dates.join(', ')}`)
 
-    for (const roleId of roles) {
-      const actualRoleId = roleMapping[roleId]
-      for (const date of dates) {
-        const basePath = `~/.openclaw/shared-workspace/daily-intel/roles/${actualRoleId}/${date}`
-        const files = await scanDirectory(basePath, null, null)
-
-        // 转换为 outputs 格式
-        for (const file of files) {
-          const output = {
-            name: file.name,
-            path: file.path,
-            type: file.type,
-            person: roleId === 'xiaomu' ? '小 U' : roleId === 'xiaokai' ? '小开' : roleId === 'xiaochan' ? '小产' : roleId === 'xiaoyan' ? '小研' : '小测',
-            date: date
-          }
-          allOutputs.push(output)
-        }
-      }
-    }
-    console.log(`[Dashboard] Total outputs: ${allOutputs.length}`)
+    const outputs = allOutputs.map((output) => ({
+      name: output.name,
+      path: output.path,
+      type: output.type,
+      person: agentNames[output.agent_id] || output.agent_id || '未知成员',
+      agentId: output.agent_id,
+      taskId: output.task_id,
+      date: output.created_at ? new Date(output.created_at * 1000).toISOString().split('T')[0] : ''
+    }))
 
     res.json({
       success: true,
-      dataSource: 'workspace',
+      dataSource: 'database',
       stats,
       projects,
       todayWork: [],
-      outputs: allOutputs
+      outputs
     })
   } catch (err) {
     console.error('[API] Dashboard error:', err)
     res.json({
       success: true,
-      dataSource: 'mock',
+      dataSource: 'database',
       stats: { totalProjects: 0, inProgress: 0, notStarted: 0, todayCommits: 0 },
       projects: [],
       todayWork: [],
@@ -1350,87 +1030,44 @@ app.get('/api/dashboard', async (req, res) => {
  */
 app.get('/api/activities', async (req, res) => {
   try {
-    const { type, actor, limit, offset, since, hours } = req.query
+    const { type, actor, limit, since, hours } = req.query
     const requestedLimit = Math.min(parseInt(limit) || 50, 500)
 
     // 计算时间范围
     const sinceTimestamp = since ? parseInt(since) : Math.floor(Date.now() / 1000) - ((parseInt(hours) || 24) * 3600)
 
-    // 从数据库获取活动记录
-    let activities = []
-    if (claudeDb) {
-      // 构建查询
-      let query = 'SELECT * FROM activities WHERE created_at > ?'
-      const params = [sinceTimestamp]
+    const tasks = listTasks({ limit: 100 })
+    let activities = tasks.flatMap((task) =>
+      listTaskEvents(task.id, { limit: 50 })
+        .filter(event => Number(event.created_at || 0) > sinceTimestamp)
+        .map(event => ({
+          id: String(event.id),
+          type: event.type,
+          entityType: 'task',
+          entityId: event.task_id,
+          actor: event.agent_id || 'system',
+          description: event.message,
+          data: event.payload_json || null,
+          createdAt: event.created_at,
+          date: new Date(event.created_at * 1000).toISOString().split('T')[0],
+          time: new Date(event.created_at * 1000).toLocaleTimeString('zh-CN', { hour12: false }),
+          person: formatActorName(event.agent_id || 'system'),
+          task: event.message,
+          status: getActivityStatus(event.type)
+        }))
+    )
 
-      if (type) {
-        query += ' AND type = ?'
-        params.push(type)
-      }
-
-      if (actor) {
-        query += ' AND actor = ?'
-        params.push(actor)
-      }
-
-      query += ' ORDER BY created_at DESC LIMIT ? OFFSET ?'
-      params.push(requestedLimit, parseInt(offset) || 0)
-
-      const dbActivities = claudeDb.prepare(query).all(...params)
-
-      // 转换为前端需要的格式
-      activities = dbActivities.map(a => ({
-        id: a.id,
-        type: a.type,
-        entityType: a.entity_type,
-        entityId: a.entity_id,
-        actor: a.actor,
-        description: a.description,
-        data: a.data ? JSON.parse(a.data) : null,
-        createdAt: a.created_at,
-        date: new Date(a.created_at * 1000).toISOString().split('T')[0],
-        time: new Date(a.created_at * 1000).toLocaleTimeString('zh-CN', { hour12: false }),
-        // 兼容前端格式
-        person: formatActorName(a.actor),
-        task: a.description,
-        status: getActivityStatus(a.type)
-      }))
-    }
-
-    let dataSource = claudeDb && activities.length > 0 ? 'database' : 'mock'
-
-    // 如果数据库数据不足，生成模拟数据补充
-    if (activities.length < requestedLimit) {
-      const mockActivities = generateMockActivities(requestedLimit - activities.length, sinceTimestamp)
-      activities = [...activities, ...mockActivities]
-      dataSource = claudeDb && activities.length > mockActivities.length ? 'mixed' : 'mock'
-    }
+    if (type) activities = activities.filter(item => item.type === type)
+    if (actor) activities = activities.filter(item => item.actor === actor)
 
     // 按时间排序
     activities.sort((a, b) => (b.createdAt || b.created_at) - (a.createdAt || a.created_at))
 
-    // 获取总数
-    let total = activities.length
-    if (claudeDb) {
-      let countQuery = 'SELECT COUNT(*) as total FROM activities WHERE created_at > ?'
-      const countParams = [sinceTimestamp]
-      if (type) {
-        countQuery += ' AND type = ?'
-        countParams.push(type)
-      }
-      if (actor) {
-        countQuery += ' AND actor = ?'
-        countParams.push(actor)
-      }
-      const countResult = claudeDb.prepare(countQuery).get(...countParams)
-      total = Math.max(countResult?.total || 0, activities.length)
-    }
-
     res.json({
       success: true,
-      dataSource,
+      dataSource: 'database',
       activities: activities.slice(0, requestedLimit),
-      total
+      total: activities.length
     })
   } catch (err) {
     console.error('[API] Activities error:', err)
@@ -1524,21 +1161,14 @@ function getActivityStatus(type) {
   return statusMap[type] || '进行中'
 }
 
-// ============ Agent Chat API ============
-// 初始化 Agent Chat 数据库表
-initializeAgentChatSchema()
 initializeTaskSchema()
 initializeAnalysisSchema()
 const runtimeRecovery = cleanupOrphanAgentRunsOnStartup()
 if (runtimeRecovery.cleaned > 0) {
   console.log(`[Claude Runtime] Startup recovery cleaned ${runtimeRecovery.cleaned} orphan queued/running runs`)
 }
-// 初始化默认 Agents
-initAgentChatRoutes()
-
-app.use('/api', createOpsRouter({ proxyToGateway }))
-app.use('/api', createAutomationRouter({ proxyToGateway }))
-app.use('/api', agentChatRouter)
+app.use('/api', createOpsRouter())
+app.use('/api', createAutomationRouter())
 app.use('/api', taskRouter)
 app.use('/api', groupChatRouter)
 app.use('/api/analysis', analysisRouter)
@@ -1576,7 +1206,6 @@ const server = app.listen(PORT, () => {
 ║  - GET /api/webhooks               - Webhook 列表         ║
 ║  - POST /api/webhooks              - 创建 Webhook         ║
 ║  - POST /api/webhooks/:id/test     - 发送测试通知        ║
-║  - GET /api/claude-sessions        - ClaudeCode 会话列表  ║
 ║  - GET /api/activities             - 活动记录（工作流）   ║
 ║                                                         ║
 ╚════════════════════════════════════════════════════════╝
@@ -1586,9 +1215,6 @@ const server = app.listen(PORT, () => {
 function gracefulShutdown(signal) {
   console.log(`[Server] Received ${signal}, shutting down gracefully...`)
   server.close(() => {
-    if (claudeDb) {
-      try { claudeDb.close() } catch {}
-    }
     console.log('[Server] Closed.')
     process.exit(0)
   })

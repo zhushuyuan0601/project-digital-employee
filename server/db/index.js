@@ -4,26 +4,18 @@
  */
 
 import Database from 'better-sqlite3'
-import { dirname, join } from 'path'
-import { fileURLToPath } from 'url'
-import { existsSync, mkdirSync } from 'fs'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
+import { dirname } from 'path'
+import { DEFAULT_SERVER_CONFIG, ensureDir, resolveProjectPath } from '../config/defaults.js'
 
 // 数据库文件路径
-const DB_PATH = process.env.DB_PATH || join(__dirname, '../data/mission-control.db')
+// 当前 Claude Runtime 分支使用独立库，避免切回 OpenClaw 分支时污染旧库。
+const DB_PATH = resolveProjectPath(process.env.DB_PATH) || DEFAULT_SERVER_CONFIG.dbPath
 
 // 数据库实例
 let db = null
 
-/**
- * 确保目录存在
- */
-function ensureDir(dir) {
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true })
-  }
+export function getDatabasePath() {
+  return DB_PATH
 }
 
 /**

@@ -15,7 +15,7 @@ export interface Agent {
   completedTasks: number
   todayTasks?: number
   description: string
-  gatewayAgentId?: string
+  runtimeAgentId?: string
 }
 
 export const AGENT_ROLES: Record<AgentRole, Agent> = Object.fromEntries(
@@ -29,7 +29,7 @@ export const AGENT_ROLES: Record<AgentRole, Agent> = Object.fromEntries(
       status: 'idle',
       completedTasks: 0,
       description: agent.description,
-      gatewayAgentId: agent.gatewayAgentId,
+      runtimeAgentId: agent.runtimeAgentId,
     },
   ])
 ) as Record<AgentRole, Agent>

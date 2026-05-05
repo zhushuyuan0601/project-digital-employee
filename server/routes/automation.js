@@ -1,6 +1,6 @@
 import express from 'express'
 
-export function createAutomationRouter({ proxyToGateway }) {
+export function createAutomationRouter() {
   const router = express.Router()
 
   const cronTasks = [
@@ -83,9 +83,6 @@ export function createAutomationRouter({ proxyToGateway }) {
 
   router.get('/cron/tasks', async (_req, res) => {
     try {
-      const gatewayData = await proxyToGateway('/api/cron/tasks').catch(() => null)
-      if (gatewayData?.success) return res.json(gatewayData)
-
       res.json({
         success: true,
         dataSource: 'mock',
@@ -144,9 +141,6 @@ export function createAutomationRouter({ proxyToGateway }) {
 
   router.get('/webhooks', async (_req, res) => {
     try {
-      const gatewayData = await proxyToGateway('/api/webhooks').catch(() => null)
-      if (gatewayData?.success) return res.json(gatewayData)
-
       res.json({
         success: true,
         dataSource: 'mock',

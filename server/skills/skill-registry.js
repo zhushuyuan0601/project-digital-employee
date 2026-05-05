@@ -1,6 +1,6 @@
 /**
  * 技能注册表客户端
- * 支持 ClawdHub, skills.sh, Awesome OpenClaw
+ * 支持 ClawdHub 和 skills.sh
  *
  * 所有外部请求都在服务器端执行（不直接从浏览器调用注册表）
  * 包含内容验证和安全扫描
@@ -15,8 +15,6 @@ import { checkSkillSecurity } from './security-scan.js'
 // 注册表 API 地址
 const CLAWHUB_API = 'https://clawhub.ai/api'
 const SKILLS_SH_API = 'https://skills.sh/api'
-const AWESOME_OPENCLAW_README = 'https://raw.githubusercontent.com/VoltAgent/awesome-openclaw-skills/main/README.md'
-const AWESOME_OPENCLAW_RAW_BASE = 'https://raw.githubusercontent.com/openclaw/skills/main/skills'
 const FETCH_TIMEOUT = 10000 // 10 秒超时
 
 // Mock 数据 - 当外部 API 不可用时使用
@@ -206,59 +204,6 @@ export async function searchSkillsSh(query = '') {
 }
 
 /**
- * 从 Awesome OpenClaw 解析技能列表
- */
-export async function searchAwesomeOpenClaw(query = '') {
-  try {
-    const response = await fetchWithTimeout(AWESOME_OPENCLAW_README)
-    if (!response.ok) throw new Error(`README 获取失败`)
-
-    const content = await response.text()
-
-    // 解析 README 中的技能列表
-    const skills = []
-    const lines = content.split('\n')
-    let currentSection = null
-
-    for (const line of lines) {
-      // 匹配 ## 分类
-      const sectionMatch = line.match(/^##\s+(.+)$/)
-      if (sectionMatch) {
-        currentSection = sectionMatch[1].trim()
-        continue
-      }
-
-      // 匹配 - [skill-name](url) - description
-      const skillMatch = line.match(/^-\s+\[([^\]]+)\]\(([^)]+)\)\s*-\s*(.+)$/)
-      if (skillMatch && currentSection) {
-        const [, name, url, description] = skillMatch
-        if (!query || name.toLowerCase().includes(query.toLowerCase()) || description.toLowerCase().includes(query.toLowerCase())) {
-          skills.push({
-            slug: name,
-            name: name,
-            description: description.trim(),
-            author: 'Community',
-            version: '1.0.0',
-            source: 'awesome-openclaw',
-            url: url,
-            tags: [currentSection]
-          })
-        }
-      }
-    }
-
-    return {
-      skills,
-      total: skills.length,
-      source: 'awesome-openclaw'
-    }
-  } catch (err) {
-    console.error('[REGISTRY] Awesome OpenClaw 搜索失败:', err.message)
-    return { skills: [], total: 0, source: 'awesome-openclaw', error: err.message }
-  }
-}
-
-/**
  * 从注册表安装技能
  */
 export async function installFromRegistry({ source, slug, targetRoot }) {
@@ -300,17 +245,6 @@ export async function installFromRegistry({ source, slug, targetRoot }) {
         if (mockSkill) {
           content = generateMockSkillContent(mockSkill)
         }
-      }
-    } else if (source === 'awesome-openclaw') {
-      // 从 GitHub 下载
-      const url = `${AWESOME_OPENCLAW_RAW_BASE}/${slug}/SKILL.md`
-      try {
-        const response = await fetchWithTimeout(url)
-        if (response.ok) {
-          content = await response.text()
-        }
-      } catch (e) {
-        console.log('[REGISTRY] GitHub 下载失败')
       }
     } else {
       throw new Error(`未知的注册表来源：${source}`)
@@ -395,15 +329,13 @@ ${(skill.tags || []).map(t => `- ${t}`).join('\n')}
  * 通用搜索接口
  */
 export async function searchRegistries(query = '') {
-  const [clawhub, skillsSh, awesome] = await Promise.all([
+  const [clawhub, skillsSh] = await Promise.all([
     searchClawdHub(query),
-    searchSkillsSh(query),
-    searchAwesomeOpenClaw(query)
+    searchSkillsSh(query)
   ])
 
   return {
     clawhub,
-    'skills-sh': skillsSh,
-    'awesome-openclaw': awesome
+    'skills-sh': skillsSh
   }
 }

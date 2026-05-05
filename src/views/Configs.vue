@@ -3,7 +3,7 @@
     <div class="page-header">
       <div>
         <h1 class="page-title">系统配置</h1>
-        <span class="page-subtitle">Claude Runtime 运行参数和 OpenClaw legacy 配置</span>
+        <span class="page-subtitle">Claude Runtime 运行参数和本机环境配置</span>
       </div>
       <button class="btn btn-primary" :disabled="loading" @click="refreshConfig">
         <i class="ri-refresh-line"></i>
@@ -53,6 +53,14 @@
 
       <div class="runtime-paths">
         <div>
+          <span>配置来源</span>
+          <code>{{ runtimeStatus?.configSource || 'built-in defaults' }}</code>
+        </div>
+        <div>
+          <span>数据库</span>
+          <code>{{ runtimeStatus?.dbPath || '--' }}</code>
+        </div>
+        <div>
           <span>执行目录</span>
           <code>{{ runtimeConfig?.cwd || '--' }}</code>
         </div>
@@ -64,6 +72,24 @@
           <span>报告目录</span>
           <code>{{ runtimeConfig?.outputRoot || '--' }}</code>
         </div>
+      </div>
+
+      <div class="runtime-checks">
+        <span :class="{ ok: runtimeStatus?.sdkAvailable, warn: !runtimeStatus?.sdkAvailable }">
+          SDK {{ runtimeStatus?.sdkAvailable ? '可用' : '不可用' }}
+        </span>
+        <span :class="{ ok: runtimeStatus?.dbWritable, warn: !runtimeStatus?.dbWritable }">
+          DB {{ runtimeStatus?.dbWritable ? '可写' : '不可写' }}
+        </span>
+        <span :class="{ ok: runtimeStatus?.cwdExists, warn: !runtimeStatus?.cwdExists }">
+          CWD {{ runtimeStatus?.cwdExists ? '存在' : '缺失' }}
+        </span>
+        <span :class="{ ok: runtimeStatus?.workspaceRootWritable, warn: !runtimeStatus?.workspaceRootWritable }">
+          工作区 {{ runtimeStatus?.workspaceRootWritable ? '可写' : '不可写' }}
+        </span>
+        <span :class="{ ok: runtimeStatus?.outputRootWritable, warn: !runtimeStatus?.outputRootWritable }">
+          报告目录 {{ runtimeStatus?.outputRootWritable ? '可写' : '不可写' }}
+        </span>
       </div>
 
       <div class="runtime-actions">
@@ -117,6 +143,13 @@ const runtimeStatus = ref<{
   running: number
   queued: number
   maxConcurrency: number
+  dbPath?: string
+  dbWritable?: boolean
+  cwdExists?: boolean
+  outputRootWritable?: boolean
+  workspaceRootWritable?: boolean
+  sdkAvailable?: boolean
+  configSource?: string
 } | null>(null)
 
 const runtimeForm = reactive({
@@ -146,15 +179,6 @@ const configs = ref<ConfigItem[]>([
     icon: 'ri-settings-3-line',
     expanded: true,
     content: '',
-  },
-  {
-    id: 'openclaw-legacy',
-    name: 'OpenClaw Legacy',
-    path: '~/.openclaw/openclaw.json',
-    icon: 'ri-file-copy-line',
-    expanded: false,
-    content: `OpenClaw Gateway 相关配置已作为 legacy fallback 保留。
-当前默认运行时为 Claude Code；任务中心和群聊优先走 Claude Runtime。`,
   },
 ])
 
@@ -362,6 +386,31 @@ onMounted(() => {
   white-space: nowrap;
   color: var(--text-primary);
   font-family: var(--font-mono);
+}
+
+.runtime-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.runtime-checks span {
+  padding: 5px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: 7px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.runtime-checks span.ok {
+  border-color: color-mix(in oklab, var(--color-success) 42%, transparent);
+  color: var(--color-success);
+}
+
+.runtime-checks span.warn {
+  border-color: color-mix(in oklab, var(--color-danger) 42%, transparent);
+  color: var(--color-danger);
 }
 
 .config-tree {

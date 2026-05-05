@@ -138,9 +138,10 @@
               </select>
               <select v-model="sourceFilter" class="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:border-cyan-500 focus:outline-none transition-colors">
                 <option value="">全部来源</option>
-                <option value="workspace">💼 Workspace</option>
                 <option value="user-agents">🔧 User Agents</option>
-                <option value="openclaw">🔌 OpenClaw</option>
+                <option value="user-codex">📚 User Codex</option>
+                <option value="project-agents">⚙️ Project Agents</option>
+                <option value="project-codex">📖 Project Codex</option>
               </select>
             </div>
           </div>
@@ -241,7 +242,7 @@
                 <input
                   v-model="registrySearchQuery"
                   type="text"
-                  placeholder="搜索 ClawdHub、skills.sh 或 Awesome OpenClaw..."
+                  placeholder="搜索 ClawdHub 或 skills.sh..."
                   class="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:border-purple-500 focus:outline-none transition-colors"
                   @keyup.enter="searchRegistry"
                 />
@@ -251,9 +252,8 @@
               <div class="flex items-center space-x-4">
                 <span class="text-gray-400 text-sm whitespace-nowrap">安装到：</span>
                 <select v-model="installTarget" class="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:border-purple-500 focus:outline-none transition-colors">
-                  <option value="workspace">~/.openclaw/workspace/skills</option>
                   <option value="user-agents">~/.agents/skills</option>
-                  <option value="openclaw">~/.openclaw/skills</option>
+                  <option value="user-codex">~/.codex/skills</option>
                 </select>
                 <button @click="searchRegistry" class="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-600 text-white rounded-xl hover:from-purple-600 hover:to-pink-700 transition-all whitespace-nowrap">
                   <i class="fas fa-search mr-2"></i>搜索
@@ -507,9 +507,10 @@
             <label class="block text-sm font-semibold text-gray-400 mb-2">技能来源</label>
             <select v-model="newSkill.source"
                     class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:border-purple-500 focus:outline-none transition-colors">
-              <option value="workspace">💼 Workspace</option>
               <option value="user-agents">🔧 User Agents</option>
-              <option value="openclaw">🔌 OpenClaw</option>
+              <option value="user-codex">📚 User Codex</option>
+              <option value="project-agents">⚙️ Project Agents</option>
+              <option value="project-codex">📖 Project Codex</option>
             </select>
           </div>
 
@@ -572,19 +573,18 @@ const skillContent = ref('')
 const registrySearchQuery = ref('')
 const registrySearching = ref(false)
 const registryResults = reactive<Record<string, { skills: RegistrySkill[], total: number, error?: string }>>({})
-const selectedRegistrySources = ref(['clawhub', 'skills-sh', 'awesome-openclaw'])
-const installTarget = ref('workspace')
+const selectedRegistrySources = ref(['clawhub', 'skills-sh'])
+const installTarget = ref('user-agents')
 const installingSkills = ref(new Set<string>())
 
 const registrySources = [
   { id: 'clawhub', name: 'ClawdHub', icon: 'fas fa-gem' },
-  { id: 'skills-sh', name: 'Skills.sh', icon: 'fas fa-terminal' },
-  { id: 'awesome-openclaw', name: 'Awesome OpenClaw', icon: 'fab fa-github' }
+  { id: 'skills-sh', name: 'Skills.sh', icon: 'fas fa-terminal' }
 ]
 
 const newSkill = ref({
   name: '',
-  source: 'workspace',
+  source: 'user-agents',
   content: ''
 })
 
@@ -680,11 +680,10 @@ async function installFromRegistry(skill: RegistrySkill) {
 function getInstallPath() {
   const home = '~' // 会被后端解析
   const paths: Record<string, string> = {
-    'workspace': `${home}/.openclaw/workspace/skills`,
     'user-agents': `${home}/.agents/skills`,
-    'openclaw': `${home}/.openclaw/skills`
+    'user-codex': `${home}/.codex/skills`
   }
-  return paths[installTarget.value] || paths['workspace']
+  return paths[installTarget.value] || paths['user-agents']
 }
 
 // 查看技能详情
@@ -802,11 +801,10 @@ function getBorderColorClass(skill: Skill) {
 
 function getIconBgClass(source?: string) {
   const classes: Record<string, string> = {
-    'workspace': 'bg-purple-500/20 text-purple-400',
     'user-agents': 'bg-cyan-500/20 text-cyan-400',
-    'openclaw': 'bg-green-500/20 text-green-400',
     'user-codex': 'bg-yellow-500/20 text-yellow-400',
-    'project-agents': 'bg-pink-500/20 text-pink-400'
+    'project-agents': 'bg-pink-500/20 text-pink-400',
+    'project-codex': 'bg-purple-500/20 text-purple-400'
   }
   return classes[source || ''] || 'bg-gray-500/20 text-gray-400'
 }
@@ -860,8 +858,7 @@ function getSecurityTextClass(status: string) {
 function getRegistrySourceIcon(source: string) {
   const icons: Record<string, string> = {
     'clawhub': 'fas fa-gem text-purple-400',
-    'skills-sh': 'fas fa-terminal text-cyan-400',
-    'awesome-openclaw': 'fab fa-github text-gray-400'
+    'skills-sh': 'fas fa-terminal text-cyan-400'
   }
   return icons[source] || 'fas fa-cube text-gray-400'
 }
@@ -869,8 +866,7 @@ function getRegistrySourceIcon(source: string) {
 function getRegistrySourceName(source: string) {
   const names: Record<string, string> = {
     'clawhub': 'ClawdHub',
-    'skills-sh': 'Skills.sh',
-    'awesome-openclaw': 'Awesome OpenClaw'
+    'skills-sh': 'Skills.sh'
   }
   return names[source] || source
 }

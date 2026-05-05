@@ -1,9 +1,9 @@
 export const RUNTIME_AGENT_MAP = {
-  xiaomu: { name: '小呦', gatewayAgentId: 'ceo', sessionKey: 'claude:xiaomu:main', roleId: 'ceo' },
-  xiaoyan: { name: '研究员', gatewayAgentId: 'researcher', sessionKey: 'claude:xiaoyan:main', roleId: 'researcher' },
-  xiaochan: { name: '产品经理', gatewayAgentId: 'pm', sessionKey: 'claude:xiaochan:main', roleId: 'pm' },
-  xiaokai: { name: '研发工程师', gatewayAgentId: 'tech-lead', sessionKey: 'claude:xiaokai:main', roleId: 'tech-lead' },
-  xiaoce: { name: '测试员', gatewayAgentId: 'team-qa', sessionKey: 'claude:xiaoce:main', roleId: 'team-qa' },
+  xiaomu: { name: '小呦', runtimeAgentId: 'ceo', sessionKey: 'claude:xiaomu:main', roleId: 'ceo' },
+  xiaoyan: { name: '研究员', runtimeAgentId: 'researcher', sessionKey: 'claude:xiaoyan:main', roleId: 'researcher' },
+  xiaochan: { name: '产品经理', runtimeAgentId: 'pm', sessionKey: 'claude:xiaochan:main', roleId: 'pm' },
+  xiaokai: { name: '研发工程师', runtimeAgentId: 'tech-lead', sessionKey: 'claude:xiaokai:main', roleId: 'tech-lead' },
+  xiaoce: { name: '测试员', runtimeAgentId: 'team-qa', sessionKey: 'claude:xiaoce:main', roleId: 'team-qa' },
 }
 
 export function extractJsonPlan(input) {

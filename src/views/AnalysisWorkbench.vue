@@ -507,7 +507,7 @@
         <div class="cfg-modal">
           <header class="cfg-modal__header">
             <div>
-              <p class="cfg-modal__eyebrow">Model Gateway</p>
+              <p class="cfg-modal__eyebrow">Model Runtime</p>
               <h2>模型配置管理</h2>
               <span>为数据分析引擎选择 OpenAI 兼容的模型连接。</span>
             </div>

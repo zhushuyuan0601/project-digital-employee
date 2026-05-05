@@ -10,12 +10,13 @@ import {
   patchAnalysisSession,
   upsertAnalysisSession,
 } from '../db/analysis.js'
+import { DEFAULT_SERVER_CONFIG, envBoolean } from '../config/defaults.js'
 
 const router = express.Router()
 const upload = multer({ storage: multer.memoryStorage() })
 
 const ANALYSIS_SERVICE_BASE_URL = (process.env.ANALYSIS_SERVICE_BASE_URL || 'http://127.0.0.1:18900').replace(/\/$/, '')
-const ALLOW_PRIVATE_URLS = process.env.ALLOW_PRIVATE_URLS === 'true'
+const ALLOW_PRIVATE_URLS = envBoolean('ALLOW_PRIVATE_URLS', DEFAULT_SERVER_CONFIG.allowPrivateUrls)
 
 function isPrivateIP(ip) {
   if (ip === '127.0.0.1' || ip === '::1' || ip === 'localhost') return true
