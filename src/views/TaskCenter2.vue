@@ -2209,6 +2209,8 @@ watch(
   min-width: 0;
   overflow: visible;
   background: transparent;
+  container-type: inline-size;
+  container-name: task-command;
 }
 
 .task-command-layout {
@@ -4460,5 +4462,111 @@ watch(
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+}
+
+@container task-command (max-width: 1260px) {
+  .task-command-layout {
+    grid-template-columns: minmax(220px, 270px) minmax(0, 1fr);
+    gap: 14px;
+    padding: 14px;
+  }
+
+  .task-rail {
+    max-height: calc(100vh - 28px);
+  }
+
+  .mission-stage {
+    padding-right: 0;
+  }
+
+  .task-inspector {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .surface {
+    padding: 14px;
+  }
+
+  .mission-hero {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 12px;
+  }
+
+  .mission-hero__metrics {
+    grid-template-columns: repeat(3, 76px);
+  }
+
+  .team-live-grid {
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 10px;
+  }
+
+  .member-card {
+    min-height: 244px;
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .member-card__top {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .member-avatar {
+    width: 32px;
+    height: 32px;
+  }
+
+  .member-live-badge {
+    padding: 0 7px;
+    font-size: 10px;
+  }
+
+  .member-card p,
+  .member-trail p {
+    font-size: 12px;
+    line-height: 1.45;
+    -webkit-line-clamp: 2;
+  }
+
+  .member-card__trail {
+    gap: 6px;
+  }
+
+  .member-trail {
+    padding: 7px 8px;
+  }
+
+  .subtask-grid {
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  }
+}
+
+@container task-command (max-width: 980px) {
+  .task-command-layout {
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+
+  .task-rail,
+  .mission-stage,
+  .task-inspector {
+    overflow: visible;
+  }
+
+  .task-rail {
+    position: static;
+    max-height: none;
+  }
+
+  .task-list {
+    max-height: min(420px, 56vh);
+  }
+
+  .task-inspector {
+    display: flex;
+  }
 }
 </style>
