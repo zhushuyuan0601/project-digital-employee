@@ -1,19 +1,69 @@
-export type TaskStatus = 'draft' | 'planning' | 'dispatching' | 'running' | 'reviewing' | 'completed' | 'failed' | 'cancelled'
-export type SubtaskStatus = 'pending' | 'assigned' | 'running' | 'blocked' | 'completed' | 'failed'
+export type TaskStatus = 'draft' | 'planning' | 'clarifying' | 'dispatching' | 'running' | 'reviewing' | 'completed' | 'failed' | 'cancelled'
+export type SubtaskStatus = 'pending' | 'ready' | 'queued' | 'assigned' | 'running' | 'waiting_user' | 'blocked' | 'completed' | 'failed' | 'skipped'
 export type TaskOutputStatus = 'pending_review' | 'accepted' | 'rejected'
 
+export type WorkflowPhase = 'research' | 'product' | 'design' | 'engineering' | 'testing' | 'review' | 'summary'
+export type WorkflowExecutionMode = 'report' | 'code' | 'test'
+
+export interface TaskClarificationQuestion {
+  id: string
+  question: string
+  reason: string
+  required: boolean
+}
+
+export interface TaskPlanParticipant {
+  agentId: string
+  needed: boolean
+  reason: string
+}
+
+export interface WorkflowNodePlan {
+  id: string
+  title: string
+  phase: WorkflowPhase
+  assignedAgentId: string
+  objective: string
+  description?: string
+  dependsOn: string[]
+  requiredInputs: string[]
+  expectedOutputs: string[]
+  executionMode: WorkflowExecutionMode
+  successCriteria: string[]
+  skipCondition?: string
+}
+
 export interface TaskPlanSubtask {
+  id?: string
   title: string
   description: string
   assignedAgentId: string
   expectedOutput?: string
+  phase?: WorkflowPhase
+  dependsOn?: string[]
+  requiredInputs?: string[]
+  expectedOutputs?: string[]
+  executionMode?: WorkflowExecutionMode
+  successCriteria?: string[]
+  skipCondition?: string
 }
 
 export interface TaskPlan {
+  decision?: 'need_clarification' | 'ready_to_plan'
   taskTitle: string
-  goal: string
-  subtasks: TaskPlanSubtask[]
-  acceptanceCriteria: string[]
+  goal?: string
+  planningNotes?: string[]
+  changeSummary?: string[]
+  knownFacts?: string[]
+  missingInformation?: string[]
+  questions?: TaskClarificationQuestion[]
+  clarificationAnswers?: Record<string, string>
+  planFeedback?: string
+  planFeedbackAt?: string
+  participants?: TaskPlanParticipant[]
+  workflow?: WorkflowNodePlan[]
+  subtasks?: TaskPlanSubtask[]
+  acceptanceCriteria?: string[]
 }
 
 export interface TaskOutput {

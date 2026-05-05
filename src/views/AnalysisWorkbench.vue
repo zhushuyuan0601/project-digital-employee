@@ -1162,6 +1162,7 @@ const dataProfile = computed(() => {
   const fields = columns.map((column, index) => ({
     name: column || `字段 ${index + 1}`,
     type: inferColumnType(rows.map((row: unknown[]) => row?.[index])),
+    missingRate: `${Math.round((rows.filter((row: unknown[]) => isEmptyCell(row?.[index])).length / Math.max(rows.length, 1)) * 100)}%`,
   }))
   return {
     rowCount: formatCount(Number(preview.value.row_count ?? rows.length)),

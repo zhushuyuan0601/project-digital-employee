@@ -11,6 +11,7 @@ import {
   listAgentRuns,
   markPlanInvalid,
   patchSubtaskContext,
+  refreshWorkflowReadiness,
   savePlan,
   updateAgentRun,
   updateSubtask,
@@ -153,6 +154,9 @@ class ClaudeRuntimeQueue {
         payload: { runId },
       })
       emitTaskEvent('agent.cancelled', { taskId: job.run.task_id, subtaskId: job.run.subtask_id, agentId: job.run.agent_id, runId })
+      if (job.run.subtask_id) {
+        updateSubtask(job.run.subtask_id, { status: 'blocked', error: '排队任务已取消' })
+      }
       return { ok: true, cancelled: 'queued' }
     }
 
@@ -220,6 +224,7 @@ class ClaudeRuntimeQueue {
         outputFormat: job.outputFormat,
         resume: job.resume,
         cwd: workspace.cwd,
+        executionMode: job.executionMode || 'report',
         abortController: controller,
         onEvent: (event) => this.handleSdkEvent(job, event),
       })
@@ -314,7 +319,8 @@ class ClaudeRuntimeQueue {
       result_summary: summarize(result.text || JSON.stringify(plan)),
       completed_at: nowSeconds(),
     })
-    emitRunLog(job, 'done', '小呦已完成结构化拆解', {
+    const isClarifying = plan.decision === 'need_clarification'
+    emitRunLog(job, 'done', isClarifying ? '小呦需要用户补充信息' : '小呦已完成动态协作计划', {
       sessionId: result.sessionId,
       costUsd: result.costUsd,
       durationMs: result.durationMs,
@@ -323,7 +329,9 @@ class ClaudeRuntimeQueue {
       taskId: job.taskId,
       agentId: job.agentId,
       type: 'agent.done',
-      message: '小呦已完成结构化拆解，等待用户确认后派发子任务',
+      message: isClarifying
+        ? '小呦已完成任务诊断，等待用户补充关键信息'
+        : '小呦已完成动态协作计划，等待用户确认后启动工作流',
       payload: { runId: job.run.id, sessionId: result.sessionId, costUsd: result.costUsd, durationMs: result.durationMs },
     })
     emitTaskEvent('agent.done', { taskId: job.taskId, agentId: job.agentId, runId: job.run.id })
@@ -386,11 +394,12 @@ class ClaudeRuntimeQueue {
       taskId: job.taskId,
       subtaskId: job.subtaskId,
       agentId: job.agentId,
-      type: 'agent.done',
+      type: 'workflow.node.completed',
       message: `${ROLE_DEFINITIONS[job.agentId]?.name || job.agentId} 已完成报告`,
       payload: { runId: job.run.id, sessionId: result.sessionId, costUsd: result.costUsd, durationMs: result.durationMs },
     })
-    emitTaskEvent('agent.done', { taskId: job.taskId, subtaskId: job.subtaskId, agentId: job.agentId, runId: job.run.id, outputPath: report.path })
+    emitTaskEvent('workflow.node.completed', { taskId: job.taskId, subtaskId: job.subtaskId, agentId: job.agentId, runId: job.run.id, outputPath: report.path })
+    runWorkflowScheduler(job.taskId)
   }
 
   async completeSummaryJob(job, result) {
@@ -604,12 +613,16 @@ function createRunAndJob({ taskId, subtaskId = null, agentId, kind, prompt, outp
     prompt,
     outputFormat,
     resume,
+    executionMode: subtaskId ? getSubtask(subtaskId)?.context_json?.executionMode || 'report' : 'report',
   }
 }
 
 export function enqueuePlanRun(taskId) {
   const task = getTaskDetail(taskId)
   if (!task) throw new Error('Task not found')
+  const activePlanRun = listActiveAgentRuns({ taskId, limit: 50 })
+    .find((run) => !run.subtask_id && run.agent_id === 'xiaomu' && String(run.id || '').startsWith('plan-'))
+  if (activePlanRun) return activePlanRun
   const job = createRunAndJob({
     taskId,
     agentId: 'xiaomu',
@@ -623,6 +636,14 @@ export function enqueuePlanRun(taskId) {
 export function enqueueSubtaskRun(subtaskId, { resume = null, prompt = null, kind = 'subtask' } = {}) {
   const subtask = getSubtask(subtaskId)
   if (!subtask) throw new Error('Subtask not found')
+  if (subtask.status === 'blocked') {
+    refreshWorkflowReadiness(subtask.task_id)
+    const refreshed = getSubtask(subtaskId)
+    if (refreshed?.status === 'blocked') {
+      throw new Error('该节点前置依赖尚未完成，暂不能执行')
+    }
+  }
+  if (['completed', 'skipped'].includes(subtask.status)) return subtask
   const active = reconcileActiveRunsForSubtask(subtaskId)
   if (active) return active
   const task = getTaskDetail(subtask.task_id)
@@ -638,20 +659,57 @@ export function enqueueSubtaskRun(subtaskId, { resume = null, prompt = null, kin
     lastRunId: job.run.id,
     retryCount: Number(subtask.context_json?.retryCount || 0) + (resume ? 1 : 0),
   })
-  updateSubtask(subtask.id, { status: 'assigned', progress: Math.max(Number(subtask.progress || 0), 10), error: null })
+  updateSubtask(subtask.id, { status: 'queued', progress: Math.max(Number(subtask.progress || 0), 15), error: null })
+  addTaskEvent({
+    taskId: task.id,
+    subtaskId: subtask.id,
+    agentId: subtask.assigned_agent_id,
+    type: 'workflow.node.ready',
+    message: `${subtask.title} 已满足依赖并进入 Claude Runtime 队列`,
+    payload: { runId: job.run.id, executionMode: subtask.context_json?.executionMode || 'report' },
+  })
   return claudeRuntimeQueue.enqueue(job)
 }
 
 export function enqueueSubtasksForTask(taskId) {
+  refreshWorkflowReadiness(taskId)
   const task = getTaskDetail(taskId)
   if (!task) throw new Error('Task not found')
   const runs = []
   for (const subtask of task.subtasks || []) {
-    if (['pending', 'assigned', 'blocked', 'failed'].includes(subtask.status)) {
+    if (['ready', 'failed'].includes(subtask.status)) {
       runs.push(enqueueSubtaskRun(subtask.id))
     }
   }
   return runs
+}
+
+function hasActiveSummaryRun(taskId) {
+  return listAgentRuns({ taskId, limit: 100 }).some((run) => (
+    String(run.id || '').startsWith('summary-') &&
+    ['queued', 'running', 'completed'].includes(run.status)
+  ))
+}
+
+function runWorkflowScheduler(taskId) {
+  const { task } = refreshWorkflowReadiness(taskId)
+  if (!task) return []
+  const runs = enqueueSubtasksForTask(taskId)
+  const allDone = task.subtasks.length > 0 && task.subtasks.every((subtask) => ['completed', 'skipped'].includes(subtask.status))
+  if (allDone && !hasActiveSummaryRun(taskId) && task.status !== 'completed') {
+    addTaskEvent({
+      taskId,
+      agentId: 'xiaomu',
+      type: 'workflow.completed',
+      message: '所有必要流程节点已完成，自动请求小呦最终汇总',
+    })
+    runs.push(enqueueSummaryRun(taskId))
+  }
+  return runs
+}
+
+export function runReadyWorkflow(taskId) {
+  return runWorkflowScheduler(taskId)
 }
 
 export function enqueueSummaryRun(taskId) {

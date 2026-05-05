@@ -44,26 +44,46 @@ export async function runClaudeQuery({
   outputFormat,
   resume,
   cwd,
+  executionMode = 'report',
   abortController,
   onEvent = () => {},
 }) {
   if (config.mock) {
     const mockText = outputFormat
       ? JSON.stringify({
+          decision: 'ready_to_plan',
           taskTitle: '模拟任务拆解',
           goal: '在 Claude Runtime MOCK 模式下验证任务编排链路',
-          subtasks: [
+          participants: [
+            { agentId: 'xiaoyan', needed: false, reason: '模拟任务不需要外部调研。' },
+            { agentId: 'xiaochan', needed: false, reason: '模拟任务不需要产品方案。' },
+            { agentId: 'xiaokai', needed: true, reason: '需要验证技术节点执行链路。' },
+            { agentId: 'xiaoce', needed: true, reason: '需要在技术节点后验证测试依赖。' },
+          ],
+          workflow: [
             {
+              id: 'node-01',
               title: '技术方案分析',
-              description: '分析当前任务的技术路径和实现建议。',
+              phase: 'engineering',
               assignedAgentId: 'xiaokai',
-              expectedOutput: '技术方案报告',
+              objective: '分析当前任务的技术路径和实现建议。',
+              dependsOn: [],
+              requiredInputs: ['任务描述'],
+              expectedOutputs: ['技术方案报告'],
+              executionMode: 'report',
+              successCriteria: ['报告已说明技术路径、风险和建议'],
             },
             {
+              id: 'node-02',
               title: '测试验收设计',
-              description: '设计验收标准和测试要点。',
+              phase: 'testing',
               assignedAgentId: 'xiaoce',
-              expectedOutput: '测试验收报告',
+              objective: '基于技术方案设计验收标准和测试要点。',
+              dependsOn: ['node-01'],
+              requiredInputs: ['技术方案报告'],
+              expectedOutputs: ['测试验收报告'],
+              executionMode: 'report',
+              successCriteria: ['报告已覆盖验收标准和风险清单'],
             },
           ],
           acceptanceCriteria: ['报告已生成', '风险和建议明确'],
@@ -81,11 +101,13 @@ export async function runClaudeQuery({
     }
   }
 
+  const allowWriteTools = !config.reportOnly && ['code', 'test'].includes(executionMode)
+  const readonlyDisallowed = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']
   const options = {
     cwd: cwd || config.cwd,
     tools: config.allowedTools,
     allowedTools: config.allowedTools,
-    disallowedTools: ['Edit', 'Write', 'MultiEdit', 'NotebookEdit'],
+    disallowedTools: allowWriteTools ? [] : readonlyDisallowed,
     permissionMode: 'dontAsk',
     includePartialMessages: true,
     maxTurns: config.maxTurns,

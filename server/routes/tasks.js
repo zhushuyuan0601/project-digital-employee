@@ -1,8 +1,9 @@
 import express from 'express'
 import { promises as fs } from 'fs'
-import { accessSync, constants, existsSync } from 'fs'
+import { accessSync, constants, existsSync, statSync } from 'fs'
 import { homedir } from 'os'
-import { join, resolve } from 'path'
+import { dirname, join, resolve } from 'path'
+import { execFile } from 'child_process'
 import {
   addTaskEvent,
   completeTask,
@@ -16,6 +17,7 @@ import {
   listTasks,
   markPlanInvalid,
   savePlan,
+  skipSubtask,
   updateSubtask,
   updateTask,
   updateTaskOutput,
@@ -26,17 +28,17 @@ import {
   cancelRun,
   enqueuePlanRun,
   enqueueSubtaskRun,
-  enqueueSubtasksForTask,
   enqueueSummaryRun,
   getRun,
   getRuntimeStatus,
   listRuns,
   retrySubtaskRun,
+  runReadyWorkflow,
 } from '../claude-runtime/index.js'
 import { getClaudeRuntimeConfig } from '../claude-runtime/config.js'
 import { claudeRuntimeEvents } from '../claude-runtime/event-bus.js'
-import { RUNTIME_AGENT_MAP } from '../claude-runtime/plan-utils.js'
-import { PROJECT_ROOT } from '../config/defaults.js'
+import { RUNTIME_AGENT_MAP, extractJsonPlan as extractRuntimePlan, validatePlan as validateRuntimePlan } from '../claude-runtime/plan-utils.js'
+import { DEFAULT_SERVER_CONFIG, PROJECT_ROOT, envString } from '../config/defaults.js'
 
 const router = express.Router()
 const HOME_DIR = process.env.HOME || process.env.USERPROFILE || homedir()
@@ -100,6 +102,75 @@ function canWritePath(path) {
   } catch {
     return false
   }
+}
+
+function isInsidePath(targetPath, rootPath) {
+  const target = resolve(targetPath)
+  const root = resolve(rootPath)
+  return target === root || target.startsWith(`${root}/`)
+}
+
+function openableRoots() {
+  const config = getClaudeRuntimeConfig()
+  const fileRoots = envString('FILE_ROOTS', DEFAULT_SERVER_CONFIG.fileRoots)
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map(resolvePath)
+  return [...new Set([
+    PROJECT_ROOT,
+    config.cwd,
+    config.outputRoot,
+    config.workspaceRoot,
+    ...fileRoots,
+  ].filter(Boolean).map((item) => resolve(item)))]
+}
+
+function isOpenPathAllowed(targetPath) {
+  return openableRoots().some((root) => isInsidePath(targetPath, root))
+}
+
+function getOpenDirectoryTarget(rawPath) {
+  if (!rawPath || typeof rawPath !== 'string') {
+    const error = new Error('path is required')
+    error.statusCode = 400
+    throw error
+  }
+
+  const resolvedTarget = resolve(resolvePath(rawPath))
+  if (!isOpenPathAllowed(resolvedTarget)) {
+    const error = new Error('Access denied: path not in allowed roots')
+    error.statusCode = 403
+    throw error
+  }
+
+  if (!existsSync(resolvedTarget)) {
+    const parent = dirname(resolvedTarget)
+    if (!existsSync(parent)) {
+      const error = new Error('File or directory not found')
+      error.statusCode = 404
+      throw error
+    }
+    return parent
+  }
+
+  const stat = statSync(resolvedTarget)
+  return stat.isDirectory() ? resolvedTarget : dirname(resolvedTarget)
+}
+
+function openPathInFileManager(targetPath) {
+  const command = process.platform === 'darwin'
+    ? 'open'
+    : process.platform === 'win32'
+      ? 'explorer'
+      : 'xdg-open'
+
+  return new Promise((resolveOpen, rejectOpen) => {
+    execFile(command, [targetPath], (error) => {
+      if (error) rejectOpen(error)
+      else resolveOpen()
+    })
+  })
 }
 
 async function runtimeDiagnostics() {
@@ -337,6 +408,49 @@ router.patch('/tasks/outputs/:id', (req, res) => {
   }
 })
 
+router.post('/files/open-directory', async (req, res) => {
+  try {
+    const targetPath = getOpenDirectoryTarget(req.body?.path || req.query.path)
+    if (!isOpenPathAllowed(targetPath)) {
+      return res.status(403).json({ success: false, error: 'Access denied: path not in allowed roots' })
+    }
+    await openPathInFileManager(targetPath)
+    res.json({ success: true, path: targetPath })
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/tasks/:id/open-workspace', async (req, res) => {
+  try {
+    const task = getTaskDetail(req.params.id)
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+
+    const config = getClaudeRuntimeConfig()
+    const isolatedWorkspace = resolve(join(config.workspaceRoot, task.id, 'project'))
+    const fallbackProject = resolve(config.cwd)
+    const targetPath = config.workspaceIsolation && existsSync(isolatedWorkspace)
+      ? isolatedWorkspace
+      : fallbackProject
+
+    if (!isOpenPathAllowed(targetPath)) {
+      return res.status(403).json({ success: false, error: 'Access denied: path not in allowed roots' })
+    }
+    if (!existsSync(targetPath)) {
+      return res.status(404).json({ success: false, error: 'Project folder not found' })
+    }
+
+    await openPathInFileManager(targetPath)
+    res.json({
+      success: true,
+      path: targetPath,
+      workspaceAvailable: targetPath === isolatedWorkspace,
+    })
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ success: false, error: err.message })
+  }
+})
+
 router.post('/tasks', (req, res) => {
   try {
     const { title, description, priority } = req.body || {}
@@ -349,7 +463,7 @@ router.post('/tasks', (req, res) => {
       taskId: task.id,
       agentId: 'xiaomu',
       type: 'plan.request.queued',
-      message: '已生成小呦拆解请求，进入 Claude Runtime 队列',
+      message: '已生成小呦任务诊断请求，进入 Claude Runtime 队列',
       payload: { sessionKey: task.coordinator_session_key, mode: 'claude-runtime' },
     })
 
@@ -497,6 +611,7 @@ router.post('/tasks/:id/plan/run', (req, res) => {
   try {
     const task = getTaskDetail(req.params.id)
     if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+    updateTask(task.id, { status: 'planning' })
     const run = enqueuePlanRun(task.id)
     res.json({ success: true, task: getTaskDetail(task.id), planRunId: run.id, run })
   } catch (err) {
@@ -511,7 +626,7 @@ router.post('/tasks/:id/plan', (req, res) => {
 
     let plan
     try {
-      plan = validatePlan(extractJsonPlan(req.body.plan || req.body.content || req.body))
+      plan = validateRuntimePlan(extractRuntimePlan(req.body.plan || req.body.content || req.body))
     } catch (err) {
       const failed = markPlanInvalid(req.params.id, `拆解计划校验失败：${err.message}`, {
         raw: req.body,
@@ -527,21 +642,129 @@ router.post('/tasks/:id/plan', (req, res) => {
   }
 })
 
-router.post('/tasks/:id/dispatch', (req, res) => {
+router.post('/tasks/:id/plan/feedback', (req, res) => {
+  try {
+    const task = getTaskDetail(req.params.id)
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+    if (task.subtasks?.length) {
+      return res.status(400).json({ success: false, error: 'Workflow already started; plan feedback is only available before confirmation' })
+    }
+    const feedback = String(req.body?.feedback || '').trim()
+    if (!feedback) return res.status(400).json({ success: false, error: 'feedback is required' })
+
+    const previousPlan = task.plan_json || {}
+    updateTask(task.id, {
+      status: 'planning',
+      plan_json: {
+        ...previousPlan,
+        planFeedback: feedback,
+        planFeedbackAt: new Date().toISOString(),
+      },
+    })
+    addTaskEvent({
+      taskId: task.id,
+      agentId: 'xiaomu',
+      type: 'plan.feedback.queued',
+      message: '用户已提交对方案的提问或修改意见，小呦将重新规划',
+      payload: { feedback },
+    })
+    const run = enqueuePlanRun(task.id)
+    res.json({ success: true, task: getTaskDetail(task.id), planRunId: run.id, run })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/tasks/:id/clarifications', (req, res) => {
+  try {
+    const task = getTaskDetail(req.params.id)
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+    const answers = req.body?.answers || {}
+    const previousPlan = task.plan_json || {}
+    updateTask(task.id, {
+      status: 'planning',
+      plan_json: {
+        ...previousPlan,
+        clarificationAnswers: answers,
+        clarificationAnsweredAt: new Date().toISOString(),
+      },
+    })
+    addTaskEvent({
+      taskId: task.id,
+      agentId: 'xiaomu',
+      type: 'coordinator.clarification_answered',
+      message: '用户已补充关键信息，小呦将重新诊断并规划协作流程',
+      payload: { answers },
+    })
+    const run = enqueuePlanRun(task.id)
+    res.json({ success: true, task: getTaskDetail(task.id), planRunId: run.id, run })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/tasks/:id/plan/confirm', (req, res) => {
   try {
     const task = getTaskDetail(req.params.id)
     if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
     if (!task.plan_json) return res.status(400).json({ success: false, error: 'Task has no accepted plan_json' })
-    createSubtasksFromPlan(req.params.id, validatePlan(task.plan_json), RUNTIME_AGENT_MAP)
+    const plan = validateRuntimePlan(task.plan_json)
+    if (plan.decision === 'need_clarification') {
+      return res.status(400).json({ success: false, error: 'Task still needs clarification before confirmation' })
+    }
+    createSubtasksFromPlan(req.params.id, plan, RUNTIME_AGENT_MAP)
     const updated = getTaskDetail(req.params.id)
+    res.json({ success: true, task: getTaskDetail(updated.id), runs: [] })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/tasks/:id/workflow/run', (req, res) => {
+  try {
+    const task = getTaskDetail(req.params.id)
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+    const runs = runReadyWorkflow(task.id)
     addTaskEvent({
       taskId: task.id,
       type: 'task.dispatch.queued',
-      message: '已重新生成子任务 Claude Runtime 派发指令',
-      payload: { subtaskCount: updated.subtasks.length, mode: 'claude-runtime' },
+      message: `依赖调度器已启动，本轮入队 ${runs.length} 个可执行节点`,
+      payload: { runCount: runs.length, mode: 'claude-runtime' },
     })
-    const runs = enqueueSubtasksForTask(updated.id)
-    res.json({ success: true, task: getTaskDetail(updated.id), runs })
+    res.json({ success: true, task: getTaskDetail(task.id), runs })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.get('/tasks/:id/workflow', (req, res) => {
+  try {
+    const task = getTaskDetail(req.params.id, { includeEvents: true, eventLimit: DEFAULT_EVENT_LIMIT })
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+    const nodes = task.subtasks.map((subtask) => ({
+      ...subtask,
+      workflow: subtask.context_json || {},
+      blockedBy: (subtask.context_json?.dependsOn || []).filter((nodeId) => {
+        const upstream = task.subtasks.find((item) => (item.context_json?.workflowNodeId || item.id) === nodeId)
+        return upstream && !['completed', 'skipped'].includes(upstream.status)
+      }),
+    }))
+    res.json({ success: true, task, workflow: { plan: task.plan_json, nodes } })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/tasks/:id/dispatch', (req, res) => {
+  try {
+    const task = getTaskDetail(req.params.id)
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+    if (!task.subtasks.length) {
+      if (!task.plan_json) return res.status(400).json({ success: false, error: 'Task has no accepted plan_json' })
+      createSubtasksFromPlan(req.params.id, validateRuntimePlan(task.plan_json), RUNTIME_AGENT_MAP)
+    }
+    const runs = runReadyWorkflow(task.id)
+    res.json({ success: true, task: getTaskDetail(task.id), runs })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }
@@ -551,7 +774,7 @@ router.post('/tasks/:id/subtasks/run', (req, res) => {
   try {
     const task = getTaskDetail(req.params.id)
     if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
-    const runs = enqueueSubtasksForTask(task.id)
+    const runs = runReadyWorkflow(task.id)
     res.json({ success: true, task: getTaskDetail(task.id), runs })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
@@ -586,17 +809,40 @@ router.post('/subtasks/:id/retry', (req, res) => {
   try {
     const subtask = getSubtask(req.params.id)
     if (!subtask) return res.status(404).json({ success: false, error: 'Subtask not found' })
-    updateSubtask(subtask.id, { status: 'assigned', progress: 5, error: null })
+    updateSubtask(subtask.id, { status: 'ready', progress: 10, error: null })
     addTaskEvent({
       taskId: subtask.task_id,
       subtaskId: subtask.id,
       agentId: subtask.assigned_agent_id,
       type: 'subtask.retry.queued',
-      message: '已生成子任务重试请求，进入 Claude Runtime 队列',
+      message: '已生成流程节点重试请求，进入 Claude Runtime 队列',
       payload: { sessionKey: subtask.session_key, mode: 'claude-runtime' },
     })
     const run = retrySubtaskRun(subtask.id)
     res.json({ success: true, task: getTaskDetail(subtask.task_id), run })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/workflow-nodes/:id/retry', (req, res) => {
+  try {
+    const subtask = getSubtask(req.params.id)
+    if (!subtask) return res.status(404).json({ success: false, error: 'Workflow node not found' })
+    updateSubtask(subtask.id, { status: 'ready', progress: 10, error: null })
+    const run = retrySubtaskRun(subtask.id)
+    res.json({ success: true, task: getTaskDetail(subtask.task_id), run })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/workflow-nodes/:id/skip', (req, res) => {
+  try {
+    const task = skipSubtask(req.params.id, req.body?.reason || '用户确认跳过该流程节点')
+    if (!task) return res.status(404).json({ success: false, error: 'Workflow node not found' })
+    const runs = runReadyWorkflow(task.id)
+    res.json({ success: true, task: getTaskDetail(task.id), runs })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }
@@ -731,10 +977,11 @@ router.post('/subtasks/:id/complete', (req, res) => {
       taskId: subtask.task_id,
       subtaskId: subtask.id,
       agentId: subtask.assigned_agent_id,
-      type: 'subtask.completed',
-      message: '子任务已标记完成',
+      type: 'workflow.node.completed',
+      message: '流程节点已标记完成',
       payload: { resultSummary: req.body?.resultSummary || '' },
     })
+    runReadyWorkflow(subtask.task_id)
     res.json({ success: true, task: getTaskDetail(subtask.task_id) })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
@@ -745,7 +992,7 @@ router.post('/tasks/:id/finalize', (req, res) => {
   try {
     const task = getTaskDetail(req.params.id)
     if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
-    if (!task.subtasks.length || !task.subtasks.every((subtask) => subtask.status === 'completed')) {
+    if (!task.subtasks.length || !task.subtasks.every((subtask) => ['completed', 'skipped'].includes(subtask.status))) {
       return res.status(400).json({ success: false, error: 'All subtasks must be completed before finalize' })
     }
     updateTask(task.id, { status: 'reviewing' })

@@ -81,7 +81,13 @@
               <p class="eyebrow">当前任务</p>
               <h1>{{ selectedTask.title }}</h1>
             </div>
-            <span class="status-chip" :class="`status-chip--${selectedTask.status}`">{{ statusText(selectedTask.status) }}</span>
+            <div class="mission-hero__tools">
+              <button class="ghost-btn ghost-btn--compact" type="button" @click="openCurrentTaskWorkspace">
+                <i class="ri-folder-open-line"></i>
+                打开项目文件夹
+              </button>
+              <span class="status-chip" :class="`status-chip--${selectedTask.status}`">{{ statusText(selectedTask.status) }}</span>
+            </div>
           </div>
           <div class="mission-hero__tips">
             <span
@@ -166,7 +172,7 @@
           <div class="surface-heading">
             <div>
               <p class="eyebrow">执行板</p>
-              <h2>子任务和负责人</h2>
+              <h2>流程节点与依赖</h2>
             </div>
             <button class="scan-btn" type="button" :disabled="scanningOutputs" @click="scanOutputs">
               <i class="ri-folder-search-line"></i>
@@ -174,15 +180,28 @@
             </button>
           </div>
 
-          <div v-if="selectedTask.subtasks.length === 0" class="quiet-state">等待小呦拆解计划。</div>
+          <div v-if="selectedTask.subtasks.length === 0" class="quiet-state">等待小呦完成诊断并确认协作流程。</div>
           <div v-else class="subtask-grid">
             <article v-for="subtask in selectedTask.subtasks" :key="subtask.id" class="subtask-card">
               <div class="subtask-card__head">
-                <span class="agent-token">{{ agentName(subtask.assigned_agent_id) }}</span>
+                <span class="agent-token">{{ phaseLabel(String(workflowContext(subtask).phase || 'review')) }}</span>
                 <span class="status-chip" :class="`status-chip--${subtask.status}`">{{ subtaskStatusText(subtask.status) }}</span>
               </div>
               <h3>{{ subtask.title }}</h3>
               <p>{{ subtask.description }}</p>
+              <div class="workflow-node-meta">
+                <span>{{ agentName(subtask.assigned_agent_id) }}</span>
+                <span>{{ executionModeLabel(subtask) }}</span>
+                <span>{{ workflowNodeKey(subtask) }}</span>
+              </div>
+              <div class="workflow-node-deps">
+                <span>前置依赖</span>
+                <p>{{ dependencyLabels(subtask).join(' / ') }}</p>
+              </div>
+              <div class="workflow-node-deps">
+                <span>预期产出</span>
+                <p>{{ expectedOutputs(subtask).join(' / ') }}</p>
+              </div>
               <div class="subtask-progress">
                 <span :style="{ width: `${subtask.progress || 0}%` }"></span>
               </div>
@@ -192,13 +211,26 @@
               </div>
               <p v-if="subtask.error" class="error-line">{{ subtask.error }}</p>
               <div class="subtask-actions">
+                <button
+                  v-if="subtask.status === 'ready'"
+                  class="primary-btn primary-btn--compact"
+                  type="button"
+                  @click="runSingleSubtask(subtask.id)"
+                >
+                  <i class="ri-play-line"></i>
+                  运行
+                </button>
                 <button class="ghost-btn ghost-btn--compact" type="button" @click="retrySubtask(subtask.id)">
                   <i class="ri-restart-line"></i>
                   重试
                 </button>
-                <button class="ghost-btn ghost-btn--compact" type="button" :disabled="subtask.status === 'completed'" @click="completeSubtask(subtask.id)">
+                <button class="ghost-btn ghost-btn--compact" type="button" :disabled="['completed', 'skipped'].includes(subtask.status)" @click="completeSubtask(subtask.id)">
                   <i class="ri-check-line"></i>
                   标记完成
+                </button>
+                <button class="ghost-btn ghost-btn--compact" type="button" :disabled="['completed', 'skipped'].includes(subtask.status)" @click="skipWorkflowNode(subtask.id)">
+                  <i class="ri-skip-forward-line"></i>
+                  跳过
                 </button>
               </div>
             </article>
@@ -279,6 +311,14 @@
                     <small>{{ agentWorkbench(subtask).latestOutput ? formatOutputTime(agentWorkbench(subtask).latestOutput) : '--' }}</small>
                   </span>
                 </button>
+                <button
+                  type="button"
+                  class="member-file-dir"
+                  title="打开所在目录"
+                  @click="agentWorkbench(subtask).latestOutput && openOutputDirectory(agentWorkbench(subtask).latestOutput, $event)"
+                >
+                  <i class="ri-folder-open-line"></i>
+                </button>
               </div>
               <div class="member-card__trail">
                 <div
@@ -314,7 +354,9 @@
           <div class="surface-heading">
             <div>
               <p class="eyebrow">拆解计划</p>
-              <h2>{{ acceptedPlan ? (selectedTask.subtasks.length ? '已确认的小呦拆解方案' : '确认小呦拆解方案') : '等待小呦结构化拆解' }}</h2>
+              <h2>
+                {{ isPlanFeedbackPending ? '小呦正在调整方案' : isClarificationPending ? '小呦正在重新诊断' : isClarificationPlan ? '小呦需要补充信息' : acceptedPlan ? (selectedTask.subtasks.length ? '已确认的动态协作流程' : '确认动态协作流程') : '等待小呦任务诊断' }}
+              </h2>
             </div>
             <div class="plan-heading-actions">
               <button
@@ -333,25 +375,135 @@
               </button>
             </div>
           </div>
-          <div v-if="acceptedPlan" class="plan-review">
+          <div v-if="isClarificationPlan" class="plan-review plan-review--clarify">
+            <div v-if="isClarificationPending" class="clarify-running-banner">
+              <i class="ri-loader-4-line"></i>
+              <div>
+                <strong>补充信息已提交，小呦正在重新诊断</strong>
+                <p>当前会保留你刚才的回答，等 Claude Runtime 返回后，这里会自动切换成新的参与矩阵和流程 DAG。</p>
+              </div>
+            </div>
+            <div class="plan-review__summary">
+              <div>
+                <span>已知信息</span>
+                <strong>{{ acceptedPlan?.knownFacts?.length || 0 }} 条</strong>
+              </div>
+              <div>
+                <span>缺口</span>
+                <strong>{{ acceptedPlan?.missingInformation?.length || 0 }} 项</strong>
+              </div>
+              <div>
+                <span>问题</span>
+                <strong>{{ planQuestions.length }} 个</strong>
+              </div>
+            </div>
+
+            <div v-if="isPlanFeedbackPending" class="clarify-running-banner">
+              <i class="ri-loader-4-line"></i>
+              <div>
+                <strong>方案反馈已提交，小呦正在调整计划</strong>
+                <p>当前会保留原方案作为上下文，等 Claude Runtime 返回后，这里会自动展示新版参与矩阵和流程 DAG。</p>
+              </div>
+            </div>
+
+            <div v-if="acceptedPlan?.planningNotes?.length || acceptedPlan?.changeSummary?.length" class="plan-notes">
+              <section v-if="acceptedPlan?.planningNotes?.length">
+                <span>小呦说明</span>
+                <ul>
+                  <li v-for="item in acceptedPlan.planningNotes" :key="item">{{ item }}</li>
+                </ul>
+              </section>
+              <section v-if="acceptedPlan?.changeSummary?.length">
+                <span>调整记录</span>
+                <ul>
+                  <li v-for="item in acceptedPlan.changeSummary" :key="item">{{ item }}</li>
+                </ul>
+              </section>
+            </div>
+            <div class="clarify-panel">
+              <div v-if="acceptedPlan?.missingInformation?.length" class="clarify-panel__facts">
+                <span>小呦识别的信息缺口</span>
+                <ul>
+                  <li v-for="item in acceptedPlan.missingInformation" :key="item">{{ item }}</li>
+                </ul>
+              </div>
+              <label v-for="question in planQuestions" :key="question.id" class="clarify-question">
+                <span>
+                  <strong>{{ question.question }}</strong>
+                  <small>{{ question.reason }}</small>
+                </span>
+                <textarea
+                  v-model="clarificationAnswers[question.id]"
+                  class="field field--textarea"
+                  :disabled="isClarificationPending"
+                  :placeholder="question.required ? '请补充该关键信息' : '可选补充'"
+                ></textarea>
+              </label>
+            </div>
+          </div>
+
+          <div v-else-if="acceptedPlan" class="plan-review">
             <div class="plan-review__summary">
               <div>
                 <span>任务目标</span>
-                <strong>{{ acceptedPlan.goal }}</strong>
+                <strong>{{ acceptedPlan.goal || selectedTask.description }}</strong>
               </div>
               <div>
-                <span>子任务</span>
-                <strong>{{ acceptedPlan.subtasks.length }} 个</strong>
+                <span>流程节点</span>
+                <strong>{{ planWorkflowNodes.length }} 个</strong>
               </div>
               <div>
                 <span>验收标准</span>
-                <strong>{{ acceptedPlan.acceptanceCriteria.length }} 条</strong>
+                <strong>{{ planAcceptanceCriteria.length }} 条</strong>
               </div>
+            </div>
+
+            <div v-if="planParticipants.length" class="participant-matrix">
+              <article
+                v-for="participant in planParticipants"
+                :key="participant.agentId"
+                class="participant-card"
+                :class="{ 'participant-card--off': !participant.needed }"
+              >
+                <span class="agent-token">{{ agentName(participant.agentId) }}</span>
+                <strong>{{ participant.needed ? '参与' : '不参与' }}</strong>
+                <p>{{ participant.reason }}</p>
+              </article>
+            </div>
+
+            <div class="workflow-phase-lanes">
+              <section
+                v-for="[phase, nodes] in workflowNodesByPhase"
+                :key="phase"
+                class="workflow-phase"
+              >
+                <div class="workflow-phase__head">
+                  <span>{{ phaseLabel(phase) }}</span>
+                  <strong>{{ nodes.length }} 个节点</strong>
+                </div>
+                <div class="workflow-phase__nodes">
+                  <article
+                    v-for="node in nodes"
+                    :key="node.id"
+                    class="workflow-plan-node"
+                  >
+                    <div class="workflow-plan-node__top">
+                      <strong>{{ node.title }}</strong>
+                      <span>{{ agentName(node.assignedAgentId) }}</span>
+                    </div>
+                    <p>{{ node.objective }}</p>
+                    <div class="workflow-plan-node__meta">
+                      <span>{{ executionModeLabels[node.executionMode] || node.executionMode }}</span>
+                      <span>{{ node.dependsOn.length ? `依赖 ${node.dependsOn.join(' / ')}` : '起始节点' }}</span>
+                    </div>
+                  </article>
+                </div>
+              </section>
             </div>
 
             <div class="plan-review__grid">
               <article
-                v-for="(subtask, index) in acceptedPlan.subtasks"
+                v-for="(subtask, index) in planWorkflowNodes"
                 :key="`${subtask.assignedAgentId}-${subtask.title}-${index}`"
                 class="plan-review-card"
               >
@@ -362,10 +514,10 @@
                     <small>{{ agentName(subtask.assignedAgentId) }}</small>
                   </div>
                 </div>
-                <p>{{ subtask.description }}</p>
+                <p>{{ subtask.objective }}</p>
                 <div class="plan-review-card__output">
                   <span>交付物</span>
-                  <p>{{ subtask.expectedOutput || '未指定，按角色报告规范交付。' }}</p>
+                  <p>{{ subtask.expectedOutputs.length ? subtask.expectedOutputs.join(' / ') : '未指定，按角色报告规范交付。' }}</p>
                 </div>
               </article>
             </div>
@@ -373,8 +525,30 @@
             <div class="plan-review__acceptance">
               <span>验收标准</span>
               <ol>
-                <li v-for="item in acceptedPlan.acceptanceCriteria" :key="item">{{ item }}</li>
+                <li v-for="item in planAcceptanceCriteria" :key="item">{{ item }}</li>
               </ol>
+            </div>
+
+            <div v-if="selectedTask.subtasks.length === 0" class="plan-feedback-box">
+              <div>
+                <span>方案提问 / 修改意见</span>
+                <p>可以问“小呦为什么让测试参与”，也可以要求“去掉研发节点”或“先加市场调研再产品设计”。提交后不会启动流程，只会生成新版方案。</p>
+              </div>
+              <textarea
+                v-model="planFeedback"
+                class="field field--textarea"
+                :disabled="isPlanFeedbackPending"
+                placeholder="输入对当前方案的问题或修改意见"
+              ></textarea>
+              <button
+                class="ghost-btn"
+                type="button"
+                :disabled="submittingPlanFeedback || isPlanFeedbackPending || !planFeedback.trim()"
+                @click="submitPlanFeedback"
+              >
+                <i class="ri-chat-check-line"></i>
+                {{ isPlanFeedbackPending ? '小呦调整中' : submittingPlanFeedback ? '提交中' : '提交给小呦调整' }}
+              </button>
             </div>
           </div>
           <div v-else class="plan-waiting">
@@ -395,18 +569,28 @@
           <div class="plan-actions">
             <span>状态：{{ acceptedPlan && selectedTask.subtasks.length ? '已确认派发' : statusText(selectedTask.status) }}</span>
             <button
-              v-if="acceptedPlan && selectedTask.subtasks.length === 0"
+              v-if="isClarificationPlan"
               class="primary-btn"
               type="button"
-              :disabled="confirmingPlan"
+              :disabled="submittingClarifications || isClarificationPending"
+              @click="submitClarifications"
+            >
+              <i class="ri-question-answer-line"></i>
+              {{ isClarificationPending ? '小呦重新诊断中' : submittingClarifications ? '提交中' : '提交补充并重新诊断' }}
+            </button>
+            <button
+              v-else-if="isReadyWorkflowPlan && selectedTask.subtasks.length === 0"
+              class="primary-btn"
+              type="button"
+              :disabled="confirmingPlan || isPlanFeedbackPending"
               @click="confirmPlanDispatch"
             >
               <i class="ri-send-plane-line"></i>
-              {{ confirmingPlan ? '派发中' : '确认并派发' }}
+              {{ confirmingPlan ? '启动中' : '确认并启动流程' }}
             </button>
             <span v-else-if="acceptedPlan" class="plan-confirmed-chip">
               <i class="ri-checkbox-circle-line"></i>
-              子任务已创建
+              流程节点已创建
             </span>
             <button v-else class="primary-btn" type="button" :disabled="applyingPlan || !planDraft.trim()" @click="applyPlan">
               <i class="ri-node-tree"></i>
@@ -451,14 +635,22 @@
                   <span>{{ insight.actor }}</span>
                   <span v-if="insight.fileLabel">{{ insight.fileLabel }}</span>
                 </div>
-                <button
-                  v-if="insight.linkedOutput"
-                  class="ghost-btn ghost-btn--compact"
-                  type="button"
-                  @click="previewOutput(insight.linkedOutput)"
-                >
-                  查看文件
-                </button>
+                <div v-if="insight.linkedOutput" class="event-item__actions">
+                  <button
+                    class="ghost-btn ghost-btn--compact"
+                    type="button"
+                    @click="previewOutput(insight.linkedOutput)"
+                  >
+                    查看文件
+                  </button>
+                  <button
+                    class="ghost-btn ghost-btn--compact"
+                    type="button"
+                    @click="openOutputDirectory(insight.linkedOutput, $event)"
+                  >
+                    打开目录
+                  </button>
+                </div>
               </div>
             </article>
           </div>
@@ -472,21 +664,24 @@
             </div>
           </div>
           <div v-if="!selectedTask?.outputs?.length" class="quiet-state">暂无绑定成果。</div>
-          <button
+          <div
             v-for="output in orderedTaskOutputs"
             :key="output.id"
-            type="button"
             class="output-row"
             :class="{ 'output-row--summary': isSummaryOutput(output) }"
-            @click="previewOutput(output)"
           >
-            <i :class="fileIcon(output.name)"></i>
-            <span class="output-row__content">
-              <strong>{{ output.name }}</strong>
-              <small>{{ agentName(output.agent_id || '') }}</small>
-            </span>
+            <button class="output-row__main" type="button" @click="previewOutput(output)">
+              <i :class="fileIcon(output.name)"></i>
+              <span class="output-row__content">
+                <strong>{{ output.name }}</strong>
+                <small>{{ agentName(output.agent_id || '') }}</small>
+              </span>
+            </button>
             <span v-if="isSummaryOutput(output)" class="output-badge">汇总报告</span>
-          </button>
+            <button class="output-row__dir" type="button" title="打开所在目录" @click="openOutputDirectory(output, $event)">
+              <i class="ri-folder-open-line"></i>
+            </button>
+          </div>
         </section>
 
         <section
@@ -518,6 +713,18 @@
     </div>
 
     <el-dialog v-model="previewDialog" :title="previewFileItem?.name || '成果预览'" width="880px">
+      <div v-if="previewFileItem" class="preview-toolbar">
+        <span :title="previewFileItem.path || ''">{{ previewFileItem.path || '该成果没有本地文件路径' }}</span>
+        <button
+          class="ghost-btn ghost-btn--compact"
+          type="button"
+          :disabled="!previewFileItem.path"
+          @click="openOutputDirectory(previewFileItem)"
+        >
+          <i class="ri-folder-open-line"></i>
+          打开所在目录
+        </button>
+      </div>
       <div v-if="previewLoading" class="preview-state">加载中...</div>
       <div v-else-if="previewError" class="preview-state preview-state--error">{{ previewError }}</div>
       <div v-else-if="previewFileItem" class="preview-content">
@@ -586,7 +793,7 @@
                 {{ memberLogsLoading ? '刷新中' : '刷新状态' }}
               </button>
               <button
-                v-if="activeMemberRunId && ['assigned', 'running'].includes(activeMemberSubtask.status)"
+                v-if="activeMemberRunId && ['queued', 'assigned', 'running'].includes(activeMemberSubtask.status)"
                 class="ghost-btn ghost-btn--compact"
                 type="button"
                 @click="cancelActiveMemberRun"
@@ -612,18 +819,27 @@
               <h3>{{ activeMemberStoryTitle }}</h3>
               <p>{{ activeMemberStorySummary }}</p>
             </div>
-            <button
-              v-if="activeMemberStoryOutputs[0]"
-              class="story-output-hero"
-              type="button"
-              @click="previewOutput(activeMemberStoryOutputs[0])"
-            >
-              <i :class="fileIcon(activeMemberStoryOutputs[0].name)"></i>
-              <span>
-                <strong>{{ activeMemberStoryOutputs[0].name }}</strong>
-                <small>{{ formatOutputTime(activeMemberStoryOutputs[0]) }}</small>
-              </span>
-            </button>
+            <div v-if="activeMemberStoryOutputs[0]" class="story-output-hero-wrap">
+              <button
+                class="story-output-hero"
+                type="button"
+                @click="previewOutput(activeMemberStoryOutputs[0])"
+              >
+                <i :class="fileIcon(activeMemberStoryOutputs[0].name)"></i>
+                <span>
+                  <strong>{{ activeMemberStoryOutputs[0].name }}</strong>
+                  <small>{{ formatOutputTime(activeMemberStoryOutputs[0]) }}</small>
+                </span>
+              </button>
+              <button
+                class="story-output-dir"
+                type="button"
+                title="打开所在目录"
+                @click="openOutputDirectory(activeMemberStoryOutputs[0], $event)"
+              >
+                <i class="ri-folder-open-line"></i>
+              </button>
+            </div>
           </section>
 
           <section class="member-story__timeline">
@@ -667,20 +883,28 @@
               暂无报告产出，完成后会在这里显示入口。
             </div>
             <div v-else class="story-output-list">
-              <button
+              <div
                 v-for="output in activeMemberStoryOutputs"
                 :key="output.id"
                 class="story-output-row"
-                type="button"
-                @click="previewOutput(output)"
               >
-                <i :class="fileIcon(output.name)"></i>
-                <span>
-                  <strong>{{ output.name }}</strong>
-                  <small>{{ formatOutputTime(output) }}</small>
-                </span>
-                <i class="ri-arrow-right-up-line"></i>
-              </button>
+                <button class="story-output-row__main" type="button" @click="previewOutput(output)">
+                  <i :class="fileIcon(output.name)"></i>
+                  <span>
+                    <strong>{{ output.name }}</strong>
+                    <small>{{ formatOutputTime(output) }}</small>
+                  </span>
+                  <i class="ri-arrow-right-up-line"></i>
+                </button>
+                <button
+                  class="story-output-dir"
+                  type="button"
+                  title="打开所在目录"
+                  @click="openOutputDirectory(output, $event)"
+                >
+                  <i class="ri-folder-open-line"></i>
+                </button>
+              </div>
             </div>
           </section>
         </div>
@@ -753,14 +977,22 @@
             </button>
             <div v-if="log.fileLabel || log.linkedOutput" class="terminal-entry__footer">
               <span v-if="log.fileLabel" class="terminal-entry__file">{{ log.fileLabel }}</span>
-              <button
-                v-if="log.linkedOutput"
-                class="ghost-btn ghost-btn--compact"
-                type="button"
-                @click="previewOutput(log.linkedOutput)"
-              >
-                打开文件
-              </button>
+              <div v-if="log.linkedOutput" class="terminal-entry__actions">
+                <button
+                  class="ghost-btn ghost-btn--compact"
+                  type="button"
+                  @click="previewOutput(log.linkedOutput)"
+                >
+                  打开文件
+                </button>
+                <button
+                  class="ghost-btn ghost-btn--compact"
+                  type="button"
+                  @click="openOutputDirectory(log.linkedOutput, $event)"
+                >
+                  打开目录
+                </button>
+              </div>
             </div>
           </article>
         </div>
@@ -781,17 +1013,38 @@ import { useAuthStore } from '@/stores/auth'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
 import { useTasksStore } from '@/stores/tasks'
 import { useThemeStore } from '@/stores/theme'
-import type { Subtask, Task, TaskEvent, TaskOutput, TaskPlan, TaskStatus, SubtaskStatus } from '@/types/task'
+import type {
+  Subtask,
+  Task,
+  TaskClarificationQuestion,
+  TaskEvent,
+  TaskOutput,
+  TaskPlan,
+  TaskPlanParticipant,
+  TaskStatus,
+  SubtaskStatus,
+  WorkflowNodePlan,
+  WorkflowPhase,
+} from '@/types/task'
 
 const TASK_EVENT_LIMIT = 400
 const TASK_SYNC_DEBOUNCE_MS = 1200
 const TASK_POLL_INTERVAL_MS = 20000
-const MEMBER_ACTIVE_WINDOW_MS = 45000
 const MEMBER_CHANGE_WINDOW_MS = 12000
 const EVENT_SYNC_TYPES = new Set([
   'plan.accepted',
+  'plan.generated',
+  'plan.confirmed',
+  'plan.feedback.queued',
+  'coordinator.clarification_required',
+  'coordinator.clarification_answered',
   'plan.invalid',
   'task.dispatch.queued',
+  'workflow.node.ready',
+  'workflow.node.completed',
+  'workflow.node.skipped',
+  'workflow.dependency.unlocked',
+  'workflow.completed',
   'agent.done',
   'agent.error',
   'agent.cancelled',
@@ -817,10 +1070,14 @@ const createDialog = ref(false)
 const creating = ref(false)
 const applyingPlan = ref(false)
 const confirmingPlan = ref(false)
+const submittingClarifications = ref(false)
+const submittingPlanFeedback = ref(false)
 const rerunningPlan = ref(false)
 const scanningOutputs = ref(false)
 const finalizingSummary = ref(false)
 const planDraft = ref('')
+const planFeedback = ref('')
+const clarificationAnswers = ref<Record<string, string>>({})
 const summaryDraft = ref('')
 const currentTimeMs = ref(Date.now())
 const previewDialog = ref(false)
@@ -922,7 +1179,7 @@ const aiStatusText = computed(() => {
 const timestampText = computed(() => new Date(currentTimeMs.value).toLocaleString('zh-CN', { hour12: false }))
 const currentUserLabel = computed(() => authStore.user?.username || 'Admin')
 const canCreateTask = computed(() => createForm.title.trim().length > 0 && createForm.description.trim().length > 0)
-const canFinalize = computed(() => !!selectedTask.value?.subtasks.length && selectedTask.value.subtasks.every(subtask => subtask.status === 'completed'))
+const canFinalize = computed(() => !!selectedTask.value?.subtasks.length && selectedTask.value.subtasks.every(subtask => ['completed', 'skipped'].includes(subtask.status)))
 const hasReviewSummary = computed(() => !!selectedTask.value?.summary?.trim())
 const canRequestSummary = computed(() =>
   !!selectedTask.value &&
@@ -964,10 +1221,27 @@ const agentLabels: Record<string, string> = {
   xiaoce: '测试员',
 }
 
+const workflowPhaseLabels: Record<WorkflowPhase, string> = {
+  research: '调研',
+  product: '产品',
+  design: '设计',
+  engineering: '研发',
+  testing: '测试',
+  review: '复盘',
+  summary: '汇总',
+}
+
+const executionModeLabels: Record<string, string> = {
+  report: '报告',
+  code: '代码',
+  test: '测试',
+}
+
 const taskStatusLabels: Record<TaskStatus, string> = {
   draft: '草稿',
-  planning: '拆解中',
-  dispatching: '派发中',
+  planning: '诊断中',
+  clarifying: '待补充',
+  dispatching: '待确认',
   running: '执行中',
   reviewing: '待验收',
   completed: '已完成',
@@ -977,20 +1251,34 @@ const taskStatusLabels: Record<TaskStatus, string> = {
 
 const subtaskStatusLabels: Record<SubtaskStatus, string> = {
   pending: '待派发',
+  ready: '可执行',
+  queued: '排队中',
   assigned: '已分配',
   running: '执行中',
+  waiting_user: '待确认',
   blocked: '阻塞',
   completed: '完成',
   failed: '失败',
+  skipped: '已跳过',
 }
 
 const IMPORTANT_EVENT_TYPES = new Set([
   'task.created',
   'plan.request.queued',
   'plan.accepted',
+  'plan.generated',
+  'plan.confirmed',
+  'plan.feedback.queued',
+  'coordinator.clarification_required',
+  'coordinator.clarification_answered',
   'plan.invalid',
   'task.dispatch.queued',
   'subtask.retry.queued',
+  'workflow.node.ready',
+  'workflow.node.completed',
+  'workflow.node.skipped',
+  'workflow.dependency.unlocked',
+  'workflow.completed',
   'agent.run.queued',
   'agent.start',
   'outputs.bound',
@@ -1008,9 +1296,19 @@ const EVENT_BADGES: Record<string, string> = {
   'task.created': '创建',
   'plan.request.queued': '拆解请求',
   'plan.accepted': '拆解完成',
+  'plan.generated': '计划生成',
+  'plan.confirmed': '计划确认',
+  'plan.feedback.queued': '方案反馈',
+  'coordinator.clarification_required': '需要补充',
+  'coordinator.clarification_answered': '已补充',
   'plan.invalid': '计划异常',
   'task.dispatch.queued': '派发',
   'subtask.retry.queued': '重试',
+  'workflow.node.ready': '可执行',
+  'workflow.node.completed': '节点完成',
+  'workflow.node.skipped': '跳过',
+  'workflow.dependency.unlocked': '解锁',
+  'workflow.completed': '流程完成',
   'agent.run.queued': '排队',
   'agent.start': '开始',
   'agent.assistant': '输出',
@@ -1057,7 +1355,8 @@ function isSummaryOutput(output: TaskOutput) {
   return /汇总|总结|final|summary/i.test(`${output.name || ''} ${output.path || ''}`)
 }
 
-function formatOutputTime(output: TaskOutput) {
+function formatOutputTime(output: TaskOutput | null | undefined) {
+  if (!output) return '--'
   if (output.mtime) return formatMsTime(output.mtime)
   return formatTime(output.created_at)
 }
@@ -1065,9 +1364,9 @@ function formatOutputTime(output: TaskOutput) {
 function eventTone(type: string): EventTone {
   if (['agent.error', 'plan.invalid', 'agent.cancelled'].includes(type)) return 'danger'
   if (['outputs.bound'].includes(type)) return 'output'
-  if (['agent.done', 'task.completed', 'subtask.completed'].includes(type)) return 'success'
-  if (['subtask.retry.queued', 'agent.run.queued', 'summary.request.queued', 'task.dispatch.queued'].includes(type)) return 'warning'
-  if (['agent.start', 'agent.tool', 'agent.assistant', 'outputs.scanned'].includes(type)) return 'progress'
+  if (['agent.done', 'workflow.node.completed', 'workflow.completed', 'task.completed', 'subtask.completed'].includes(type)) return 'success'
+  if (['coordinator.clarification_required', 'subtask.retry.queued', 'agent.run.queued', 'summary.request.queued', 'task.dispatch.queued'].includes(type)) return 'warning'
+  if (['plan.generated', 'plan.confirmed', 'plan.feedback.queued', 'workflow.node.ready', 'workflow.dependency.unlocked', 'agent.start', 'agent.tool', 'agent.assistant', 'outputs.scanned'].includes(type)) return 'progress'
   return 'neutral'
 }
 
@@ -1105,6 +1404,14 @@ function insightHeadline(event: TaskEvent) {
       return '产生了新的文件成果'
     case 'agent.done':
       return 'Agent 已提交阶段结果'
+    case 'workflow.node.completed':
+      return '流程节点已完成'
+    case 'workflow.node.ready':
+      return '流程节点已进入执行队列'
+    case 'workflow.dependency.unlocked':
+      return '下游依赖已解锁'
+    case 'workflow.completed':
+      return '协作流程已完成'
     case 'agent.error':
       return '执行过程中出现异常'
     case 'agent.start':
@@ -1115,6 +1422,12 @@ function insightHeadline(event: TaskEvent) {
       return '子任务已重新入队'
     case 'plan.accepted':
       return '拆解计划通过校验'
+    case 'plan.generated':
+      return '小呦生成了动态协作计划'
+    case 'plan.feedback.queued':
+      return '用户提交了方案反馈'
+    case 'coordinator.clarification_required':
+      return '小呦需要补充关键信息'
     case 'summary.request.queued':
       return '最终汇总已入队'
     case 'task.completed':
@@ -1502,8 +1815,12 @@ const activeMemberStoryTitle = computed(() => {
   const subtask = activeMemberSubtask.value
   if (!subtask) return '暂无执行任务'
   if (subtask.status === 'failed') return '执行出现异常，需要查看日志或重试'
+  if (subtask.status === 'skipped') return '该节点已跳过'
   if (subtask.status === 'completed') return '执行已完成，报告可进入产出区查看'
   if (subtask.status === 'running') return '正在执行，关键步骤会持续更新'
+  if (subtask.status === 'queued') return '节点已排队，等待 Claude Runtime 执行'
+  if (subtask.status === 'ready') return '依赖已满足，可以启动执行'
+  if (subtask.status === 'blocked') return '等待前置依赖完成'
   if (subtask.status === 'assigned') return '任务已分配，等待进入 Claude Runtime'
   return '任务等待执行'
 })
@@ -1527,6 +1844,53 @@ const acceptedPlan = computed<TaskPlan | null>(() => selectedTask.value?.plan_js
 const acceptedPlanRaw = computed(() => {
   if (!acceptedPlan.value) return ''
   return JSON.stringify(acceptedPlan.value, null, 2)
+})
+
+const isClarificationPlan = computed(() => acceptedPlan.value?.decision === 'need_clarification')
+const isClarificationPending = computed(() =>
+  isClarificationPlan.value &&
+  selectedTask.value?.status === 'planning' &&
+  !!acceptedPlan.value?.clarificationAnswers &&
+  selectedTask.value.subtasks.length === 0
+)
+const isReadyWorkflowPlan = computed(() => acceptedPlan.value?.decision === 'ready_to_plan' || !!acceptedPlan.value?.workflow?.length || !!acceptedPlan.value?.subtasks?.length)
+const isPlanFeedbackPending = computed(() =>
+  isReadyWorkflowPlan.value &&
+  selectedTask.value?.status === 'planning' &&
+  !!acceptedPlan.value?.planFeedback &&
+  selectedTask.value.subtasks.length === 0
+)
+const planQuestions = computed<TaskClarificationQuestion[]>(() => acceptedPlan.value?.questions || [])
+const planParticipants = computed<TaskPlanParticipant[]>(() => acceptedPlan.value?.participants || [])
+const planWorkflowNodes = computed<WorkflowNodePlan[]>(() => {
+  const plan = acceptedPlan.value
+  if (!plan) return []
+  if (Array.isArray(plan.workflow) && plan.workflow.length) return plan.workflow
+  return (plan.subtasks || []).map((subtask, index) => ({
+    id: subtask.id || `node-${String(index + 1).padStart(2, '0')}`,
+    title: subtask.title,
+    phase: subtask.phase || 'review',
+    assignedAgentId: subtask.assignedAgentId,
+    objective: subtask.description,
+    description: subtask.description,
+    dependsOn: subtask.dependsOn || [],
+    requiredInputs: subtask.requiredInputs || [],
+    expectedOutputs: subtask.expectedOutputs || (subtask.expectedOutput ? [subtask.expectedOutput] : []),
+    executionMode: subtask.executionMode || 'report',
+    successCriteria: subtask.successCriteria || [],
+    skipCondition: subtask.skipCondition,
+  }))
+})
+const planAcceptanceCriteria = computed(() => acceptedPlan.value?.acceptanceCriteria || [])
+const workflowPhaseOrder: WorkflowPhase[] = ['research', 'product', 'design', 'engineering', 'testing', 'review', 'summary']
+const workflowNodesByPhase = computed(() => {
+  const groups = new Map<WorkflowPhase, WorkflowNodePlan[]>()
+  for (const phase of workflowPhaseOrder) groups.set(phase, [])
+  for (const node of planWorkflowNodes.value) {
+    const phase = workflowPhaseOrder.includes(node.phase) ? node.phase : 'review'
+    groups.get(phase)?.push(node)
+  }
+  return [...groups.entries()].filter(([, nodes]) => nodes.length)
 })
 
 function subtaskActivityTimestampMs(subtask: Subtask) {
@@ -1579,9 +1943,11 @@ const taskFlowSteps = computed<TaskFlowStep[]>(() => {
       key: 'plan',
       title: '拆解计划',
       description: task?.subtasks.length
-        ? `小呦已拆解出 ${task.subtasks.length} 个子任务。`
+        ? `小呦已创建 ${task.subtasks.length} 个流程节点。`
         : task?.plan_json
-          ? '小呦已输出拆解计划，等待确认派发。'
+          ? task.status === 'clarifying'
+            ? '小呦需要补充信息后再拆解。'
+            : '小呦已输出动态协作计划，等待确认。'
           : '等待小呦输出结构化计划，并在拆解区确认。',
     },
     {
@@ -1642,10 +2008,12 @@ const taskFlowCallout = computed<TaskFlowCallout>(() => {
 
   if (taskFlowCurrentKey.value === 'plan') {
     return {
-      title: task.plan_json ? '当前等待确认拆解计划' : '当前处于拆解阶段',
+      title: isClarificationPlan.value ? '当前等待补充信息' : task.plan_json ? '当前等待确认协作流程' : '当前处于诊断阶段',
       detail: task.plan_json
-        ? '请先查看小呦拆出的目标、子任务、负责人、交付物和验收标准，确认后再派发执行。'
-        : '等待小呦输出结构化计划；也可以手动粘贴 JSON 进入确认节点。',
+        ? isClarificationPlan.value
+          ? '小呦判断信息不足，需要先回答关键问题，再重新生成真实协作计划。'
+          : '请先查看小呦判断出的参与成员、阶段、依赖和验收标准，确认后再启动依赖调度。'
+        : '等待小呦完成任务诊断；也可以手动粘贴结构化 JSON 进入确认节点。',
       actionLabel: '前往拆解区',
       target: 'plan',
     }
@@ -1889,14 +2257,52 @@ async function confirmPlanDispatch() {
   if (!selectedTask.value?.plan_json || confirmingPlan.value) return
   confirmingPlan.value = true
   try {
-    const response = await tasksStore.dispatchTask(selectedTask.value.id)
+    const confirmed = await tasksStore.confirmPlan(selectedTask.value.id)
+    const response = await tasksStore.runWorkflow(confirmed.task.id)
     await tasksStore.fetchTask(response.task.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
-    ElMessage.success(`拆解计划已确认，已入队 ${response.runs?.length || 0} 个 Claude Runtime run`)
+    ElMessage.success(`动态协作流程已启动，本轮入队 ${response.runs?.length || 0} 个可执行节点`)
     await refreshRuntimeStatus()
   } catch (err) {
-    ElMessage.error(err instanceof Error ? err.message : '确认派发失败')
+    ElMessage.error(err instanceof Error ? err.message : '确认启动失败')
   } finally {
     confirmingPlan.value = false
+  }
+}
+
+async function submitClarifications() {
+  if (!selectedTask.value || submittingClarifications.value) return
+  const requiredMissing = planQuestions.value
+    .filter(question => question.required && !String(clarificationAnswers.value[question.id] || '').trim())
+  if (requiredMissing.length) {
+    ElMessage.warning('请先补充小呦标记为必填的关键信息')
+    return
+  }
+  submittingClarifications.value = true
+  try {
+    const response = await tasksStore.submitClarifications(selectedTask.value.id, clarificationAnswers.value)
+    await tasksStore.fetchTask(response.task.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
+    ElMessage.success('补充信息已提交，小呦会重新诊断并生成协作流程')
+    await refreshRuntimeStatus()
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '提交补充信息失败')
+  } finally {
+    submittingClarifications.value = false
+  }
+}
+
+async function submitPlanFeedback() {
+  if (!selectedTask.value || submittingPlanFeedback.value || !planFeedback.value.trim()) return
+  submittingPlanFeedback.value = true
+  try {
+    const response = await tasksStore.submitPlanFeedback(selectedTask.value.id, planFeedback.value.trim())
+    planFeedback.value = ''
+    await tasksStore.fetchTask(response.task.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
+    ElMessage.success('方案反馈已提交，小呦会重新调整协作计划')
+    await refreshRuntimeStatus()
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '提交方案反馈失败')
+  } finally {
+    submittingPlanFeedback.value = false
   }
 }
 
@@ -1926,6 +2332,34 @@ async function retrySubtask(subtaskId: string) {
   }
 }
 
+async function runSingleSubtask(subtaskId: string) {
+  try {
+    const response = await tasksStore.runSubtask(subtaskId)
+    await tasksStore.fetchTask(response.task.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
+    ElMessage.success('流程节点已进入 Claude Runtime 队列')
+    await refreshRuntimeStatus()
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '启动节点失败')
+  }
+}
+
+async function skipWorkflowNode(subtaskId: string) {
+  const reason = await ElMessageBox.prompt('请输入跳过原因，方便后续验收回看。', '跳过流程节点', {
+    confirmButtonText: '跳过',
+    cancelButtonText: '取消',
+    inputValue: '用户确认当前任务不需要该节点继续执行',
+  }).then(({ value }) => value).catch(() => null)
+  if (reason == null) return
+  try {
+    const response = await tasksStore.skipWorkflowNode(subtaskId, reason)
+    await tasksStore.fetchTask(response.task.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
+    ElMessage.success('流程节点已跳过，依赖状态已重新计算')
+    await refreshRuntimeStatus()
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '跳过节点失败')
+  }
+}
+
 async function cancelActiveMemberRun() {
   if (!activeMemberRunId.value || !activeMemberSubtask.value) return
   try {
@@ -1940,8 +2374,8 @@ async function cancelActiveMemberRun() {
 
 async function completeSubtask(subtaskId: string) {
   try {
-    const response = await tasksStore.completeSubtask(subtaskId, '由操作员在任务指挥中心确认完成')
-    await tasksStore.fetchTask(response.task.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
+    const task = await tasksStore.completeSubtask(subtaskId, '由操作员在任务指挥中心确认完成')
+    await tasksStore.fetchTask(task.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
     ElMessage.success('子任务已标记完成')
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '更新失败')
@@ -1995,7 +2429,8 @@ async function completeTask() {
   }
 }
 
-async function previewOutput(output: TaskOutput) {
+async function previewOutput(output: TaskOutput | null | undefined) {
+  if (!output) return
   previewFileItem.value = output
   previewDialog.value = true
   previewContent.value = ''
@@ -2017,6 +2452,30 @@ async function previewOutput(output: TaskOutput) {
   }
 }
 
+async function openOutputDirectory(output: TaskOutput | null | undefined, event?: MouseEvent) {
+  event?.stopPropagation()
+  if (!output?.path) {
+    ElMessage.warning('该成果没有可打开的本地文件路径')
+    return
+  }
+  try {
+    await taskApi.openFileDirectory(output.path)
+    ElMessage.success('已打开成果所在目录')
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '打开目录失败')
+  }
+}
+
+async function openCurrentTaskWorkspace() {
+  if (!selectedTask.value) return
+  try {
+    const result = await taskApi.openTaskWorkspace(selectedTask.value.id)
+    ElMessage.success(result.workspaceAvailable ? '已打开任务项目文件夹' : '任务工作区未生成，已打开运行项目根目录')
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '打开项目文件夹失败')
+  }
+}
+
 function renderPreview() {
   return md.render(previewContent.value)
 }
@@ -2027,11 +2486,11 @@ function outputTimestampMs(output: TaskOutput) {
 }
 
 function completedCount(task: Task) {
-  return task.subtasks?.filter(subtask => subtask.status === 'completed').length || 0
+  return task.subtasks?.filter(subtask => ['completed', 'skipped'].includes(subtask.status)).length || 0
 }
 
 function needsPlan(task: Task) {
-  return ['planning', 'dispatching', 'failed'].includes(task.status) && !task.subtasks.length
+  return ['planning', 'clarifying', 'dispatching', 'failed'].includes(task.status) && !task.subtasks.length
 }
 
 function statusText(status: TaskStatus) {
@@ -2044,6 +2503,39 @@ function subtaskStatusText(status: SubtaskStatus) {
 
 function agentName(agentId: string) {
   return agentLabels[agentId] || agentId || '未归属'
+}
+
+function phaseLabel(phase?: string) {
+  return workflowPhaseLabels[(phase || 'review') as WorkflowPhase] || phase || '复盘'
+}
+
+function workflowContext(subtask: Subtask) {
+  return subtask.context_json || {}
+}
+
+function workflowNodeKey(subtask: Subtask) {
+  const context = workflowContext(subtask)
+  return typeof context.workflowNodeId === 'string' ? context.workflowNodeId : subtask.id
+}
+
+function dependencyLabels(subtask: Subtask) {
+  const dependsOn = Array.isArray(workflowContext(subtask).dependsOn) ? workflowContext(subtask).dependsOn as string[] : []
+  if (!dependsOn.length) return ['无前置依赖']
+  return dependsOn.map((nodeId) => {
+    const upstream = selectedTask.value?.subtasks.find(item => workflowNodeKey(item) === nodeId)
+    return upstream ? `${upstream.title}（${subtaskStatusText(upstream.status)}）` : nodeId
+  })
+}
+
+function expectedOutputs(subtask: Subtask) {
+  const outputs = workflowContext(subtask).expectedOutputs
+  if (Array.isArray(outputs) && outputs.length) return outputs.map(String)
+  return subtask.expected_output ? [subtask.expected_output] : ['按角色规范输出报告']
+}
+
+function executionModeLabel(subtask: Subtask) {
+  const mode = typeof workflowContext(subtask).executionMode === 'string' ? String(workflowContext(subtask).executionMode) : 'report'
+  return executionModeLabels[mode] || mode
 }
 
 function agentInitial(agentId: string) {
@@ -2246,7 +2738,17 @@ function shouldSyncTaskForEvent(type: string) {
 function shouldRefreshEventsForSync(type: string) {
   return [
     'plan.accepted',
+    'plan.generated',
+    'plan.confirmed',
+    'plan.feedback.queued',
+    'coordinator.clarification_required',
+    'coordinator.clarification_answered',
     'plan.invalid',
+    'workflow.node.ready',
+    'workflow.node.completed',
+    'workflow.node.skipped',
+    'workflow.dependency.unlocked',
+    'workflow.completed',
     'agent.done',
     'agent.error',
     'agent.cancelled',
@@ -2361,6 +2863,14 @@ watch(
   (raw) => {
     if (raw && (!planDraft.value.trim() || selectedTask.value?.subtasks.length === 0)) {
       planDraft.value = raw
+    }
+    if (isClarificationPlan.value) {
+      const previous = acceptedPlan.value?.clarificationAnswers || {}
+      const next = { ...clarificationAnswers.value }
+      for (const question of planQuestions.value) {
+        if (next[question.id] == null) next[question.id] = String(previous[question.id] || '')
+      }
+      clarificationAnswers.value = next
     }
   },
   { flush: 'post' }
@@ -2678,6 +3188,243 @@ watch(
 
 .plan-review__acceptance li + li {
   margin-top: 5px;
+}
+
+.plan-notes,
+.plan-feedback-box {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-card);
+}
+
+.plan-notes {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.plan-notes section {
+  min-width: 0;
+}
+
+.plan-notes span,
+.plan-feedback-box span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.plan-notes ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.plan-feedback-box p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.plan-review--clarify {
+  padding: 12px;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.05);
+}
+
+.clarify-panel,
+.participant-matrix,
+.workflow-phase-lanes {
+  display: grid;
+  gap: 12px;
+}
+
+.clarify-panel__facts,
+.clarify-question,
+.participant-card,
+.workflow-phase,
+.workflow-plan-node {
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-card);
+}
+
+.clarify-panel__facts,
+.clarify-question,
+.participant-card,
+.workflow-phase,
+.workflow-plan-node {
+  padding: 12px;
+}
+
+.clarify-running-banner {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.34);
+  border-radius: 8px;
+  background: rgba(var(--color-primary-rgb), 0.08);
+}
+
+.clarify-running-banner i {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb), 0.16);
+  animation: spin 1.1s linear infinite;
+}
+
+.clarify-running-banner strong {
+  color: var(--text-primary);
+}
+
+.clarify-running-banner p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.clarify-panel__facts span,
+.clarify-question > span,
+.workflow-node-deps span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.clarify-panel__facts ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+}
+
+.clarify-question {
+  display: grid;
+  gap: 10px;
+}
+
+.clarify-question strong,
+.workflow-plan-node__top strong {
+  color: var(--text-primary);
+}
+
+.clarify-question small {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.participant-matrix {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.participant-card--off {
+  opacity: 0.58;
+}
+
+.participant-card strong {
+  display: block;
+  margin-top: 10px;
+  color: var(--text-primary);
+}
+
+.participant-card p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.workflow-phase-lanes {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: start;
+}
+
+.workflow-phase__head,
+.workflow-plan-node__top,
+.workflow-plan-node__meta,
+.workflow-node-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.workflow-phase__head span {
+  color: var(--color-primary);
+  font-weight: 800;
+}
+
+.workflow-phase__head strong,
+.workflow-plan-node__top span,
+.workflow-plan-node__meta,
+.workflow-node-meta,
+.workflow-node-deps p {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.workflow-phase__nodes {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.workflow-plan-node {
+  display: grid;
+  gap: 8px;
+}
+
+.workflow-plan-node p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.workflow-node-meta {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+
+.workflow-node-meta span {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(var(--color-primary-rgb), 0.1);
+  color: var(--color-primary);
+}
+
+.workflow-node-deps {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.14);
+  border: 1px solid var(--border-subtle);
+}
+
+.workflow-node-deps p {
+  margin: 0;
+  line-height: 1.5;
 }
 
 .plan-waiting {
@@ -3032,6 +3779,11 @@ watch(
   background: rgba(46, 160, 67, 0.14);
 }
 
+.status-chip--skipped {
+  color: var(--text-tertiary);
+  background: rgba(148, 163, 184, 0.12);
+}
+
 .status-chip--failed,
 .status-chip--blocked {
   color: var(--color-error);
@@ -3039,7 +3791,10 @@ watch(
 }
 
 .status-chip--planning,
+.status-chip--clarifying,
 .status-chip--dispatching,
+.status-chip--ready,
+.status-chip--queued,
 .status-chip--assigned {
   color: var(--color-warning);
   background: rgba(245, 158, 11, 0.14);
@@ -3257,6 +4012,15 @@ watch(
   justify-content: space-between;
   gap: 12px;
   grid-column: 1 / -1;
+}
+
+.mission-hero__tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: 0 0 auto;
 }
 
 .mission-hero__tips {
@@ -3639,6 +4403,10 @@ watch(
 
 .member-card__file {
   margin-top: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  gap: 8px;
+  align-items: stretch;
 }
 
 .member-file-pill {
@@ -3653,6 +4421,27 @@ watch(
   background: rgba(var(--color-primary-rgb), 0.1);
   color: var(--text-primary);
   cursor: pointer;
+}
+
+.member-file-dir,
+.story-output-dir,
+.output-row__dir {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.22);
+  border-radius: 8px;
+  background: rgba(var(--color-primary-rgb), 0.08);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.member-file-dir:hover,
+.story-output-dir:hover,
+.output-row__dir:hover {
+  color: var(--text-primary);
+  border-color: rgba(var(--color-primary-rgb), 0.45);
+  background: rgba(var(--color-primary-rgb), 0.14);
 }
 
 .member-file-pill span {
@@ -3851,6 +4640,13 @@ watch(
   gap: 8px;
 }
 
+.event-item__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .event-item__top {
   display: flex;
   align-items: center;
@@ -3892,12 +4688,11 @@ watch(
   background: var(--bg-card);
   color: var(--text-primary);
   display: grid;
-  grid-template-columns: 20px 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 8px;
-  padding: 10px;
-  cursor: pointer;
-  text-align: left;
+  padding: 6px;
+  overflow: hidden;
 }
 
 .output-row--summary {
@@ -3914,6 +4709,25 @@ watch(
   min-width: 0;
   display: grid;
   gap: 4px;
+}
+
+.output-row__main {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 4px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.output-row__dir {
+  width: 32px;
+  height: 32px;
 }
 
 .output-row__content strong {
@@ -3962,6 +4776,28 @@ watch(
 
 .preview-state--error {
   color: var(--color-error);
+}
+
+.preview-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-card);
+}
+
+.preview-toolbar span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 12px;
 }
 
 .preview-content {
@@ -4315,17 +5151,26 @@ watch(
   border-radius: 8px;
   background: rgba(var(--color-primary-rgb), 0.08);
   color: var(--text-primary);
-  cursor: pointer;
+}
+
+.story-output-hero-wrap {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
+  gap: 8px;
+  align-items: stretch;
 }
 
 .story-output-hero {
   min-width: 0;
+  width: 100%;
   display: grid;
   grid-template-columns: 26px minmax(0, 1fr);
   gap: 10px;
   align-items: center;
   padding: 12px;
   text-align: left;
+  cursor: pointer;
 }
 
 .story-output-list {
@@ -4340,11 +5185,30 @@ watch(
 .story-output-row {
   width: 100%;
   display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  gap: 8px;
+  align-items: center;
+  padding: 5px;
+  text-align: left;
+  overflow: hidden;
+}
+
+.story-output-row__main {
+  min-width: 0;
+  display: grid;
   grid-template-columns: 22px minmax(0, 1fr) 18px;
   gap: 10px;
   align-items: center;
-  padding: 10px 11px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 5px 6px;
   text-align: left;
+  cursor: pointer;
+}
+
+.story-output-dir {
+  min-width: 34px;
 }
 
 .story-output-hero span,
@@ -4785,6 +5649,13 @@ watch(
   flex-wrap: wrap;
 }
 
+.terminal-entry__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .terminal-entry__file {
   color: #5eead4;
   font-size: 12px;
@@ -4883,6 +5754,12 @@ watch(
   }
 }
 
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @media (max-width: 1180px) {
   .task-command-layout {
     grid-template-columns: 300px minmax(0, 1fr);
@@ -4902,6 +5779,10 @@ watch(
     grid-column: 1 / -1;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .participant-matrix {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -4944,6 +5825,11 @@ watch(
   }
 
   .mission-flow__rail {
+    grid-template-columns: 1fr;
+  }
+
+  .participant-matrix,
+  .workflow-phase-lanes {
     grid-template-columns: 1fr;
   }
 

@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { taskApi } from '@/api/tasks'
-import type { CreateTaskRequest, Task, TaskEvent, TaskOutput, TaskStatus } from '@/types/task'
+import type { CreateTaskRequest, Task, TaskEvent, TaskOutput } from '@/types/task'
 
 const DEFAULT_EVENT_LIMIT = 400
 const LOCAL_EVENT_WINDOW_SECONDS = 2
@@ -180,7 +180,18 @@ export const useTasksStore = defineStore('tasks', () => {
 
       switch (event.type) {
         case 'plan.accepted':
+        case 'plan.generated':
           task.status = 'dispatching'
+          break
+        case 'coordinator.clarification_required':
+          task.status = 'clarifying'
+          break
+        case 'coordinator.clarification_answered':
+        case 'plan.feedback.queued':
+          task.status = 'planning'
+          break
+        case 'plan.confirmed':
+          task.status = 'running'
           break
         case 'task.dispatch.queued':
           task.status = 'running'
@@ -197,8 +208,16 @@ export const useTasksStore = defineStore('tasks', () => {
         case 'subtask.retry.queued':
         case 'agent.run.queued':
           if (subtask) {
-            subtask.status = 'assigned'
+            subtask.status = 'queued'
             subtask.progress = Math.max(Number(subtask.progress || 0), 10)
+            subtask.error = null
+          }
+          break
+        case 'workflow.node.ready':
+        case 'workflow.dependency.unlocked':
+          if (subtask) {
+            subtask.status = event.type === 'workflow.node.ready' ? 'queued' : 'ready'
+            subtask.progress = Math.max(Number(subtask.progress || 0), event.type === 'workflow.node.ready' ? 15 : 10)
             subtask.error = null
           }
           break
@@ -216,8 +235,16 @@ export const useTasksStore = defineStore('tasks', () => {
           }
           break
         case 'agent.done':
+        case 'workflow.node.completed':
           if (subtask) {
             subtask.status = 'completed'
+            subtask.progress = 100
+            subtask.error = null
+          }
+          break
+        case 'workflow.node.skipped':
+          if (subtask) {
+            subtask.status = 'skipped'
             subtask.progress = 100
             subtask.error = null
           }
@@ -316,8 +343,38 @@ export const useTasksStore = defineStore('tasks', () => {
     return response
   }
 
+  async function confirmPlan(taskId: string) {
+    const response = await taskApi.confirmPlan(taskId)
+    selectedTask.value = applyTaskResponse(response.task)
+    return response
+  }
+
+  async function submitPlanFeedback(taskId: string, feedback: string) {
+    const response = await taskApi.submitPlanFeedback(taskId, feedback)
+    selectedTask.value = applyTaskResponse(response.task)
+    return response
+  }
+
+  async function submitClarifications(taskId: string, answers: Record<string, string>) {
+    const response = await taskApi.submitClarifications(taskId, answers)
+    selectedTask.value = applyTaskResponse(response.task)
+    return response
+  }
+
+  async function runWorkflow(taskId: string) {
+    const response = await taskApi.runWorkflow(taskId)
+    selectedTask.value = applyTaskResponse(response.task)
+    return response
+  }
+
   async function retrySubtask(subtaskId: string) {
     const response = await taskApi.retrySubtask(subtaskId)
+    selectedTask.value = applyTaskResponse(response.task)
+    return response
+  }
+
+  async function skipWorkflowNode(subtaskId: string, reason = '') {
+    const response = await taskApi.skipWorkflowNode(subtaskId, reason)
     selectedTask.value = applyTaskResponse(response.task)
     return response
   }
@@ -446,7 +503,12 @@ export const useTasksStore = defineStore('tasks', () => {
     createTask,
     applyPlan,
     dispatchTask,
+    confirmPlan,
+    submitPlanFeedback,
+    submitClarifications,
+    runWorkflow,
     retrySubtask,
+    skipWorkflowNode,
     runPlan,
     runSubtasks,
     runSubtask,

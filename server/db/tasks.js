@@ -1,7 +1,7 @@
 import { getDatabase } from './index.js'
 
-export const TASK_STATUSES = ['draft', 'planning', 'dispatching', 'running', 'reviewing', 'completed', 'failed', 'cancelled']
-export const SUBTASK_STATUSES = ['pending', 'assigned', 'running', 'blocked', 'completed', 'failed']
+export const TASK_STATUSES = ['draft', 'planning', 'clarifying', 'dispatching', 'running', 'reviewing', 'completed', 'failed', 'cancelled']
+export const SUBTASK_STATUSES = ['pending', 'ready', 'queued', 'assigned', 'running', 'waiting_user', 'blocked', 'completed', 'failed', 'skipped']
 export const OUTPUT_STATUSES = ['pending_review', 'accepted', 'rejected']
 
 function nowSeconds() {
@@ -19,7 +19,7 @@ function parseJson(value, fallback = null) {
 
 function taskProgress(task, subtasks = []) {
   if (!subtasks.length) return 0
-  const total = subtasks.reduce((sum, subtask) => sum + Number(subtask.progress || 0), 0)
+  const total = subtasks.reduce((sum, subtask) => sum + (subtask.status === 'skipped' ? 100 : Number(subtask.progress || 0)), 0)
   return Math.round(total / subtasks.length)
 }
 
@@ -230,7 +230,7 @@ export function listTasks({ status, limit = 50 } = {}) {
     SELECT
       t.*,
       COUNT(DISTINCT s.id) as subtask_count,
-      SUM(CASE WHEN s.status = 'completed' THEN 1 ELSE 0 END) as completed_subtask_count,
+      SUM(CASE WHEN s.status IN ('completed', 'skipped') THEN 1 ELSE 0 END) as completed_subtask_count,
       COUNT(DISTINCT o.id) as output_count
     FROM tasks t
     LEFT JOIN subtasks s ON s.task_id = t.id
@@ -324,16 +324,22 @@ function keyValue(value) {
 
 export function savePlan(taskId, plan) {
   const db = getDatabase()
+  const isClarifying = plan?.decision === 'need_clarification'
+  const status = isClarifying ? 'clarifying' : 'dispatching'
+  const eventType = isClarifying ? 'coordinator.clarification_required' : 'plan.generated'
+  const message = isClarifying
+    ? `小呦需要补充 ${plan.questions?.length || 0} 个关键信息后再拆解`
+    : `小呦已生成动态协作计划，共 ${plan.workflow?.length || plan.subtasks?.length || 0} 个流程节点`
   db.prepare(`
     UPDATE tasks
-    SET plan_json = ?, status = 'dispatching', updated_at = unixepoch()
+    SET plan_json = ?, status = ?, updated_at = unixepoch()
     WHERE id = ?
-  `).run(JSON.stringify(plan), taskId)
+  `).run(JSON.stringify(plan), status, taskId)
   addTaskEvent({
     taskId,
     agentId: 'xiaomu',
-    type: 'plan.accepted',
-    message: `小呦拆解计划已通过校验，共 ${plan.subtasks.length} 个子任务`,
+    type: eventType,
+    message,
     payload: plan,
   })
   return getTaskDetail(taskId)
@@ -360,6 +366,7 @@ export function createSubtasksFromPlan(taskId, plan, agentMap) {
   const db = getDatabase()
   const task = getTaskDetail(taskId)
   if (!task) return null
+  if (plan?.decision === 'need_clarification') return task
 
   const existing = db.prepare('SELECT COUNT(*) as count FROM subtasks WHERE task_id = ?').get(taskId)
   if (existing.count > 0) {
@@ -370,24 +377,39 @@ export function createSubtasksFromPlan(taskId, plan, agentMap) {
     INSERT INTO subtasks (
       id, task_id, title, description, expected_output, assigned_agent_id,
       gateway_agent_id, session_key, status, progress, context_json, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'assigned', 5, ?, unixepoch(), unixepoch())
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch())
   `)
 
   const tx = db.transaction(() => {
-    plan.subtasks.forEach((subtask, index) => {
-      const agent = agentMap[subtask.assignedAgentId]
-      const subtaskId = `${taskId}-sub-${String(index + 1).padStart(2, '0')}`
+    const workflow = Array.isArray(plan.workflow) ? plan.workflow : plan.subtasks
+    workflow.forEach((node, index) => {
+      const agent = agentMap[node.assignedAgentId]
+      const workflowNodeId = node.id || `node-${String(index + 1).padStart(2, '0')}`
+      const safeNodeId = String(workflowNodeId).replace(/[^\w-]+/g, '-')
+      const subtaskId = `${taskId}-${safeNodeId}`
+      const dependsOn = Array.isArray(node.dependsOn) ? node.dependsOn : []
+      const initialStatus = dependsOn.length ? 'blocked' : 'ready'
       insert.run(
         subtaskId,
         taskId,
-        subtask.title,
-        subtask.description,
-        subtask.expectedOutput || '',
-        subtask.assignedAgentId,
+        node.title,
+        node.objective || node.description,
+        (node.expectedOutputs || [node.expectedOutput]).filter(Boolean).join('\n'),
+        node.assignedAgentId,
         agent.runtimeAgentId,
         agent.sessionKey,
+        initialStatus,
+        initialStatus === 'ready' ? 10 : 0,
         JSON.stringify({
-          expectedOutput: subtask.expectedOutput || '',
+          workflowNodeId,
+          phase: node.phase || 'review',
+          dependsOn,
+          requiredInputs: node.requiredInputs || [],
+          expectedOutputs: node.expectedOutputs || (node.expectedOutput ? [node.expectedOutput] : []),
+          executionMode: node.executionMode || 'report',
+          successCriteria: node.successCriteria || [],
+          skipCondition: node.skipCondition || '',
+          expectedOutput: (node.expectedOutputs || [node.expectedOutput]).filter(Boolean).join('\n'),
           acceptanceCriteria: plan.acceptanceCriteria || [],
         })
       )
@@ -402,9 +424,9 @@ export function createSubtasksFromPlan(taskId, plan, agentMap) {
 
   addTaskEvent({
     taskId,
-    type: 'task.dispatch.queued',
-    message: `平台已创建 ${plan.subtasks.length} 个子任务，等待 Claude Runtime 队列执行`,
-    payload: { subtaskCount: plan.subtasks.length, mode: 'claude-runtime' },
+    type: 'plan.confirmed',
+    message: `平台已确认动态协作计划，创建 ${plan.workflow?.length || plan.subtasks?.length || 0} 个流程节点`,
+    payload: { nodeCount: plan.workflow?.length || plan.subtasks?.length || 0, mode: 'claude-runtime' },
   })
 
   return getTaskDetail(taskId)
@@ -426,11 +448,77 @@ export function updateSubtask(subtaskId, updates) {
   return subtask
 }
 
+function workflowNodeKey(subtask) {
+  const context = parseJson(subtask.context_json, {})
+  return context?.workflowNodeId || subtask.id
+}
+
+function completedWorkflowKeys(subtasks) {
+  return new Set(
+    subtasks
+      .filter((subtask) => ['completed', 'skipped'].includes(subtask.status))
+      .map(workflowNodeKey)
+  )
+}
+
+export function refreshWorkflowReadiness(taskId) {
+  const db = getDatabase()
+  const subtasks = db.prepare('SELECT * FROM subtasks WHERE task_id = ? ORDER BY created_at ASC').all(taskId)
+  const completed = completedWorkflowKeys(subtasks)
+  const unlocked = []
+
+  for (const subtask of subtasks) {
+    if (!['blocked', 'pending'].includes(subtask.status)) continue
+    const context = parseJson(subtask.context_json, {})
+    const dependsOn = Array.isArray(context.dependsOn) ? context.dependsOn : []
+    const ready = dependsOn.every((nodeId) => completed.has(nodeId))
+    if (!ready) continue
+    db.prepare(`
+      UPDATE subtasks
+      SET status = 'ready', progress = CASE WHEN progress < 10 THEN 10 ELSE progress END, error = NULL, updated_at = unixepoch()
+      WHERE id = ?
+    `).run(subtask.id)
+    unlocked.push(subtask.id)
+    addTaskEvent({
+      taskId,
+      subtaskId: subtask.id,
+      agentId: subtask.assigned_agent_id,
+      type: 'workflow.dependency.unlocked',
+      message: `${subtask.title} 的前置依赖已满足，进入可执行状态`,
+      payload: { dependsOn },
+    })
+  }
+
+  if (unlocked.length) db.prepare('UPDATE tasks SET updated_at = unixepoch() WHERE id = ?').run(taskId)
+  refreshTaskStatus(taskId)
+  return { task: getTaskDetail(taskId), unlocked }
+}
+
+export function skipSubtask(subtaskId, reason = '用户确认跳过该节点') {
+  const subtask = getSubtask(subtaskId)
+  if (!subtask) return null
+  updateSubtask(subtaskId, {
+    status: 'skipped',
+    progress: 100,
+    result_summary: reason,
+    completed_at: nowSeconds(),
+    error: null,
+  })
+  addTaskEvent({
+    taskId: subtask.task_id,
+    subtaskId,
+    agentId: subtask.assigned_agent_id,
+    type: 'workflow.node.skipped',
+    message: reason,
+  })
+  return refreshWorkflowReadiness(subtask.task_id).task
+}
+
 export function refreshTaskStatus(taskId) {
   const db = getDatabase()
   const subtasks = db.prepare('SELECT status FROM subtasks WHERE task_id = ?').all(taskId)
   if (!subtasks.length) return getTaskDetail(taskId)
-  const allCompleted = subtasks.every((subtask) => subtask.status === 'completed')
+  const allCompleted = subtasks.every((subtask) => ['completed', 'skipped'].includes(subtask.status))
   const anyFailed = subtasks.some((subtask) => subtask.status === 'failed')
   const status = allCompleted ? 'reviewing' : anyFailed ? 'failed' : 'running'
   db.prepare('UPDATE tasks SET status = ?, updated_at = unixepoch() WHERE id = ?').run(status, taskId)

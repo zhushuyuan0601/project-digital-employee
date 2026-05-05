@@ -134,6 +134,12 @@ interface TaskOutputResponse {
   output: TaskOutput
 }
 
+interface OpenDirectoryResponse {
+  success: boolean
+  path: string
+  workspaceAvailable?: boolean
+}
+
 interface AgentRunLogsResponse {
   success: boolean
   logs: AgentRunLog[]
@@ -177,6 +183,32 @@ export const taskApi = {
     })
   },
 
+  confirmPlan(taskId: string) {
+    return request<TaskResponse>(`/api/tasks/${encodeURIComponent(taskId)}/plan/confirm`, {
+      method: 'POST',
+    })
+  },
+
+  submitPlanFeedback(taskId: string, feedback: string) {
+    return request<TaskResponse>(`/api/tasks/${encodeURIComponent(taskId)}/plan/feedback`, {
+      method: 'POST',
+      body: JSON.stringify({ feedback }),
+    })
+  },
+
+  submitClarifications(taskId: string, answers: Record<string, string>) {
+    return request<TaskResponse>(`/api/tasks/${encodeURIComponent(taskId)}/clarifications`, {
+      method: 'POST',
+      body: JSON.stringify({ answers }),
+    })
+  },
+
+  runWorkflow(taskId: string) {
+    return request<TaskResponse>(`/api/tasks/${encodeURIComponent(taskId)}/workflow/run`, {
+      method: 'POST',
+    })
+  },
+
   runPlan(taskId: string) {
     return request<TaskResponse>(`/api/tasks/${encodeURIComponent(taskId)}/plan/run`, {
       method: 'POST',
@@ -198,6 +230,13 @@ export const taskApi = {
   retrySubtask(subtaskId: string) {
     return request<TaskResponse>(`/api/subtasks/${encodeURIComponent(subtaskId)}/retry`, {
       method: 'POST',
+    })
+  },
+
+  skipWorkflowNode(subtaskId: string, reason = '') {
+    return request<TaskResponse>(`/api/workflow-nodes/${encodeURIComponent(subtaskId)}/skip`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
     })
   },
 
@@ -316,6 +355,19 @@ export const taskApi = {
     return request<TaskOutputResponse>(`/api/tasks/outputs/${encodeURIComponent(String(outputId))}`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
+    })
+  },
+
+  openFileDirectory(path: string) {
+    return request<OpenDirectoryResponse>('/api/files/open-directory', {
+      method: 'POST',
+      body: JSON.stringify({ path }),
+    })
+  },
+
+  openTaskWorkspace(taskId: string) {
+    return request<OpenDirectoryResponse>(`/api/tasks/${encodeURIComponent(taskId)}/open-workspace`, {
+      method: 'POST',
     })
   },
 }

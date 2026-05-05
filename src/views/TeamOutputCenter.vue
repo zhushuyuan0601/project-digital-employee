@@ -178,6 +178,17 @@
                   <span>{{ agentName(output.agent_id || '') }}</span>
                   <span>{{ output.subtask_title || output.subtask_id || '主任务' }}</span>
                 </div>
+                <div class="output-card-actions">
+                  <button
+                    type="button"
+                    class="output-card-action"
+                    :disabled="!output.path"
+                    @click="openOutputDirectory(output)"
+                  >
+                    <i class="ri-folder-open-line"></i>
+                    打开目录
+                  </button>
+                </div>
               </article>
             </div>
           </section>
@@ -190,6 +201,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { taskApi } from '@/api/tasks'
 import { AGENT_DEFINITIONS } from '@/config/agents'
 import { useTasksStore } from '@/stores/tasks'
 import type { Task, TaskOutput, TaskOutputStatus, TaskStatus } from '@/types/task'
@@ -342,6 +355,7 @@ function taskStatusText(status: TaskStatus) {
   const labels: Record<TaskStatus, string> = {
     draft: '草稿',
     planning: '拆解中',
+    clarifying: '待补充',
     dispatching: '派发中',
     running: '执行中',
     reviewing: '待验收',
@@ -384,6 +398,19 @@ function formatTime(value?: number | null) {
 
 function openTask(taskId: string) {
   router.push({ path: '/task-center-2', query: { task: taskId } })
+}
+
+async function openOutputDirectory(output: TaskOutput) {
+  if (!output.path) {
+    ElMessage.warning('该成果没有可打开的本地文件路径')
+    return
+  }
+  try {
+    await taskApi.openFileDirectory(output.path)
+    ElMessage.success('已打开成果所在目录')
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '打开目录失败')
+  }
 }
 
 watch(activeTab, (tab) => {
@@ -810,6 +837,34 @@ onMounted(async () => {
 
 .output-status {
   color: var(--color-primary);
+}
+
+.output-card-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.output-card-action {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.26);
+  border-radius: 8px;
+  padding: 0 10px;
+  background: rgba(var(--color-primary-rgb), 0.08);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.output-card-action:hover:not(:disabled) {
+  border-color: rgba(var(--color-primary-rgb), 0.5);
+  background: rgba(var(--color-primary-rgb), 0.14);
+}
+
+.output-card-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .empty-output {
