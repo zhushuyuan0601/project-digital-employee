@@ -54,9 +54,7 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/capability',
-    name: 'capability',
-    component: () => import('@/views/CapabilityCenter.vue'),
-    meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
+    redirect: '/dashboard'
   },
   {
     path: '/chat',
@@ -70,7 +68,7 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/tools',
-    redirect: { path: '/capability', query: { tab: 'tools' } }
+    redirect: '/dashboard'
   },
   {
     path: '/group-chat',
@@ -80,23 +78,19 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/skills',
-    redirect: { path: '/capability', query: { tab: 'skills' } }
+    redirect: '/dashboard'
   },
   {
     path: '/skills-old',
-    redirect: { path: '/capability', query: { tab: 'skills' } }
+    redirect: '/dashboard'
   },
   {
     path: '/tokens',
-    name: 'tokens',
-    component: () => import('@/views/Tokens.vue'),
-    meta: { requiresAuth: true }
+    redirect: '/dashboard'
   },
   {
     path: '/memory',
-    name: 'memory',
-    component: () => import('@/views/Memory.vue'),
-    meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
+    redirect: '/dashboard'
   },
   {
     path: '/analysis',

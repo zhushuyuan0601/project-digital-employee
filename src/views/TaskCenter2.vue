@@ -84,7 +84,33 @@
             <span class="status-chip" :class="`status-chip--${selectedTask.status}`">{{ statusText(selectedTask.status) }}</span>
           </div>
           <div class="mission-hero__tips">
-            <span v-for="tip in taskHeaderTips" :key="tip" class="mission-tip">{{ tip }}</span>
+            <span
+              v-for="tip in taskHeaderTips"
+              :key="tip.label"
+              class="mission-tip"
+              :title="tip.detail"
+            >
+              {{ tip.label }}
+            </span>
+            <div class="mission-detail-tip">
+              <button type="button" class="mission-detail-tip__trigger">
+                <i class="ri-file-list-3-line"></i>
+                任务详情
+              </button>
+              <div class="mission-detail-popover">
+                <div class="mission-detail-popover__head">
+                  <strong>{{ selectedTask.title }}</strong>
+                  <small>{{ taskDetailMeta }}</small>
+                </div>
+                <div v-if="taskDetailItems.length" class="mission-detail-popover__facts">
+                  <div v-for="item in taskDetailItems" :key="item.label">
+                    <span>{{ item.label }}</span>
+                    <strong>{{ item.value }}</strong>
+                  </div>
+                </div>
+                <pre>{{ taskDetailBody }}</pre>
+              </div>
+            </div>
           </div>
           <div class="mission-hero__metrics">
             <div>
@@ -280,7 +306,7 @@
         </section>
 
         <section
-          v-if="selectedTask && needsPlan(selectedTask)"
+          v-if="selectedTask && (needsPlan(selectedTask) || acceptedPlan)"
           ref="planSectionRef"
           class="surface plan-console"
           :class="{ 'plan-console--focus': taskFlowCurrentKey === 'plan' }"
@@ -288,7 +314,7 @@
           <div class="surface-heading">
             <div>
               <p class="eyebrow">拆解计划</p>
-              <h2>应用小呦返回的 JSON</h2>
+              <h2>{{ acceptedPlan ? (selectedTask.subtasks.length ? '已确认的小呦拆解方案' : '确认小呦拆解方案') : '等待小呦结构化拆解' }}</h2>
             </div>
             <div class="plan-heading-actions">
               <button
@@ -307,16 +333,84 @@
               </button>
             </div>
           </div>
-          <textarea
-            v-model="planDraft"
-            class="field field--plan"
-            placeholder="粘贴小呦返回的结构化 JSON，平台会校验并自动派发子任务。"
-          ></textarea>
+          <div v-if="acceptedPlan" class="plan-review">
+            <div class="plan-review__summary">
+              <div>
+                <span>任务目标</span>
+                <strong>{{ acceptedPlan.goal }}</strong>
+              </div>
+              <div>
+                <span>子任务</span>
+                <strong>{{ acceptedPlan.subtasks.length }} 个</strong>
+              </div>
+              <div>
+                <span>验收标准</span>
+                <strong>{{ acceptedPlan.acceptanceCriteria.length }} 条</strong>
+              </div>
+            </div>
+
+            <div class="plan-review__grid">
+              <article
+                v-for="(subtask, index) in acceptedPlan.subtasks"
+                :key="`${subtask.assignedAgentId}-${subtask.title}-${index}`"
+                class="plan-review-card"
+              >
+                <div class="plan-review-card__head">
+                  <span>{{ index + 1 }}</span>
+                  <div>
+                    <strong>{{ subtask.title }}</strong>
+                    <small>{{ agentName(subtask.assignedAgentId) }}</small>
+                  </div>
+                </div>
+                <p>{{ subtask.description }}</p>
+                <div class="plan-review-card__output">
+                  <span>交付物</span>
+                  <p>{{ subtask.expectedOutput || '未指定，按角色报告规范交付。' }}</p>
+                </div>
+              </article>
+            </div>
+
+            <div class="plan-review__acceptance">
+              <span>验收标准</span>
+              <ol>
+                <li v-for="item in acceptedPlan.acceptanceCriteria" :key="item">{{ item }}</li>
+              </ol>
+            </div>
+          </div>
+          <div v-else class="plan-waiting">
+            <i class="ri-loader-4-line"></i>
+            <div>
+              <strong>小呦正在拆解任务</strong>
+              <p>拆解完成后，这里会展示目标、负责人、交付物和验收标准；确认后才会派发执行。</p>
+            </div>
+          </div>
+          <details class="plan-raw">
+            <summary>{{ acceptedPlan ? '查看结构化 JSON' : '手动粘贴结构化 JSON' }}</summary>
+            <textarea
+              v-model="planDraft"
+              class="field field--plan"
+              :placeholder="acceptedPlan ? acceptedPlanRaw : '粘贴小呦返回的结构化 JSON，平台会校验后进入确认节点。'"
+            ></textarea>
+          </details>
           <div class="plan-actions">
-            <span>状态：{{ statusText(selectedTask.status) }}</span>
-            <button class="primary-btn" type="button" :disabled="applyingPlan || !planDraft.trim()" @click="applyPlan">
+            <span>状态：{{ acceptedPlan && selectedTask.subtasks.length ? '已确认派发' : statusText(selectedTask.status) }}</span>
+            <button
+              v-if="acceptedPlan && selectedTask.subtasks.length === 0"
+              class="primary-btn"
+              type="button"
+              :disabled="confirmingPlan"
+              @click="confirmPlanDispatch"
+            >
+              <i class="ri-send-plane-line"></i>
+              {{ confirmingPlan ? '派发中' : '确认并派发' }}
+            </button>
+            <span v-else-if="acceptedPlan" class="plan-confirmed-chip">
+              <i class="ri-checkbox-circle-line"></i>
+              子任务已创建
+            </span>
+            <button v-else class="primary-btn" type="button" :disabled="applyingPlan || !planDraft.trim()" @click="applyPlan">
               <i class="ri-node-tree"></i>
-              {{ applyingPlan ? '应用中' : '校验并派发' }}
+              {{ applyingPlan ? '校验中' : '校验拆解计划' }}
             </button>
           </div>
         </section>
@@ -687,7 +781,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
 import { useTasksStore } from '@/stores/tasks'
 import { useThemeStore } from '@/stores/theme'
-import type { Subtask, Task, TaskEvent, TaskOutput, TaskStatus, SubtaskStatus } from '@/types/task'
+import type { Subtask, Task, TaskEvent, TaskOutput, TaskPlan, TaskStatus, SubtaskStatus } from '@/types/task'
 
 const TASK_EVENT_LIMIT = 400
 const TASK_SYNC_DEBOUNCE_MS = 1200
@@ -722,6 +816,7 @@ const createForm = reactive({
 const createDialog = ref(false)
 const creating = ref(false)
 const applyingPlan = ref(false)
+const confirmingPlan = ref(false)
 const rerunningPlan = ref(false)
 const scanningOutputs = ref(false)
 const finalizingSummary = ref(false)
@@ -1427,6 +1522,13 @@ const activeMemberStorySummary = computed(() => {
   return cleanText(subtask.description, 180)
 })
 
+const acceptedPlan = computed<TaskPlan | null>(() => selectedTask.value?.plan_json || null)
+
+const acceptedPlanRaw = computed(() => {
+  if (!acceptedPlan.value) return ''
+  return JSON.stringify(acceptedPlan.value, null, 2)
+})
+
 function subtaskActivityTimestampMs(subtask: Subtask) {
   const latestEvent = [...selectedTaskEvents.value]
     .reverse()
@@ -1456,7 +1558,7 @@ const taskFlowCurrentKey = computed<'create' | 'plan' | 'execute' | 'review' | '
   if (!task) return 'create'
   if (task.status === 'completed') return 'archive'
   if (task.status === 'reviewing' || hasReviewSummary.value || canFinalize.value) return 'review'
-  if (task.subtasks.length > 0 || ['dispatching', 'running'].includes(task.status)) return 'execute'
+  if (task.subtasks.length > 0) return 'execute'
   return 'plan'
 })
 
@@ -1478,7 +1580,9 @@ const taskFlowSteps = computed<TaskFlowStep[]>(() => {
       title: '拆解计划',
       description: task?.subtasks.length
         ? `小呦已拆解出 ${task.subtasks.length} 个子任务。`
-        : '等待小呦输出 JSON 计划，并在拆解区校验派发。',
+        : task?.plan_json
+          ? '小呦已输出拆解计划，等待确认派发。'
+          : '等待小呦输出结构化计划，并在拆解区确认。',
     },
     {
       key: 'execute',
@@ -1538,8 +1642,10 @@ const taskFlowCallout = computed<TaskFlowCallout>(() => {
 
   if (taskFlowCurrentKey.value === 'plan') {
     return {
-      title: '当前处于拆解阶段',
-      detail: '如果小呦已经输出计划，就到拆解区校验并派发；否则先等待拆解结果。',
+      title: task.plan_json ? '当前等待确认拆解计划' : '当前处于拆解阶段',
+      detail: task.plan_json
+        ? '请先查看小呦拆出的目标、子任务、负责人、交付物和验收标准，确认后再派发执行。'
+        : '等待小呦输出结构化计划；也可以手动粘贴 JSON 进入确认节点。',
       actionLabel: '前往拆解区',
       target: 'plan',
     }
@@ -1598,16 +1704,75 @@ const taskHeaderTips = computed(() => {
   if (!task) return []
 
   const tips = [
-    cleanText(task.description, 42),
-    `当前 ${statusText(task.status)}`,
-    `${completedCount(task)}/${task.subtasks.length} 子任务完成`,
+    {
+      label: taskDetailSummary.value,
+      detail: cleanText(task.description, 1200),
+    },
+    {
+      label: `当前 ${statusText(task.status)}`,
+      detail: `任务状态：${statusText(task.status)}。更新时间：${formatTime(task.updated_at)}`,
+    },
+    {
+      label: `${completedCount(task)}/${task.subtasks.length} 子任务完成`,
+      detail: task.subtasks.length
+        ? task.subtasks.map(subtask => `${agentName(subtask.assigned_agent_id)}：${subtask.title}（${subtaskStatusText(subtask.status)}）`).join('\n')
+        : '等待小呦拆解子任务。',
+    },
   ]
 
   if (task.outputs.length > 0) {
-    tips.push(`已产出 ${task.outputs.length} 个成果`)
+    tips.push({
+      label: `已产出 ${task.outputs.length} 个成果`,
+      detail: task.outputs.map(output => output.name).join('\n'),
+    })
   }
 
   return tips.slice(0, 4)
+})
+
+const taskDetailMeta = computed(() => {
+  const task = selectedTask.value
+  if (!task) return ''
+  return `优先级 ${task.priority || 'normal'} · ${formatTime(task.created_at)} 创建 · ${formatTime(task.updated_at)} 更新`
+})
+
+const taskDetailSummary = computed(() => {
+  const task = selectedTask.value
+  if (!task) return '暂无任务详情'
+  const firstLine = task.description
+    .split('\n')
+    .map(line => line.trim())
+    .find(Boolean) || task.description
+  return cleanText(firstLine, 58)
+})
+
+const taskDetailItems = computed(() => {
+  const task = selectedTask.value
+  if (!task) return []
+  const labels = ['邮件渠道', '邮箱账号', '邮件 UID', 'Message-ID', '发件人', '收件时间']
+  const lines = task.description.split('\n').map(line => line.trim()).filter(Boolean)
+  return labels
+    .map((label) => {
+      const prefix = `${label}：`
+      const line = lines.find(item => item.startsWith(prefix))
+      return line ? { label, value: cleanText(line.slice(prefix.length), 180) } : null
+    })
+    .filter((item): item is { label: string; value: string } => Boolean(item))
+})
+
+const taskDetailBody = computed(() => {
+  const task = selectedTask.value
+  if (!task) return ''
+  const description = task.description
+  const mailBodyIndex = description.indexOf('## 邮件正文')
+  if (mailBodyIndex >= 0) {
+    const outputIndex = description.indexOf('## 附件', mailBodyIndex)
+    const body = description
+      .slice(mailBodyIndex + '## 邮件正文'.length, outputIndex >= 0 ? outputIndex : undefined)
+      .trim()
+    return body ? cleanText(body, 1800) : '邮件正文为空。'
+  }
+  return cleanText(description, 1800)
 })
 
 const orderedTaskOutputs = computed(() => {
@@ -1662,7 +1827,7 @@ async function refreshRuntimeStatus() {
 async function selectTask(taskId: string) {
   try {
     await tasksStore.fetchTask(taskId)
-    planDraft.value = ''
+    planDraft.value = selectedTask.value?.plan_json ? JSON.stringify(selectedTask.value.plan_json, null, 2) : ''
     summaryDraft.value = selectedTask.value?.summary || ''
     await scrollTaskRowIntoView(taskId)
   } catch (err) {
@@ -1708,16 +1873,30 @@ async function applyPlan() {
   applyingPlan.value = true
   try {
     const response = await tasksStore.applyPlan(selectedTask.value.id, planDraft.value)
-    planDraft.value = ''
-    const runResponse = await tasksStore.runSubtasks(response.task.id)
+    planDraft.value = response.task.plan_json ? JSON.stringify(response.task.plan_json, null, 2) : ''
     await tasksStore.fetchTask(response.task.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
-    ElMessage.success(`计划已校验，${runResponse.runs?.length || 0} 个子任务已进入 Claude Runtime 队列`)
+    ElMessage.success('拆解计划已校验，请确认后派发执行')
     await refreshRuntimeStatus()
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '计划应用失败')
     await tasksStore.fetchTask(selectedTask.value.id)
   } finally {
     applyingPlan.value = false
+  }
+}
+
+async function confirmPlanDispatch() {
+  if (!selectedTask.value?.plan_json || confirmingPlan.value) return
+  confirmingPlan.value = true
+  try {
+    const response = await tasksStore.dispatchTask(selectedTask.value.id)
+    await tasksStore.fetchTask(response.task.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
+    ElMessage.success(`拆解计划已确认，已入队 ${response.runs?.length || 0} 个 Claude Runtime run`)
+    await refreshRuntimeStatus()
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '确认派发失败')
+  } finally {
+    confirmingPlan.value = false
   }
 }
 
@@ -2178,6 +2357,16 @@ watch(
 )
 
 watch(
+  () => acceptedPlanRaw.value,
+  (raw) => {
+    if (raw && (!planDraft.value.trim() || selectedTask.value?.subtasks.length === 0)) {
+      planDraft.value = raw
+    }
+  },
+  { flush: 'post' }
+)
+
+watch(
   () => selectedTask.value?.id,
   (taskId) => {
     if (taskId) openTaskEventStream(taskId)
@@ -2352,6 +2541,201 @@ watch(
   font-family: var(--font-mono);
   font-size: 12px;
   resize: vertical;
+}
+
+.plan-review,
+.plan-waiting,
+.plan-raw {
+  margin-top: 12px;
+}
+
+.plan-review {
+  display: grid;
+  gap: 12px;
+}
+
+.plan-review__summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px 120px;
+  gap: 10px;
+}
+
+.plan-review__summary div,
+.plan-review__acceptance,
+.plan-waiting {
+  border: 1px solid rgba(var(--color-primary-rgb), 0.22);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.08), transparent 56%),
+    var(--bg-card);
+}
+
+.plan-review__summary div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 11px 12px;
+}
+
+.plan-review__summary span,
+.plan-review-card__output span,
+.plan-review__acceptance > span {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.plan-review__summary strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.plan-review__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.plan-review-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-card);
+}
+
+.plan-review-card__head {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.plan-review-card__head > span {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: #08111f;
+  background: var(--color-primary);
+  font-weight: 800;
+}
+
+.plan-review-card__head strong,
+.plan-review-card__head small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-review-card__head strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.plan-review-card__head small,
+.plan-review-card p,
+.plan-review-card__output p,
+.plan-review__acceptance li,
+.plan-waiting p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.plan-review-card p,
+.plan-review-card__output p,
+.plan-waiting p {
+  margin: 0;
+}
+
+.plan-review-card__output {
+  display: grid;
+  gap: 5px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.plan-review__acceptance {
+  padding: 12px;
+}
+
+.plan-review__acceptance ol {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.plan-review__acceptance li + li {
+  margin-top: 5px;
+}
+
+.plan-waiting {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 12px;
+}
+
+.plan-waiting i {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb), 0.12);
+  animation: liveDotPulse 1.3s ease-in-out infinite;
+}
+
+.plan-waiting strong {
+  color: var(--text-primary);
+}
+
+.plan-raw {
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  overflow: hidden;
+}
+
+.plan-raw summary {
+  padding: 10px 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.plan-raw .field--plan {
+  width: calc(100% - 24px);
+  min-height: 180px;
+  margin: 0 12px 12px;
+}
+
+.plan-confirmed-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid rgba(74, 222, 128, 0.3);
+  border-radius: 999px;
+  color: var(--color-success);
+  background: rgba(74, 222, 128, 0.08);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .field--select {
@@ -2890,6 +3274,7 @@ watch(
 .mission-tip {
   display: inline-flex;
   align-items: center;
+  max-width: min(520px, 100%);
   min-height: 28px;
   padding: 0 10px;
   border-radius: 999px;
@@ -2897,6 +3282,114 @@ watch(
   font-size: 12px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mission-detail-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  z-index: 8;
+}
+
+.mission-detail-tip__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.38);
+  border-radius: 999px;
+  color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb), 0.1);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.mission-detail-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  width: min(680px, calc(100vw - 88px));
+  max-height: min(520px, 68vh);
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.36);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.12), transparent 48%),
+    color-mix(in srgb, var(--bg-panel) 96%, black 4%);
+  box-shadow: 0 22px 55px rgba(0, 0, 0, 0.38);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+  overflow: auto;
+}
+
+.mission-detail-tip:hover .mission-detail-popover,
+.mission-detail-tip:focus-within .mission-detail-popover {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.mission-detail-popover__head {
+  display: grid;
+  gap: 4px;
+}
+
+.mission-detail-popover__head strong {
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.mission-detail-popover__head small {
+  color: var(--text-tertiary);
+}
+
+.mission-detail-popover__facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mission-detail-popover__facts div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.mission-detail-popover__facts span {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.mission-detail-popover__facts strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.mission-detail-popover pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.65;
 }
 
 .mission-hero__metrics {
@@ -4555,6 +5048,14 @@ watch(
 
   .subtask-grid {
     grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  }
+
+  .plan-review__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .plan-review__grid {
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   }
 
   .event-list {

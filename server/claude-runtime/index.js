@@ -308,7 +308,6 @@ class ClaudeRuntimeQueue {
     }
 
     savePlan(job.taskId, plan)
-    createSubtasksFromPlan(job.taskId, plan, RUNTIME_AGENT_MAP)
     updateAgentRun(job.run.id, {
       status: 'completed',
       claude_session_id: result.sessionId,
@@ -324,11 +323,10 @@ class ClaudeRuntimeQueue {
       taskId: job.taskId,
       agentId: job.agentId,
       type: 'agent.done',
-      message: '小呦已完成结构化拆解，子任务将进入 Claude Runtime 队列',
+      message: '小呦已完成结构化拆解，等待用户确认后派发子任务',
       payload: { runId: job.run.id, sessionId: result.sessionId, costUsd: result.costUsd, durationMs: result.durationMs },
     })
     emitTaskEvent('agent.done', { taskId: job.taskId, agentId: job.agentId, runId: job.run.id })
-    enqueueSubtasksForTask(job.taskId)
   }
 
   async completeSubtaskJob(job, result) {

@@ -13,14 +13,17 @@ import skillsRouter from './routes/skills.js'
 import taskRouter from './routes/tasks.js'
 import analysisRouter from './routes/analysis.js'
 import groupChatRouter from './routes/group-chat.js'
+import mailRouter from './routes/mail.js'
 import { createAutomationRouter } from './routes/automation.js'
 import { createOpsRouter } from './routes/ops.js'
 import { initializeSchema } from './db/index.js'
 import { initializeTaskSchema } from './db/tasks.js'
 import { listTaskEvents, listTaskOutputs, listTasks } from './db/tasks.js'
 import { initializeAnalysisSchema } from './db/analysis.js'
+import { initializeMailSchema } from './db/mail.js'
 import { cleanupOrphanAgentRunsOnStartup } from './claude-runtime/index.js'
 import { getClaudeRuntimeConfig } from './claude-runtime/config.js'
+import { startMailScanner } from './mail/mail-service.js'
 import { DEFAULT_SERVER_CONFIG, ensureDir, envString } from './config/defaults.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -1163,14 +1166,17 @@ function getActivityStatus(type) {
 
 initializeTaskSchema()
 initializeAnalysisSchema()
+initializeMailSchema()
 const runtimeRecovery = cleanupOrphanAgentRunsOnStartup()
 if (runtimeRecovery.cleaned > 0) {
   console.log(`[Claude Runtime] Startup recovery cleaned ${runtimeRecovery.cleaned} orphan queued/running runs`)
 }
+startMailScanner()
 app.use('/api', createOpsRouter())
 app.use('/api', createAutomationRouter())
 app.use('/api', taskRouter)
 app.use('/api', groupChatRouter)
+app.use('/api', mailRouter)
 app.use('/api/analysis', analysisRouter)
 
 // 启动服务器
@@ -1194,11 +1200,10 @@ const server = app.listen(PORT, () => {
 ║  - POST /api/skills/install        - 安装技能            ║
 ║  - POST /api/skills/:id/update     - 更新技能            ║
 ║  - DELETE /api/skills/:id          - 卸载技能            ║
-║  - GET /api/tokens/stats           - Token 使用统计       ║
-║  - GET /api/tokens/export          - 导出 Token 报告      ║
-║  - GET /api/memory                 - 内存图谱数据        ║
 ║  - GET /api/security/audit         - 安全审计            ║
 ║  - POST /api/security/scan         - 运行安全扫描        ║
+║  - GET /api/mail/channels          - 邮件渠道配置        ║
+║  - POST /api/mail/channels/:id/scan- 扫描邮件触发任务    ║
 ║  - GET /api/cron/tasks             - 定时任务列表        ║
 ║  - POST /api/cron/tasks            - 创建定时任务        ║
 ║  - POST /api/cron/tasks/:id/toggle - 切换任务状态        ║

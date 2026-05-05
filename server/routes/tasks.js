@@ -520,10 +520,8 @@ router.post('/tasks/:id/plan', (req, res) => {
       return res.status(400).json({ success: false, error: err.message, task: failed })
     }
 
-    savePlan(req.params.id, plan)
-    createSubtasksFromPlan(req.params.id, plan, RUNTIME_AGENT_MAP)
-    const updated = getTaskDetail(req.params.id)
-    res.json({ success: true, task: updated, dispatches: subtaskDispatches(updated) })
+    const updated = savePlan(req.params.id, plan)
+    res.json({ success: true, task: updated, dispatches: [] })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }

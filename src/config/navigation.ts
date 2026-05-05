@@ -1,11 +1,8 @@
 import { markRaw } from 'vue'
 import {
   DataLine,
-  Coin,
-  Collection,
   Connection,
   DataBoard,
-  MagicStick,
   OfficeBuilding,
   Operation,
   Setting,
@@ -41,7 +38,6 @@ export const navigationSections: NavigationSection[] = [
     label: '系统管理',
     items: [
       { to: '/automation', label: '自动化与集成中心', meta: '调度、回调与自动联动', icon: markRaw(Timer), roles: ['admin', 'operator'] },
-      { to: '/capability', label: '能力中心', meta: '工具能力与技能管理', icon: markRaw(MagicStick), roles: ['admin', 'operator'] },
       { to: '/configs', label: '系统配置', meta: '环境与参数', icon: markRaw(Setting), roles: ['admin'] },
     ],
   },
@@ -49,8 +45,6 @@ export const navigationSections: NavigationSection[] = [
     label: '高级能力',
     items: [
       { to: '/analysis', label: '数据分析工作台', meta: '结构化分析与报告导出', icon: markRaw(DataLine), roles: ['admin', 'operator'] },
-      { to: '/tokens', label: '成本追踪', meta: 'Token 与请求', icon: markRaw(Coin) },
-      { to: '/memory', label: '内存图谱', meta: '知识与上下文', icon: markRaw(Collection), roles: ['admin', 'operator'] },
       { to: '/security', label: '安全治理中心', meta: '密钥、MCP 与审计事件', icon: markRaw(WarningFilled), roles: ['admin'] },
     ],
   },

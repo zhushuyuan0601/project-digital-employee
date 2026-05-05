@@ -180,6 +180,8 @@ export const useTasksStore = defineStore('tasks', () => {
 
       switch (event.type) {
         case 'plan.accepted':
+          task.status = 'dispatching'
+          break
         case 'task.dispatch.queued':
           task.status = 'running'
           break
@@ -304,6 +306,12 @@ export const useTasksStore = defineStore('tasks', () => {
 
   async function applyPlan(taskId: string, content: string | Record<string, unknown>) {
     const response = await taskApi.applyPlan(taskId, content)
+    selectedTask.value = applyTaskResponse(response.task)
+    return response
+  }
+
+  async function dispatchTask(taskId: string) {
+    const response = await taskApi.dispatchTask(taskId)
     selectedTask.value = applyTaskResponse(response.task)
     return response
   }
@@ -437,6 +445,7 @@ export const useTasksStore = defineStore('tasks', () => {
     fetchTaskEvents,
     createTask,
     applyPlan,
+    dispatchTask,
     retrySubtask,
     runPlan,
     runSubtasks,
