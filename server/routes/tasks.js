@@ -17,6 +17,7 @@ import {
   savePlan,
   updateSubtask,
   updateTask,
+  updateTaskOutput,
   upsertTaskOutput,
 } from '../db/tasks.js'
 import {
@@ -27,8 +28,10 @@ import {
   enqueueSummaryRun,
   getRun,
   getRuntimeStatus,
+  listRuns,
   retrySubtaskRun,
 } from '../claude-runtime/index.js'
+import { getClaudeRuntimeConfig } from '../claude-runtime/config.js'
 import { claudeRuntimeEvents } from '../claude-runtime/event-bus.js'
 import { RUNTIME_AGENT_MAP } from '../claude-runtime/plan-utils.js'
 
@@ -274,6 +277,20 @@ router.get('/tasks/outputs', (req, res) => {
   }
 })
 
+router.patch('/tasks/outputs/:id', (req, res) => {
+  try {
+    const { status } = req.body || {}
+    if (!['pending_review', 'accepted', 'rejected'].includes(status)) {
+      return res.status(400).json({ success: false, error: 'Invalid output status' })
+    }
+    const output = updateTaskOutput(Number(req.params.id), { status })
+    if (!output) return res.status(404).json({ success: false, error: 'Output not found' })
+    res.json({ success: true, output })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
 router.post('/tasks', (req, res) => {
   try {
     const { title, description, priority } = req.body || {}
@@ -300,6 +317,43 @@ router.post('/tasks', (req, res) => {
 router.get('/runtime/status', (_req, res) => {
   try {
     res.json({ success: true, status: getRuntimeStatus() })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.get('/runtime/config', (_req, res) => {
+  try {
+    res.json({ success: true, config: getClaudeRuntimeConfig() })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.patch('/runtime/config', (req, res) => {
+  try {
+    const body = req.body || {}
+    if (body.maxConcurrency != null) process.env.CLAUDE_AGENT_MAX_CONCURRENCY = String(Math.max(1, Number(body.maxConcurrency) || 3))
+    if (body.maxTurns != null) process.env.CLAUDE_AGENT_MAX_TURNS = String(Math.max(1, Number(body.maxTurns) || 256))
+    if (body.reportOnly != null) process.env.CLAUDE_REPORT_ONLY = body.reportOnly ? 'true' : 'false'
+    if (body.workspaceIsolation != null) process.env.CLAUDE_WORKSPACE_ISOLATION = body.workspaceIsolation ? 'true' : 'false'
+    if (body.mock != null) process.env.CLAUDE_RUNTIME_MOCK = body.mock ? 'true' : 'false'
+    if (Array.isArray(body.allowedTools)) process.env.CLAUDE_ALLOWED_TOOLS = body.allowedTools.join(',')
+    res.json({ success: true, config: getClaudeRuntimeConfig(), status: getRuntimeStatus() })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.get('/runs', (req, res) => {
+  try {
+    const runs = listRuns({
+      taskId: req.query.taskId,
+      subtaskId: req.query.subtaskId,
+      status: req.query.status,
+      limit: req.query.limit ? Number(req.query.limit) : 100,
+    })
+    res.json({ success: true, runs })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }

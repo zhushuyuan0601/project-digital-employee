@@ -385,6 +385,18 @@ export const useTasksStore = defineStore('tasks', () => {
     return outputs.value
   }
 
+  async function updateOutputStatus(outputId: number, status: 'pending_review' | 'accepted' | 'rejected') {
+    const response = await taskApi.updateOutputStatus(outputId, status)
+    outputs.value = outputs.value.map(output => output.id === outputId ? response.output : output)
+    if (selectedTask.value) {
+      selectedTask.value = {
+        ...selectedTask.value,
+        outputs: selectedTask.value.outputs.map(output => output.id === outputId ? response.output : output),
+      }
+    }
+    return response.output
+  }
+
   function ingestRuntimeEvent(event: RuntimeEventPayload) {
     if (!event.taskId) return null
 
@@ -437,6 +449,7 @@ export const useTasksStore = defineStore('tasks', () => {
     completeTask,
     scanOutputs,
     fetchOutputs,
+    updateOutputStatus,
     ingestRuntimeEvent,
     clearTaskEvents,
   }

@@ -689,7 +689,7 @@ export function listRuns(params) {
 
 export function getRuntimeStatus() {
   const queueStatus = claudeRuntimeQueue.status()
-  const recentRuns = listAgentRuns({ limit: 50 })
+  const recentRuns = listAgentRuns({ limit: 500 })
   const compactRuns = recentRuns.map((run) => ({
     id: run.id,
     task_id: run.task_id,
@@ -709,11 +709,75 @@ export function getRuntimeStatus() {
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
   const today = Math.floor(todayStart.getTime() / 1000)
+  const completedRuns = recentRuns.filter((run) => run.status === 'completed')
+  const finishedRuns = recentRuns.filter((run) => run.started_at && run.completed_at)
+  const avgDurationMs = finishedRuns.length
+    ? Math.round(finishedRuns.reduce((sum, run) => sum + Math.max(0, Number(run.completed_at) - Number(run.started_at)) * 1000, 0) / finishedRuns.length)
+    : 0
+  const avgQueueWaitMs = recentRuns.filter((run) => run.started_at && run.created_at).length
+    ? Math.round(recentRuns
+      .filter((run) => run.started_at && run.created_at)
+      .reduce((sum, run) => sum + Math.max(0, Number(run.started_at) - Number(run.created_at)) * 1000, 0) / recentRuns.filter((run) => run.started_at && run.created_at).length)
+    : 0
+  const runCounts = recentRuns.reduce((acc, run) => {
+    acc[run.status] = (acc[run.status] || 0) + 1
+    return acc
+  }, {})
+  const agentStatsMap = new Map()
+  for (const run of recentRuns) {
+    const stat = agentStatsMap.get(run.agent_id) || {
+      agentId: run.agent_id,
+      roleName: run.role_name || run.agent_id,
+      queued: 0,
+      running: 0,
+      completed: 0,
+      failed: 0,
+      cancelled: 0,
+      total: 0,
+      avgDurationMs: 0,
+      _durationTotal: 0,
+      _durationCount: 0,
+    }
+    stat[run.status] = (stat[run.status] || 0) + 1
+    stat.total += 1
+    if (run.started_at && run.completed_at) {
+      stat._durationTotal += Math.max(0, Number(run.completed_at) - Number(run.started_at)) * 1000
+      stat._durationCount += 1
+    }
+    agentStatsMap.set(run.agent_id, stat)
+  }
+  const agentStats = [...agentStatsMap.values()].map((stat) => ({
+    agentId: stat.agentId,
+    roleName: stat.roleName,
+    queued: stat.queued,
+    running: stat.running,
+    completed: stat.completed,
+    failed: stat.failed,
+    cancelled: stat.cancelled,
+    total: stat.total,
+    avgDurationMs: stat._durationCount ? Math.round(stat._durationTotal / stat._durationCount) : 0,
+  }))
+  const failureReasons = recentRuns
+    .filter((run) => run.status === 'failed' && run.error)
+    .reduce((acc, run) => {
+      const label = String(run.error || '').slice(0, 120)
+      acc[label] = (acc[label] || 0) + 1
+      return acc
+    }, {})
   return {
     ...queueStatus,
-    completedToday: recentRuns.filter((run) => run.status === 'completed' && Number(run.completed_at || 0) >= today).length,
+    completedToday: completedRuns.filter((run) => Number(run.completed_at || 0) >= today).length,
     failedToday: recentRuns.filter((run) => run.status === 'failed' && Number(run.completed_at || 0) >= today).length,
-    recentRuns: compactRuns,
+    avgDurationMs,
+    avgQueueWaitMs,
+    successRate: recentRuns.length ? Math.round((completedRuns.length / recentRuns.length) * 1000) / 10 : 100,
+    runCounts,
+    agentStats,
+    failureReasons: Object.entries(failureReasons)
+      .map(([reason, count]) => ({ reason, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8),
+    recentRuns: compactRuns.slice(0, 100),
     healthy: true,
   }
 }

@@ -31,6 +31,32 @@ export interface AgentRun {
   updated_at?: number
 }
 
+export interface RuntimeAgentStat {
+  agentId: string
+  roleName: string
+  queued: number
+  running: number
+  completed: number
+  failed: number
+  cancelled: number
+  total: number
+  avgDurationMs: number
+}
+
+export interface RuntimeConfig {
+  runtime: string
+  maxConcurrency: number
+  maxTurns: number
+  reportOnly: boolean
+  cwd: string
+  workspaceIsolation: boolean
+  workspaceRoot: string
+  allowedTools: string[]
+  outputRoot: string
+  model?: string
+  mock: boolean
+}
+
 export interface AgentRunLog {
   id: number
   run_id: string
@@ -57,8 +83,26 @@ interface RuntimeStatusResponse {
     running: number
     completedToday: number
     failedToday: number
+    avgDurationMs?: number
+    avgQueueWaitMs?: number
+    successRate?: number
+    runCounts?: Record<string, number>
+    agentStats?: RuntimeAgentStat[]
+    failureReasons?: Array<{ reason: string; count: number }>
+    recentRuns?: AgentRun[]
     healthy: boolean
   }
+}
+
+interface RuntimeConfigResponse {
+  success: boolean
+  config: RuntimeConfig
+  status?: RuntimeStatusResponse['status']
+}
+
+interface RunsResponse {
+  success: boolean
+  runs: AgentRun[]
 }
 
 interface TasksResponse {
@@ -74,6 +118,11 @@ interface TaskEventsResponse {
 interface TaskOutputsResponse {
   success: boolean
   outputs: TaskOutput[]
+}
+
+interface TaskOutputResponse {
+  success: boolean
+  output: TaskOutput
 }
 
 interface AgentRunLogsResponse {
@@ -202,6 +251,33 @@ export const taskApi = {
     return request<RuntimeStatusResponse>('/api/runtime/status')
   },
 
+  runtimeConfig() {
+    return request<RuntimeConfigResponse>('/api/runtime/config')
+  },
+
+  updateRuntimeConfig(payload: Partial<RuntimeConfig>) {
+    return request<RuntimeConfigResponse>('/api/runtime/config', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  listRuns(params: { taskId?: string; subtaskId?: string; status?: string; limit?: number } = {}) {
+    const search = new URLSearchParams()
+    if (params.taskId) search.set('taskId', params.taskId)
+    if (params.subtaskId) search.set('subtaskId', params.subtaskId)
+    if (params.status) search.set('status', params.status)
+    if (params.limit) search.set('limit', String(params.limit))
+    const query = search.toString()
+    return request<RunsResponse>(`/api/runs${query ? `?${query}` : ''}`)
+  },
+
+  cancelRun(runId: string) {
+    return request<{ success: boolean; result: unknown; run: AgentRun }>(`/api/runs/${encodeURIComponent(runId)}/cancel`, {
+      method: 'POST',
+    })
+  },
+
   listRunLogs(runId: string, params: { limit?: number; beforeId?: number } = {}) {
     const search = new URLSearchParams()
     if (params.limit) search.set('limit', String(params.limit))
@@ -225,5 +301,12 @@ export const taskApi = {
     if (params.status) search.set('status', params.status)
     const query = search.toString()
     return request<TaskOutputsResponse>(`/api/tasks/outputs${query ? `?${query}` : ''}`)
+  },
+
+  updateOutputStatus(outputId: number, status: TaskOutput['status']) {
+    return request<TaskOutputResponse>(`/api/tasks/outputs/${encodeURIComponent(String(outputId))}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    })
   },
 }

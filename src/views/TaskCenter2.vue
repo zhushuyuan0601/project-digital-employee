@@ -491,6 +491,15 @@
                 <i class="ri-refresh-line"></i>
                 {{ memberLogsLoading ? '刷新中' : '刷新状态' }}
               </button>
+              <button
+                v-if="activeMemberRunId && ['assigned', 'running'].includes(activeMemberSubtask.status)"
+                class="ghost-btn ghost-btn--compact"
+                type="button"
+                @click="cancelActiveMemberRun"
+              >
+                <i class="ri-stop-circle-line"></i>
+                停止运行
+              </button>
               <button class="primary-btn primary-btn--compact" type="button" @click="memberLogsDrawer = true">
                 <i class="ri-terminal-box-line"></i>
                 原始日志
@@ -1735,6 +1744,18 @@ async function retrySubtask(subtaskId: string) {
     await refreshRuntimeStatus()
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '重试失败')
+  }
+}
+
+async function cancelActiveMemberRun() {
+  if (!activeMemberRunId.value || !activeMemberSubtask.value) return
+  try {
+    await taskApi.cancelRun(activeMemberRunId.value)
+    await tasksStore.fetchTask(activeMemberSubtask.value.task_id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
+    ElMessage.success('已请求停止当前 Claude Runtime run')
+    await refreshRuntimeStatus()
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '停止运行失败')
   }
 }
 

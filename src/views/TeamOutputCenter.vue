@@ -62,6 +62,14 @@
               <span>{{ agentName(output.agent_id || '') }}</span>
               <span>{{ output.subtask_title || output.subtask_id || '主任务' }}</span>
             </div>
+            <div class="output-card-actions">
+              <button type="button" :disabled="output.status === 'accepted'" @click="setOutputStatus(output.id, 'accepted')">
+                接受
+              </button>
+              <button type="button" :disabled="output.status === 'rejected'" @click="setOutputStatus(output.id, 'rejected')">
+                退回
+              </button>
+            </div>
           </article>
         </div>
       </div>
@@ -72,6 +80,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import Agents from '@/components/team/AgentsPanel.vue'
 import DigitalEmployee from '@/components/team/DigitalEmployeePanel.vue'
 import { useTasksStore } from '@/stores/tasks'
@@ -125,6 +134,15 @@ async function loadTaskOutputs() {
     agentId: outputFilters.agentId || undefined,
     status: outputFilters.status || undefined,
   })
+}
+
+async function setOutputStatus(outputId: number, status: TaskOutputStatus) {
+  try {
+    await tasksStore.updateOutputStatus(outputId, status)
+    ElMessage.success('成果状态已更新')
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '更新成果状态失败')
+  }
 }
 
 function outputStatusText(status: TaskOutputStatus) {
@@ -275,6 +293,9 @@ onMounted(async () => {
   border-radius: 8px;
   background: var(--bg-panel);
   padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .output-card-head,
@@ -289,16 +310,42 @@ onMounted(async () => {
 .task-output-card h3 {
   color: var(--text-primary);
   font-size: 15px;
-  margin: 14px 0 8px;
+  margin: 0;
 }
 
 .task-output-card p {
   color: var(--text-secondary);
-  margin: 0 0 14px;
+  margin: 0;
 }
 
 .output-status {
   color: var(--color-primary);
+}
+
+.output-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+.output-card-actions button {
+  min-height: 30px;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+.output-card-actions button:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.output-card-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .empty-output {

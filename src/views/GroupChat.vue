@@ -13,35 +13,40 @@
       <div class="hero-status">
         <span class="status-pill" :class="allConnected ? 'status-pill--online' : anyConnected ? 'status-pill--partial' : 'status-pill--offline'">
           <span class="status-pill__dot"></span>
-          {{ allConnected ? '全员在线' : anyConnected ? '部分在线' : '等待接入' }}
+          {{ allConnected ? 'READY' : anyConnected ? '运行中' : '等待 Runtime' }}
         </span>
         <span class="hero-updated">{{ latestActivityText }}</span>
       </div>
 
       <div class="metrics-grid">
         <article class="metric-card">
-          <span class="metric-label">活跃席位</span>
-          <strong class="metric-value">{{ activeAgentCount }}/{{ participatingAgents.length }}</strong>
-          <span class="metric-hint">已接入协同链路</span>
+          <span class="metric-label">READY</span>
+          <strong class="metric-value">{{ readyAgentCount }}</strong>
+          <span class="metric-hint">可接收 @ 指令</span>
         </article>
         <article class="metric-card">
-          <span class="metric-label">会话消息</span>
-          <strong class="metric-value">{{ messages.length }}</strong>
-          <span class="metric-hint">本地归档记录</span>
+          <span class="metric-label">活跃运行</span>
+          <strong class="metric-value">{{ runtimeStatus?.running || 0 }}</strong>
+          <span class="metric-hint">Claude Runtime running</span>
         </article>
         <article class="metric-card">
-          <span class="metric-label">待机席位</span>
-          <strong class="metric-value">{{ offlineAgentCount }}</strong>
-          <span class="metric-hint">尚未加入频道</span>
+          <span class="metric-label">队列等待</span>
+          <strong class="metric-value">{{ runtimeStatus?.queued || 0 }}</strong>
+          <span class="metric-hint">等待执行</span>
+        </article>
+        <article class="metric-card">
+          <span class="metric-label">今日完成</span>
+          <strong class="metric-value">{{ runtimeStatus?.completedToday || 0 }}</strong>
+          <span class="metric-hint">报告型 run</span>
         </article>
       </div>
 
       <div class="command-actions">
-        <button class="control-btn control-btn--solid" @click="handleConnectAll" :disabled="allConnected">
-          全连
+        <button class="control-btn control-btn--solid" @click="handleConnectAll">
+          刷新状态
         </button>
-        <button class="control-btn" @click="handleDisconnectAll" :disabled="!anyConnected">
-          全断
+        <button class="control-btn" @click="handleDisconnectAll" :disabled="activeGroupRunIds.length === 0">
+          停止运行
         </button>
         <button class="control-btn" @click="confirmClear">
           清屏
@@ -68,10 +73,10 @@
             <div class="roster-item__avatar">{{ agent.avatar }}</div>
             <div class="roster-item__body">
               <strong>{{ agent.name }}</strong>
-              <span>{{ agent.isConnected ? '可直接下达指令' : '暂未接入，会自动提示离线' }}</span>
+              <span>{{ agentStatusHint(agent.id) }}</span>
             </div>
-            <span class="roster-item__status" :class="agent.isConnected ? 'is-online' : 'is-offline'">
-              {{ agent.isConnected ? '在线' : '离线' }}
+            <span class="roster-item__status" :class="agentStatusClass(agent.id)">
+              {{ agentStatusText(agent.id) }}
             </span>
           </button>
         </div>
@@ -90,8 +95,8 @@
             <strong>{{ messages.length }}</strong>
           </div>
           <div class="meta-badge">
-            <span>在线</span>
-            <strong>{{ activeAgentCount }}</strong>
+            <span>运行</span>
+            <strong>{{ runtimeStatus?.running || 0 }}</strong>
           </div>
         </div>
       </header>
@@ -183,7 +188,7 @@
             <div class="composer-footer">
               <div class="composer-footnote">
                 <span>广播消息会保存在本地会话。</span>
-                <span>未上线成员会收到系统提醒，不会静默失败。</span>
+                <span>Agent 回复会通过 Claude Runtime 事件流回写频道。</span>
               </div>
               <button
                 class="draft-task-btn"
@@ -218,6 +223,7 @@ import { extractText } from '@/utils/gateway-protocol'
 import ChatMessageBubble from '@/components/chat/ChatMessageBubble.vue'
 import { useChatFormatting } from '@/composables/useChatFormatting'
 import { useTasksStore } from '@/stores/tasks'
+import { taskApi } from '@/api/tasks'
 
 const groupStore = useGroupChatStore()
 const multiAgentStore = useMultiAgentChatStore()
@@ -228,8 +234,21 @@ const { formatTime, formatRichText } = useChatFormatting()
 const groupConfig = computed(() => groupStore.groupConfig)
 const messages = computed(() => groupStore.messages)
 
-const allConnected = computed(() => true)
-const anyConnected = computed(() => multiAgentStore.anyConnected || true)
+const runtimeStatus = ref<{
+  healthy: boolean
+  running: number
+  queued: number
+  completedToday: number
+  recentRuns?: Array<{ id: string; status: string; task_id?: string | null; agent_id: string }>
+} | null>(null)
+const streamConnected = ref(false)
+const activeRunIds = ref<string[]>([])
+const agentRunStates = ref<Record<string, string>>({})
+const runBuffers = ref<Record<string, string>>({})
+let groupEventSource: EventSource | null = null
+
+const allConnected = computed(() => !!runtimeStatus.value?.healthy)
+const anyConnected = computed(() => streamConnected.value || !!runtimeStatus.value?.healthy)
 
 const participatingAgents = computed(() => {
   const agentIds = groupStore.groupConfig.agentIds
@@ -244,13 +263,11 @@ const participatingAgents = computed(() => {
   })
 })
 
-const activeAgentCount = computed(() =>
+const readyAgentCount = computed(() =>
   participatingAgents.value.filter(agent => agent.isConnected).length
 )
 
-const offlineAgentCount = computed(() =>
-  participatingAgents.value.length - activeAgentCount.value
-)
+const activeGroupRunIds = computed(() => [...new Set(activeRunIds.value)])
 
 const latestActivityText = computed(() => {
   const lastMessage = messages.value[messages.value.length - 1]
@@ -269,6 +286,40 @@ const inputRef = ref<HTMLTextAreaElement | null>(null)
 const getAgentName = (agentId: string) => {
   const agent = participatingAgents.value.find(a => a.id === agentId)
   return agent?.name || agentId
+}
+
+const agentRuntimeState = (agentId: string) => {
+  return agentRunStates.value[agentId] || 'ready'
+}
+
+const agentStatusText = (agentId: string) => {
+  const labels: Record<string, string> = {
+    ready: '就绪',
+    queued: '排队中',
+    running: '执行中',
+    recent: '最近完成',
+    failed: '失败',
+    stopped: '已停止',
+  }
+  return labels[agentRuntimeState(agentId)] || '就绪'
+}
+
+const agentStatusClass = (agentId: string) => {
+  const state = agentRuntimeState(agentId)
+  if (state === 'running' || state === 'recent') return 'is-online'
+  if (state === 'queued') return 'is-pending'
+  if (state === 'failed' || state === 'stopped') return 'is-offline'
+  return 'is-ready'
+}
+
+const agentStatusHint = (agentId: string) => {
+  const state = agentRuntimeState(agentId)
+  if (state === 'running') return 'Claude Runtime 正在执行'
+  if (state === 'queued') return '已进入 Runtime 队列'
+  if (state === 'recent') return '最近完成，可继续 @ 下达指令'
+  if (state === 'failed') return '最近运行失败，可重新下达'
+  if (state === 'stopped') return '运行已停止，可重新下达'
+  return '可直接 @ 下达指令'
 }
 
 const appendMention = (agentName: string) => {
@@ -297,6 +348,95 @@ const createTaskFromMessage = async (content: string) => {
     router.push({ path: '/task-center-2', query: { task: response.task.id } })
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '创建任务失败')
+  }
+}
+
+async function refreshRuntimeStatus() {
+  try {
+    const response = await taskApi.runtimeStatus()
+    runtimeStatus.value = response.status
+  } catch (err) {
+    console.warn('[GroupChat] Runtime status failed:', err)
+    runtimeStatus.value = {
+      healthy: false,
+      running: 0,
+      queued: 0,
+      completedToday: 0,
+      recentRuns: [],
+    }
+  }
+}
+
+function upsertActiveRun(runId?: string | null) {
+  if (!runId) return
+  if (!activeRunIds.value.includes(runId)) {
+    activeRunIds.value = [...activeRunIds.value, runId]
+  }
+}
+
+function removeActiveRun(runId?: string | null) {
+  if (!runId) return
+  activeRunIds.value = activeRunIds.value.filter(id => id !== runId)
+}
+
+function setAgentRunState(agentId?: string | null, state = 'ready') {
+  if (!agentId) return
+  agentRunStates.value = {
+    ...agentRunStates.value,
+    [agentId]: state,
+  }
+}
+
+function setupRuntimeEventStream() {
+  groupEventSource?.close()
+  groupEventSource = new EventSource('/api/group-chat/events/stream')
+  groupEventSource.onopen = () => {
+    streamConnected.value = true
+  }
+  groupEventSource.onerror = () => {
+    streamConnected.value = false
+  }
+  groupEventSource.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(event.data)
+      if (payload.type === 'connected' || payload.type === 'ping') return
+      const agentId = payload.agentId
+      const runId = payload.runId || ''
+      if (runId) upsertActiveRun(runId)
+
+      if (payload.type === 'group.agent.delta') {
+        if (!agentId || !payload.message) return
+        const next = `${runBuffers.value[runId] || ''}${payload.message}`
+        runBuffers.value = { ...runBuffers.value, [runId]: next }
+        groupStore.updateAgentReply(agentId, next)
+        scrollToBottom()
+      } else if (payload.type === 'group.agent.snapshot') {
+        if (!agentId || !payload.message) return
+        runBuffers.value = { ...runBuffers.value, [runId]: payload.message }
+        groupStore.updateAgentReply(agentId, payload.message)
+        scrollToBottom()
+      } else if (payload.type === 'group.run.queued' || payload.type === 'group.run.started') {
+        setAgentRunState(agentId, payload.type === 'group.run.queued' ? 'queued' : 'running')
+        groupStore.addSystemMessage(payload.message || 'Claude Runtime 状态更新')
+      } else if (payload.type === 'group.run.completed') {
+        removeActiveRun(runId)
+        setAgentRunState(agentId, 'recent')
+        groupStore.addSystemMessage(`${payload.message || '报告已生成'}，可前往任务指挥中心查看：${payload.taskId || ''}`)
+        refreshRuntimeStatus()
+      } else if (payload.type === 'group.run.failed' || payload.type === 'group.run.cancelled') {
+        removeActiveRun(runId)
+        setAgentRunState(agentId, payload.type === 'group.run.failed' ? 'failed' : 'stopped')
+        groupStore.addSystemMessage(payload.message || 'Claude Runtime 运行结束')
+        refreshRuntimeStatus()
+      }
+    } catch (err) {
+      console.warn('[GroupChat] Failed to parse runtime event:', err)
+    }
+  }
+  return () => {
+    groupEventSource?.close()
+    groupEventSource = null
+    streamConnected.value = false
   }
 }
 
@@ -339,6 +479,11 @@ const handleSend = async () => {
 
   const content = inputContent.value.trim()
   const { mentions, invalidMentions, offlineAgents } = groupStore.handleUserMessage(content)
+  fetch('/api/group-chat/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, sender: 'user' }),
+  }).catch(() => null)
   if (invalidMentions.length > 0 || offlineAgents.length > 0) {
     console.warn('[GroupChat] ignored mentions', { invalidMentions, offlineAgents })
   }
@@ -359,6 +504,8 @@ const handleSend = async () => {
       const data = await response.json()
 
       if (data.success) {
+        upsertActiveRun(data.run?.id)
+        setAgentRunState(agentId, 'queued')
         multiAgentStore.agents[agentId]?.messages.push({
           id: `msg-${Date.now()}`,
           role: 'user',
@@ -403,11 +550,20 @@ const confirmClear = () => {
 }
 
 const handleConnectAll = () => {
+  refreshRuntimeStatus()
   ElMessage.success('Claude Runtime 状态已刷新')
 }
 
-const handleDisconnectAll = () => {
-  ElMessage.warning('Claude Runtime 任务请在任务指挥中心停止')
+const handleDisconnectAll = async () => {
+  const runIds = activeGroupRunIds.value
+  if (!runIds.length) return
+  await Promise.all(runIds.map(runId =>
+    fetch(`/api/group-chat/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }).catch(() => null)
+  ))
+  activeRunIds.value = []
+  agentRunStates.value = Object.fromEntries(Object.keys(agentRunStates.value).map(agentId => [agentId, 'stopped']))
+  await refreshRuntimeStatus()
+  ElMessage.success('已请求停止群聊运行任务')
 }
 
 let prevLength = 0
@@ -420,9 +576,12 @@ const checkScroll = setInterval(() => {
 
 const stopAgentWatch = setupAgentStatusWatcher()
 const cleanupListener = setupMessageListener()
+let cleanupRuntimeStream: (() => void) | null = null
 
 onMounted(() => {
   groupStore.loadMessages()
+  refreshRuntimeStatus()
+  cleanupRuntimeStream = setupRuntimeEventStream()
   scrollToBottom()
   inputRef.value?.focus()
 })
@@ -431,6 +590,7 @@ onUnmounted(() => {
   clearInterval(checkScroll)
   stopAgentWatch()
   cleanupListener()
+  cleanupRuntimeStream?.()
 })
 </script>
 
@@ -681,6 +841,14 @@ onUnmounted(() => {
 
 .roster-item__status.is-online {
   color: var(--color-success);
+}
+
+.roster-item__status.is-ready {
+  color: var(--color-primary);
+}
+
+.roster-item__status.is-pending {
+  color: var(--color-warning);
 }
 
 .roster-item__status.is-offline {

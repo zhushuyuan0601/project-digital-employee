@@ -112,6 +112,61 @@
       </div>
     </div>
 
+    <div class="runtime-grid">
+      <section class="obs-card runtime-card">
+        <h2 class="obs-card__title">
+          <span class="obs-card__icon"><Tickets /></span>
+          Claude Runtime Run 历史
+        </h2>
+        <div class="run-list">
+          <article v-for="run in recentRuns" :key="run.id" class="run-row">
+            <div>
+              <strong>{{ run.role_name || run.agent_id }}</strong>
+              <span>{{ run.id }}</span>
+            </div>
+            <span class="run-status" :class="`run-status--${run.status}`">{{ run.status }}</span>
+            <span>{{ formatRunDuration(run) }}</span>
+          </article>
+          <div v-if="recentRuns.length === 0" class="runtime-empty">暂无 Runtime run 记录。</div>
+        </div>
+      </section>
+
+      <section class="obs-card runtime-card">
+        <h2 class="obs-card__title">
+          <span class="obs-card__icon"><Aim /></span>
+          角色吞吐
+        </h2>
+        <div class="agent-stat-list">
+          <article v-for="agent in runtimeAgentStats" :key="agent.agentId" class="agent-stat">
+            <div>
+              <strong>{{ agent.roleName }}</strong>
+              <span>total {{ agent.total }} · avg {{ formatDuration(agent.avgDurationMs) }}</span>
+            </div>
+            <div class="agent-stat__bars">
+              <span class="is-success">{{ agent.completed }}</span>
+              <span class="is-running">{{ agent.running }}</span>
+              <span class="is-danger">{{ agent.failed }}</span>
+            </div>
+          </article>
+          <div v-if="runtimeAgentStats.length === 0" class="runtime-empty">暂无角色运行统计。</div>
+        </div>
+      </section>
+
+      <section class="obs-card runtime-card">
+        <h2 class="obs-card__title">
+          <span class="obs-card__icon"><List /></span>
+          失败原因聚合
+        </h2>
+        <div class="failure-list">
+          <article v-for="item in failureReasons" :key="item.reason" class="failure-row">
+            <span>{{ item.count }}</span>
+            <p>{{ item.reason }}</p>
+          </article>
+          <div v-if="failureReasons.length === 0" class="runtime-empty">暂无失败聚合。</div>
+        </div>
+      </section>
+    </div>
+
     <!-- Bottom: System Status / Roles / Logs -->
     <div class="obs-bottom">
       <!-- System Resources -->
@@ -155,7 +210,7 @@
         </h2>
         <div class="obs-roles">
           <div
-            v-for="role in roleList"
+            v-for="role in runtimeRoleList"
             :key="role.name"
             class="obs-role-item"
           >
@@ -228,7 +283,7 @@ import {
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
 import { storeToRefs } from 'pinia'
 import { getActivities, getDashboard, type ActivityItem } from '@/api/dashboard'
-import { taskApi } from '@/api/tasks'
+import { taskApi, type AgentRun, type RuntimeAgentStat } from '@/api/tasks'
 
 const multiAgentStore = useMultiAgentChatStore()
 const { anyConnected } = storeToRefs(multiAgentStore)
@@ -278,7 +333,20 @@ const stats = ref({
   systemLoad: '65%',
 })
 const dataSource = ref<'workspace' | 'database' | 'mock' | 'mixed' | ''>('')
-const runtimeStatus = ref<{ healthy: boolean; running: number; queued: number; maxConcurrency: number } | null>(null)
+const runtimeStatus = ref<{
+  healthy: boolean
+  running: number
+  queued: number
+  maxConcurrency: number
+  completedToday?: number
+  failedToday?: number
+  avgDurationMs?: number
+  avgQueueWaitMs?: number
+  successRate?: number
+  agentStats?: RuntimeAgentStat[]
+  failureReasons?: Array<{ reason: string; count: number }>
+  recentRuns?: AgentRun[]
+} | null>(null)
 const dataSourceLabel = computed(() => {
   if (!dataSource.value) return ''
   const labels = {
@@ -324,9 +392,31 @@ async function loadDashboardData() {
       ...stats.value,
       activeAgents: runtimeResult.value.status.running,
       activeTasks: Math.max(Number(stats.value.activeTasks || 0), runtimeResult.value.status.queued + runtimeResult.value.status.running),
+      successRate: `${runtimeResult.value.status.successRate ?? 100}%`,
+      avgResponse: formatDuration(runtimeResult.value.status.avgDurationMs || 0),
+      alerts: runtimeResult.value.status.failedToday ?? stats.value.alerts,
       systemLoad: `${Math.min(100, Math.round((runtimeResult.value.status.running / Math.max(1, runtimeResult.value.status.maxConcurrency)) * 100))}%`,
     }
   }
+}
+
+function formatDuration(valueMs?: number | null) {
+  const value = Number(valueMs || 0)
+  if (!value) return '--'
+  if (value < 1000) return `${value}ms`
+  const seconds = Math.round(value / 1000)
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  return `${minutes}m ${seconds % 60}s`
+}
+
+function formatRunDuration(run: AgentRun) {
+  if (run.started_at && run.completed_at) {
+    return formatDuration((Number(run.completed_at) - Number(run.started_at)) * 1000)
+  }
+  if (run.status === 'queued') return '等待中'
+  if (run.status === 'running') return '执行中'
+  return '--'
 }
 
 function formatActivityLog(activity: ActivityItem) {
@@ -340,14 +430,14 @@ function formatActivityLog(activity: ActivityItem) {
 // ─── KPI Metrics ────────────────────────────────────────
 const metrics = computed(() => [
   {
-    label: '活跃任务',
-    value: stats.value.activeTasks,
+    label: '运行中',
+    value: runtimeStatus.value?.running ?? stats.value.activeAgents,
     icon: markRaw(Operation),
     color: '#2f81f7',
   },
   {
-    label: '活跃 Agent',
-    value: stats.value.activeAgents,
+    label: '排队中',
+    value: runtimeStatus.value?.queued ?? 0,
     icon: markRaw(Aim),
     color: '#2f81f7',
   },
@@ -358,14 +448,14 @@ const metrics = computed(() => [
     color: '#238636',
   },
   {
-    label: '平均响应时间',
+    label: '平均耗时',
     value: stats.value.avgResponse,
     icon: markRaw(DataLine),
     color: '#2f81f7',
   },
   {
-    label: '告警数',
-    value: stats.value.alerts,
+    label: '今日完成',
+    value: runtimeStatus.value?.completedToday ?? 0,
     icon: markRaw(List),
     color: '#d29922',
   },
@@ -376,6 +466,10 @@ const metrics = computed(() => [
     color: '#2f81f7',
   },
 ])
+
+const recentRuns = computed(() => runtimeStatus.value?.recentRuns?.slice(0, 12) || [])
+const runtimeAgentStats = computed(() => runtimeStatus.value?.agentStats || [])
+const failureReasons = computed(() => runtimeStatus.value?.failureReasons || [])
 
 // ─── Flow Nodes ─────────────────────────────────────────
 const flowNodes = ref([
@@ -466,6 +560,23 @@ const roleList = ref([
     count: 4,
   },
 ])
+
+const runtimeRoleList = computed(() => {
+  if (!runtimeAgentStats.value.length) return roleList.value
+  const iconByAgent: Record<string, any> = {
+    xiaomu: markRaw(Connection),
+    xiaoyan: markRaw(Search),
+    xiaochan: markRaw(Document),
+    xiaokai: markRaw(Monitor),
+    xiaoce: markRaw(Select),
+  }
+  return runtimeAgentStats.value.map((agent) => ({
+    name: agent.roleName || agent.agentId,
+    icon: iconByAgent[agent.agentId] || markRaw(Aim),
+    active: agent.running > 0 || agent.queued > 0,
+    count: agent.total,
+  }))
+})
 
 // ─── Recent Logs ────────────────────────────────────────
 const recentLogs = ref([
@@ -649,6 +760,136 @@ const recentLogs = ref([
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 20px;
+}
+
+.runtime-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.9fr) minmax(260px, 0.9fr);
+  gap: 20px;
+}
+
+.runtime-card {
+  min-height: 260px;
+}
+
+.run-list,
+.agent-stat-list,
+.failure-list {
+  display: grid;
+  gap: 10px;
+  max-height: 280px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.run-row,
+.agent-stat,
+.failure-row {
+  display: grid;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklab, var(--border) 84%, transparent);
+  border-radius: 10px;
+  background: color-mix(in oklab, #fff 2.2%, transparent);
+}
+
+.run-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.run-row strong,
+.agent-stat strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 0.86rem;
+}
+
+.run-row span,
+.agent-stat span {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.run-status {
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: color-mix(in oklab, var(--border) 60%, transparent);
+}
+
+.run-status--running,
+.run-status--queued {
+  color: var(--accent-blue);
+}
+
+.run-status--completed {
+  color: var(--accent-green);
+}
+
+.run-status--failed,
+.run-status--cancelled {
+  color: var(--accent-red);
+}
+
+.agent-stat {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.agent-stat__bars {
+  display: flex;
+  gap: 6px;
+}
+
+.agent-stat__bars span {
+  min-width: 24px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  text-align: center;
+  background: color-mix(in oklab, var(--border) 52%, transparent);
+}
+
+.agent-stat__bars .is-success {
+  color: var(--accent-green);
+}
+
+.agent-stat__bars .is-running {
+  color: var(--accent-blue);
+}
+
+.agent-stat__bars .is-danger {
+  color: var(--accent-red);
+}
+
+.failure-row {
+  grid-template-columns: 28px minmax(0, 1fr);
+}
+
+.failure-row span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  color: var(--accent-red);
+  background: color-mix(in oklab, var(--accent-red) 12%, transparent);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+}
+
+.failure-row p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.runtime-empty {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.6;
 }
 
 /* ── Card Base ────────────────────────────────────────── */
@@ -1173,6 +1414,10 @@ const recentLogs = ref([
   }
 
   .obs-middle {
+    grid-template-columns: 1fr;
+  }
+
+  .runtime-grid {
     grid-template-columns: 1fr;
   }
 }

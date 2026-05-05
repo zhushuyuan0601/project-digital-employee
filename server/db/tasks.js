@@ -491,6 +491,23 @@ export function listTaskOutputs({ taskId, agentId, status } = {}) {
   `).all(...params).map(normalizeOutput)
 }
 
+export function updateTaskOutput(outputId, updates) {
+  const allowed = ['status']
+  const entries = Object.entries(updates).filter(([key]) => allowed.includes(key))
+  if (!entries.length) return null
+  const db = getDatabase()
+  const setClause = entries.map(([key]) => `${key} = ?`).join(', ')
+  const values = entries.map(([, value]) => value)
+  db.prepare(`UPDATE task_outputs SET ${setClause} WHERE id = ?`).run(...values, outputId)
+  return normalizeOutput(db.prepare(`
+    SELECT o.*, t.title as task_title, s.title as subtask_title
+    FROM task_outputs o
+    LEFT JOIN tasks t ON t.id = o.task_id
+    LEFT JOIN subtasks s ON s.id = o.subtask_id
+    WHERE o.id = ?
+  `).get(outputId))
+}
+
 export function createAgentRun({
   id,
   taskId,
