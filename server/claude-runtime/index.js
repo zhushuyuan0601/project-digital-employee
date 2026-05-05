@@ -622,7 +622,7 @@ export function enqueuePlanRun(taskId) {
   return claudeRuntimeQueue.enqueue(job)
 }
 
-export function enqueueSubtaskRun(subtaskId, { resume = null } = {}) {
+export function enqueueSubtaskRun(subtaskId, { resume = null, prompt = null, kind = 'subtask' } = {}) {
   const subtask = getSubtask(subtaskId)
   if (!subtask) throw new Error('Subtask not found')
   const active = reconcileActiveRunsForSubtask(subtaskId)
@@ -632,8 +632,8 @@ export function enqueueSubtaskRun(subtaskId, { resume = null } = {}) {
     taskId: task.id,
     subtaskId: subtask.id,
     agentId: subtask.assigned_agent_id,
-    kind: 'subtask',
-    prompt: buildSubtaskPrompt(task, subtask),
+    kind,
+    prompt: prompt || buildSubtaskPrompt(task, subtask),
     resume,
   })
   patchSubtaskContext(subtask.id, {

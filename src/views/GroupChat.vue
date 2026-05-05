@@ -4,7 +4,7 @@
       <div class="command-sidebar__hero">
         <div class="hero-mark">群</div>
         <div class="hero-copy">
-          <p class="hero-kicker">联合态势频道</p>
+          <p class="hero-kicker">Group Chat</p>
           <h1 class="hero-title">{{ groupConfig.name }}</h1>
           <p class="hero-desc">{{ groupConfig.description }}</p>
         </div>
@@ -13,31 +13,23 @@
       <div class="hero-status">
         <span class="status-pill" :class="allConnected ? 'status-pill--online' : anyConnected ? 'status-pill--partial' : 'status-pill--offline'">
           <span class="status-pill__dot"></span>
-          {{ allConnected ? 'READY' : anyConnected ? '运行中' : '等待 Runtime' }}
+          {{ allConnected ? '可聊天' : anyConnected ? '回复中' : '连接中' }}
         </span>
         <span class="hero-updated">{{ latestActivityText }}</span>
       </div>
 
-      <div class="metrics-grid">
-        <article class="metric-card">
-          <span class="metric-label">READY</span>
-          <strong class="metric-value">{{ readyAgentCount }}</strong>
-          <span class="metric-hint">可接收 @ 指令</span>
+      <div class="conversation-summary">
+        <article>
+          <span>成员</span>
+          <strong>{{ readyAgentCount }}</strong>
         </article>
-        <article class="metric-card">
-          <span class="metric-label">活跃运行</span>
-          <strong class="metric-value">{{ runtimeStatus?.running || 0 }}</strong>
-          <span class="metric-hint">Claude Runtime running</span>
+        <article>
+          <span>消息</span>
+          <strong>{{ messages.length }}</strong>
         </article>
-        <article class="metric-card">
-          <span class="metric-label">队列等待</span>
-          <strong class="metric-value">{{ runtimeStatus?.queued || 0 }}</strong>
-          <span class="metric-hint">等待执行</span>
-        </article>
-        <article class="metric-card">
-          <span class="metric-label">今日完成</span>
-          <strong class="metric-value">{{ runtimeStatus?.completedToday || 0 }}</strong>
-          <span class="metric-hint">报告型 run</span>
+        <article>
+          <span>回复中</span>
+          <strong>{{ runtimeStatus?.running || 0 }}</strong>
         </article>
       </div>
 
@@ -46,18 +38,18 @@
           刷新状态
         </button>
         <button class="control-btn" @click="handleDisconnectAll" :disabled="activeGroupRunIds.length === 0">
-          停止运行
+          停止回复
         </button>
-        <button class="control-btn" @click="confirmClear">
-          清屏
+        <button class="control-btn" @click="confirmClearHistory">
+          清除历史
         </button>
       </div>
 
       <section class="roster-panel">
         <div class="panel-heading">
           <div>
-            <p class="panel-kicker">作战成员</p>
-            <h2>协同编组</h2>
+            <p class="panel-kicker">Members</p>
+            <h2>群聊成员</h2>
           </div>
           <span class="panel-count">{{ participatingAgents.length }}</span>
         </div>
@@ -86,41 +78,41 @@
     <section class="command-stage">
       <header class="stage-header">
         <div class="stage-header__copy">
-          <p class="stage-kicker">实时群控面板</p>
-          <h2>面向任务分派、回执追踪与多 Agent 会商的主频道</h2>
+          <p class="stage-kicker">Conversation</p>
+          <h2>持续对话，按需 @ 成员加入讨论</h2>
         </div>
         <div class="stage-header__meta">
           <div class="meta-badge">
-            <span>消息流</span>
+            <span>消息</span>
             <strong>{{ messages.length }}</strong>
           </div>
           <div class="meta-badge">
-            <span>运行</span>
+            <span>回复中</span>
             <strong>{{ runtimeStatus?.running || 0 }}</strong>
           </div>
         </div>
       </header>
 
-      <div class="stage-body">
+      <div class="chat-panel">
         <div class="stream-shell">
           <div class="stream-toolbar">
             <div class="stream-toolbar__title">
               <span class="toolbar-dot"></span>
-              指挥席广播流
+              群聊消息
             </div>
             <div class="stream-toolbar__hint">
-              对成员使用 `@姓名` 可定向下达指令
+              输入 `@姓名` 邀请成员回复
             </div>
           </div>
 
           <div class="messages-container" ref="messagesContainer">
             <div v-if="messages.length === 0" class="empty-state">
               <div class="empty-orbit">
-                <span class="empty-orbit__core">作战待命</span>
+                <span class="empty-orbit__core">开始聊天</span>
               </div>
               <div class="empty-copy">
-                <h3>频道已建立，等待第一条指令</h3>
-                <p>在下方输入框中直接输入，或点击左侧成员卡片快速插入 `@成员名`。</p>
+                <h3>还没有消息</h3>
+                <p>直接发送会记录到群聊；使用 `@成员名` 可以让对应成员回复。</p>
               </div>
             </div>
 
@@ -139,15 +131,6 @@
                 :avatar-text="message.sender === 'agent' ? (message.senderAvatar || '◈') : message.sender === 'system' ? '⚙' : '我'"
                 :mentions="(message.mentions || []).map(getAgentName)"
               />
-              <button
-                v-if="message.sender === 'user'"
-                type="button"
-                class="message-task-btn"
-                @click="createTaskFromMessage(message.content)"
-              >
-                <i class="ri-node-tree"></i>
-                转任务
-              </button>
             </div>
           </div>
         </div>
@@ -155,8 +138,8 @@
         <div class="composer-shell">
           <div class="composer-head">
             <div>
-              <p class="panel-kicker">快速派发</p>
-              <h3>指挥输入台</h3>
+              <p class="panel-kicker">Message</p>
+              <h3>发送消息</h3>
             </div>
             <span class="draft-counter">{{ inputContent.trim().length }} 字</span>
           </div>
@@ -176,34 +159,54 @@
           </div>
 
           <div class="composer-box">
+            <div v-if="mentionPanelVisible" class="mention-suggest-panel">
+              <div class="mention-suggest-panel__head">
+                <span>选择成员</span>
+                <kbd>↑↓</kbd>
+                <kbd>Enter</kbd>
+              </div>
+              <button
+                v-for="(agent, index) in mentionCandidates"
+                :key="agent.id"
+                type="button"
+                class="mention-suggest-item"
+                :class="{ 'is-active': index === activeMentionIndex }"
+                @mousedown.prevent="selectMentionCandidate(agent)"
+                @mouseenter="activeMentionIndex = index"
+              >
+                <span class="mention-suggest-item__avatar">{{ agent.avatar }}</span>
+                <span class="mention-suggest-item__body">
+                  <strong>@{{ agent.name }}</strong>
+                  <small>{{ agentStatusHint(agent.id) }}</small>
+                </span>
+                <span class="mention-suggest-item__state" :class="agentStatusClass(agent.id)">
+                  {{ agentStatusText(agent.id) }}
+                </span>
+              </button>
+            </div>
             <textarea
               v-model="inputContent"
               class="message-input"
-              placeholder="输入群指令，使用 @ 成员名 定向派发。Enter 发送，Shift+Enter 换行。"
-              @keydown.enter.exact.prevent="handleSend"
+              placeholder="输入消息。使用 @ 成员名 邀请回复。Enter 发送，Shift+Enter 换行。"
+              @keydown="handleComposerKeydown"
+              @input="handleComposerInput"
+              @click="refreshMentionSuggestions"
+              @focus="refreshMentionSuggestions"
               rows="6"
               ref="inputRef"
             ></textarea>
 
             <div class="composer-footer">
               <div class="composer-footnote">
-                <span>广播消息会保存在本地会话。</span>
-                <span>Agent 回复会通过 Claude Runtime 事件流回写频道。</span>
+                <span>历史消息会持久化，并自动压缩为长期记忆。</span>
+                <span>只显示你和成员的正常对话内容。</span>
               </div>
-              <button
-                class="draft-task-btn"
-                type="button"
-                :disabled="sendDisabled"
-                @click="createTaskFromMessage(inputContent)"
-              >
-                转为任务
-              </button>
               <button
                 class="send-btn"
                 @click="handleSend"
                 :disabled="sendDisabled"
               >
-                下达指令
+                发送
               </button>
             </div>
           </div>
@@ -215,20 +218,15 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { useGroupChatStore } from '@/stores/groupChat'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { extractText } from '@/utils/gateway-protocol'
 import ChatMessageBubble from '@/components/chat/ChatMessageBubble.vue'
 import { useChatFormatting } from '@/composables/useChatFormatting'
-import { useTasksStore } from '@/stores/tasks'
-import { taskApi } from '@/api/tasks'
 
 const groupStore = useGroupChatStore()
 const multiAgentStore = useMultiAgentChatStore()
-const tasksStore = useTasksStore()
-const router = useRouter()
 const { formatTime, formatRichText } = useChatFormatting()
 
 const groupConfig = computed(() => groupStore.groupConfig)
@@ -282,6 +280,22 @@ const sendDisabled = computed(() => !inputContent.value.trim())
 const inputContent = ref('')
 const messagesContainer = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLTextAreaElement | null>(null)
+const mentionQuery = ref('')
+const mentionStart = ref(-1)
+const mentionEnd = ref(-1)
+const activeMentionIndex = ref(0)
+
+const mentionCandidates = computed(() => {
+  const query = mentionQuery.value.trim().toLowerCase()
+  const candidates = participatingAgents.value.filter((agent) => {
+    if (!query) return true
+    return agent.name.toLowerCase().includes(query) || agent.id.toLowerCase().includes(query)
+  })
+  return candidates.slice(0, 5)
+})
+
+const mentionPanelVisible = computed(() => mentionStart.value >= 0 && mentionCandidates.value.length > 0)
+const noisySystemMessagePattern = /(已进入|开始回复|回复完成|队列|运行结束|运行回复已停止|排队回复已取消|Claude Runtime 状态更新)/
 
 const getAgentName = (agentId: string) => {
   const agent = participatingAgents.value.find(a => a.id === agentId)
@@ -316,10 +330,10 @@ const agentStatusHint = (agentId: string) => {
   const state = agentRuntimeState(agentId)
   if (state === 'running') return 'Claude Runtime 正在执行'
   if (state === 'queued') return '已进入 Runtime 队列'
-  if (state === 'recent') return '最近完成，可继续 @ 下达指令'
-  if (state === 'failed') return '最近运行失败，可重新下达'
-  if (state === 'stopped') return '运行已停止，可重新下达'
-  return '可直接 @ 下达指令'
+  if (state === 'recent') return '刚刚回复过，可继续 @ 聊天'
+  if (state === 'failed') return '上次回复失败，可重新发送'
+  if (state === 'stopped') return '回复已停止，可重新发送'
+  return '可直接 @ 聊天'
 }
 
 const appendMention = (agentName: string) => {
@@ -334,27 +348,86 @@ const appendMention = (agentName: string) => {
   nextTick(() => inputRef.value?.focus())
 }
 
-const createTaskFromMessage = async (content: string) => {
-  const description = content.trim()
-  if (!description) return
-  const plainTitle = description.replace(/@\S+/g, '').trim().slice(0, 32) || '群聊协作任务'
-  try {
-    const response = await tasksStore.createTask({
-      title: plainTitle,
-      description,
-      priority: 'normal',
-    })
-    ElMessage.success('已从群聊创建任务')
-    router.push({ path: '/task-center-2', query: { task: response.task.id } })
-  } catch (err) {
-    ElMessage.error(err instanceof Error ? err.message : '创建任务失败')
+function closeMentionSuggestions() {
+  mentionQuery.value = ''
+  mentionStart.value = -1
+  mentionEnd.value = -1
+  activeMentionIndex.value = 0
+}
+
+function refreshMentionSuggestions() {
+  const input = inputRef.value
+  if (!input) return
+  const caret = input.selectionStart ?? inputContent.value.length
+  const beforeCaret = inputContent.value.slice(0, caret)
+  const match = beforeCaret.match(/(^|\s)@([^\s@]*)$/)
+  if (!match) {
+    closeMentionSuggestions()
+    return
+  }
+
+  mentionStart.value = beforeCaret.length - match[2].length - 1
+  mentionEnd.value = caret
+  mentionQuery.value = match[2] || ''
+  activeMentionIndex.value = Math.min(activeMentionIndex.value, Math.max(mentionCandidates.value.length - 1, 0))
+}
+
+function handleComposerInput() {
+  nextTick(() => refreshMentionSuggestions())
+}
+
+function selectMentionCandidate(agent = mentionCandidates.value[activeMentionIndex.value]) {
+  if (!agent || mentionStart.value < 0) return
+  const input = inputRef.value
+  const before = inputContent.value.slice(0, mentionStart.value)
+  const after = inputContent.value.slice(mentionEnd.value)
+  const token = `@${agent.name} `
+  inputContent.value = `${before}${token}${after.replace(/^\s*/, '')}`
+  const caret = before.length + token.length
+  closeMentionSuggestions()
+  nextTick(() => {
+    input?.focus()
+    input?.setSelectionRange(caret, caret)
+  })
+}
+
+function handleComposerKeydown(event: KeyboardEvent) {
+  if (event.isComposing) return
+
+  if (mentionPanelVisible.value) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      activeMentionIndex.value = (activeMentionIndex.value + 1) % mentionCandidates.value.length
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      activeMentionIndex.value = (activeMentionIndex.value - 1 + mentionCandidates.value.length) % mentionCandidates.value.length
+      return
+    }
+    if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault()
+      selectMentionCandidate()
+      return
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      closeMentionSuggestions()
+      return
+    }
+  }
+
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    handleSend()
   }
 }
 
 async function refreshRuntimeStatus() {
   try {
-    const response = await taskApi.runtimeStatus()
-    runtimeStatus.value = response.status
+    const response = await fetch('/api/group-chat/status')
+    const data = await response.json()
+    runtimeStatus.value = data.status
   } catch (err) {
     console.warn('[GroupChat] Runtime status failed:', err)
     runtimeStatus.value = {
@@ -408,25 +481,22 @@ function setupRuntimeEventStream() {
         if (!agentId || !payload.message) return
         const next = `${runBuffers.value[runId] || ''}${payload.message}`
         runBuffers.value = { ...runBuffers.value, [runId]: next }
-        groupStore.updateAgentReply(agentId, next)
+        groupStore.updateAgentReply(agentId, next, runId)
         scrollToBottom()
       } else if (payload.type === 'group.agent.snapshot') {
         if (!agentId || !payload.message) return
         runBuffers.value = { ...runBuffers.value, [runId]: payload.message }
-        groupStore.updateAgentReply(agentId, payload.message)
+        groupStore.updateAgentReply(agentId, payload.message, runId)
         scrollToBottom()
       } else if (payload.type === 'group.run.queued' || payload.type === 'group.run.started') {
         setAgentRunState(agentId, payload.type === 'group.run.queued' ? 'queued' : 'running')
-        groupStore.addSystemMessage(payload.message || 'Claude Runtime 状态更新')
       } else if (payload.type === 'group.run.completed') {
         removeActiveRun(runId)
         setAgentRunState(agentId, 'recent')
-        groupStore.addSystemMessage(`${payload.message || '报告已生成'}，可前往任务指挥中心查看：${payload.taskId || ''}`)
         refreshRuntimeStatus()
       } else if (payload.type === 'group.run.failed' || payload.type === 'group.run.cancelled') {
         removeActiveRun(runId)
         setAgentRunState(agentId, payload.type === 'group.run.failed' ? 'failed' : 'stopped')
-        groupStore.addSystemMessage(payload.message || 'Claude Runtime 运行结束')
         refreshRuntimeStatus()
       }
     } catch (err) {
@@ -482,7 +552,7 @@ const handleSend = async () => {
   fetch('/api/group-chat/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content, sender: 'user' }),
+    body: JSON.stringify({ content, sender: 'user', senderId: 'user', senderName: '我' }),
   }).catch(() => null)
   if (invalidMentions.length > 0 || offlineAgents.length > 0) {
     console.warn('[GroupChat] ignored mentions', { invalidMentions, offlineAgents })
@@ -498,6 +568,7 @@ const handleSend = async () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           content: content.replace(/@[^\s]+/g, '').trim(),
+          roomId: groupConfig.value.id,
         })
       })
 
@@ -513,14 +584,13 @@ const handleSend = async () => {
           timestamp: Date.now(),
           agentId
         })
-        groupStore.addSystemMessage(`${agentState.config.displayName} 已进入 Claude Runtime 队列，可在任务指挥中心查看：${data.task?.id || ''}`)
       } else {
         console.error(`[GroupChat] Failed to queue message for ${agentId}:`, data.error)
-        groupStore.addSystemMessage(`${agentState.config.displayName} 入队失败：${data.error || '未知错误'}`)
+        ElMessage.error(`${agentState.config.displayName} 入队失败：${data.error || '未知错误'}`)
       }
     } catch (err) {
       console.error(`[GroupChat] Send message error to ${agentId}:`, err)
-      groupStore.addSystemMessage(`${agentState.config.displayName} 入队失败`)
+      ElMessage.error(`${agentState.config.displayName} 入队失败`)
     }
   }
 
@@ -539,13 +609,45 @@ const scrollToBottom = () => {
   })
 }
 
-const confirmClear = () => {
-  ElMessageBox.confirm('清空群聊消息记录？', '确认', {
-    confirmButtonText: '清空',
+async function loadServerMessages() {
+  try {
+    const response = await fetch(`/api/group-chat/messages?roomId=${encodeURIComponent(groupConfig.value.id)}&limit=120`)
+    const data = await response.json()
+    if (data.success && Array.isArray(data.messages)) {
+      const normalized = data.messages.map((message: any) => ({
+        id: String(message.id),
+        content: String(message.content || ''),
+        sender: message.sender === 'agent' || message.sender === 'system' ? message.sender : 'user',
+        senderId: message.senderId,
+        senderName: message.senderName || (message.sender === 'agent' ? getAgentName(message.senderId || '') : '我'),
+        senderAvatar: message.sender === 'agent'
+          ? participatingAgents.value.find(agent => agent.id === message.senderId)?.avatar
+          : undefined,
+        timestamp: Number(message.timestamp || Date.now()),
+        runId: message.runId,
+      })).filter((message: any) => !(message.sender === 'system' && noisySystemMessagePattern.test(message.content)))
+      if (normalized.length > 0) {
+        groupStore.setMessages(normalized)
+      }
+    }
+  } catch (err) {
+    console.warn('[GroupChat] Load server messages failed:', err)
+  }
+}
+
+const confirmClearHistory = () => {
+  ElMessageBox.confirm('清除当前群聊的历史消息、压缩记忆和成员会话？运行中的回复也会被停止。', '清除历史会话', {
+    confirmButtonText: '清除历史',
     cancelButtonText: '取消',
     type: 'warning'
-  }).then(() => {
+  }).then(async () => {
+    await handleDisconnectAll()
     groupStore.clearMessages()
+    runBuffers.value = {}
+    agentRunStates.value = {}
+    await fetch(`/api/group-chat/messages?roomId=${encodeURIComponent(groupConfig.value.id)}`, { method: 'DELETE' }).catch(() => null)
+    await refreshRuntimeStatus()
+    ElMessage.success('历史会话已清除')
   }).catch(() => {})
 }
 
@@ -563,7 +665,7 @@ const handleDisconnectAll = async () => {
   activeRunIds.value = []
   agentRunStates.value = Object.fromEntries(Object.keys(agentRunStates.value).map(agentId => [agentId, 'stopped']))
   await refreshRuntimeStatus()
-  ElMessage.success('已请求停止群聊运行任务')
+  ElMessage.success('已请求停止正在生成的回复')
 }
 
 let prevLength = 0
@@ -580,6 +682,7 @@ let cleanupRuntimeStream: (() => void) | null = null
 
 onMounted(() => {
   groupStore.loadMessages()
+  loadServerMessages()
   refreshRuntimeStatus()
   cleanupRuntimeStream = setupRuntimeEventStream()
   scrollToBottom()
@@ -596,8 +699,8 @@ onUnmounted(() => {
 
 <style scoped>
 .command-room {
-  min-height: 100%;
-  height: auto;
+  height: 100%;
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(280px, 332px) minmax(0, 1fr);
   background:
@@ -606,10 +709,11 @@ onUnmounted(() => {
     var(--bg-base);
   border: 1px solid var(--border-default);
   border-radius: 28px;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .command-sidebar {
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -714,35 +818,35 @@ onUnmounted(() => {
   font-size: 0.78rem;
 }
 
-.metrics-grid {
+.conversation-summary {
   display: grid;
-  gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
 
-.metric-card {
+.conversation-summary article {
   display: grid;
-  gap: 6px;
-  padding: 16px;
-  border-radius: 18px;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 16px;
   background: color-mix(in oklab, var(--bg-card) 88%, transparent);
   box-shadow: inset 0 0 0 1px var(--border-default);
 }
 
-.metric-label,
-.metric-hint,
+.conversation-summary span,
 .panel-count,
 .draft-counter {
   color: var(--text-secondary);
 }
 
-.metric-label,
-.metric-hint {
+.conversation-summary span {
   font-size: 0.8rem;
 }
 
-.metric-value {
+.conversation-summary strong {
   color: var(--text-primary);
-  font-size: 1.55rem;
+  font-size: 1.25rem;
   line-height: 1;
 }
 
@@ -780,6 +884,7 @@ onUnmounted(() => {
 }
 
 .roster-panel {
+  flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -912,16 +1017,17 @@ onUnmounted(() => {
   font-size: 1.2rem;
 }
 
-.stage-body {
+.chat-panel {
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  display: flex;
+  flex-direction: column;
   gap: 16px;
 }
 
 .stream-shell {
-  min-height: 620px;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -968,7 +1074,7 @@ onUnmounted(() => {
 
 .empty-state {
   flex: 1;
-  min-height: 420px;
+  min-height: 280px;
   display: grid;
   place-items: center;
   gap: 18px;
@@ -976,8 +1082,8 @@ onUnmounted(() => {
 }
 
 .empty-orbit {
-  width: 220px;
-  height: 220px;
+  width: 160px;
+  height: 160px;
   display: grid;
   place-items: center;
   border-radius: 50%;
@@ -991,8 +1097,8 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 110px;
-  height: 110px;
+  width: 92px;
+  height: 92px;
   border-radius: 999px;
   background: color-mix(in oklab, var(--bg-card) 92%, transparent);
   color: var(--text-primary);
@@ -1037,47 +1143,11 @@ onUnmounted(() => {
   max-width: min(44rem, calc(100% - 52px));
 }
 
-.message-task-btn,
-.draft-task-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 1px solid var(--border-default);
-  border-radius: 10px;
-  background: var(--bg-card);
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.message-task-btn {
-  min-height: 30px;
-  padding: 0 9px;
-  margin-top: 20px;
-  font-size: 12px;
-}
-
-.draft-task-btn {
-  width: 100%;
-  height: 40px;
-  font-weight: 700;
-}
-
-.message-task-btn:hover,
-.draft-task-btn:hover {
-  color: var(--color-primary);
-  border-color: var(--color-primary);
-}
-
-.draft-task-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
 .composer-shell {
   display: flex;
   flex-direction: column;
-  min-height: 620px;
+  flex-shrink: 0;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -1106,8 +1176,8 @@ onUnmounted(() => {
 }
 
 .composer-box {
+  position: relative;
   display: flex;
-  flex: 1;
   min-height: 0;
   flex-direction: column;
   margin: 0 18px 18px;
@@ -1117,16 +1187,131 @@ onUnmounted(() => {
   box-shadow: inset 0 0 0 1px var(--border-default);
 }
 
+.mention-suggest-panel {
+  position: absolute;
+  z-index: 8;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: grid;
+  gap: 6px;
+  max-height: 270px;
+  overflow-y: auto;
+  padding: 10px;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--bg-panel) 96%, transparent), color-mix(in oklab, var(--bg-card) 92%, transparent));
+  border: 1px solid color-mix(in oklab, var(--color-primary) 24%, var(--border-default));
+  box-shadow:
+    0 18px 50px color-mix(in oklab, #000 36%, transparent),
+    inset 0 1px 0 color-mix(in oklab, #fff 8%, transparent);
+}
+
+.mention-suggest-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 6px;
+  color: var(--text-tertiary);
+  font-size: 0.74rem;
+}
+
+.mention-suggest-panel__head span {
+  margin-right: auto;
+}
+
+.mention-suggest-panel__head kbd {
+  min-width: 24px;
+  height: 20px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--bg-base) 72%, transparent);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.68rem;
+  box-shadow: inset 0 0 0 1px var(--border-default);
+}
+
+.mention-suggest-item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.mention-suggest-item:hover,
+.mention-suggest-item.is-active {
+  background: color-mix(in oklab, var(--color-primary) 16%, var(--bg-base));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-primary) 28%, transparent);
+}
+
+.mention-suggest-item__avatar {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  background: color-mix(in oklab, var(--color-primary) 18%, var(--bg-card));
+  color: var(--text-primary);
+}
+
+.mention-suggest-item__body {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.mention-suggest-item__body strong,
+.mention-suggest-item__body small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mention-suggest-item__body strong {
+  font-size: 0.9rem;
+}
+
+.mention-suggest-item__body small,
+.mention-suggest-item__state {
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+}
+
+.mention-suggest-item__state.is-online,
+.mention-suggest-item__state.is-ready {
+  color: var(--color-primary);
+}
+
+.mention-suggest-item__state.is-pending {
+  color: var(--color-warning);
+}
+
+.mention-suggest-item__state.is-offline {
+  color: var(--color-error);
+}
+
 .message-input {
-  flex: 1;
-  min-height: 240px;
+  min-height: 96px;
+  max-height: 180px;
   padding: 0;
   border: 0;
   background: transparent;
   color: var(--text-primary);
   font: inherit;
   line-height: 1.7;
-  resize: none;
+  resize: vertical;
 }
 
 .message-input::placeholder {
@@ -1138,7 +1323,9 @@ onUnmounted(() => {
 }
 
 .composer-footer {
-  display: grid;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
   gap: 14px;
   padding-top: 14px;
   box-shadow: inset 0 1px 0 var(--border-default);
@@ -1152,7 +1339,7 @@ onUnmounted(() => {
 }
 
 .send-btn {
-  width: 100%;
+  min-width: 112px;
   height: 48px;
   border: 0;
   border-radius: 16px;
@@ -1183,17 +1370,11 @@ onUnmounted(() => {
 @media (max-width: 1180px) {
   .command-room {
     grid-template-columns: 1fr;
-    min-height: auto;
-    height: auto;
   }
 
   .command-sidebar {
     border-right: 0;
     border-bottom: 1px solid var(--border-default);
-  }
-
-  .stage-body {
-    grid-template-columns: 1fr;
   }
 
   .stream-shell,
@@ -1202,7 +1383,7 @@ onUnmounted(() => {
   }
 
   .composer-box {
-    min-height: 280px;
+    min-height: 0;
   }
 }
 
@@ -1227,11 +1408,24 @@ onUnmounted(() => {
   .stage-header__meta,
   .command-actions {
     width: 100%;
+  }
+
+  .command-actions,
+  .conversation-summary {
     grid-template-columns: 1fr;
   }
 
   .messages-container {
     padding: 16px;
+  }
+
+  .composer-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .send-btn {
+    width: 100%;
   }
 
   .composer-box,
