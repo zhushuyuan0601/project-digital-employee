@@ -297,7 +297,7 @@
           </div>
           <div class="team-live-grid">
             <article
-              v-for="subtask in selectedTask.subtasks"
+              v-for="subtask in orderedTaskSubtasks"
               :key="subtask.id"
               class="member-card"
               :class="{
@@ -1324,6 +1324,7 @@ const reviewRequestButtonText = computed(() => {
   if (selectedTask.value?.status === 'reviewing' || hasReviewSummary.value) return '已请求汇总'
   return '请求汇总'
 })
+const orderedTaskSubtasks = computed(() => sortSubtasksByExecutionOrder(selectedTask.value?.subtasks || [], selectedTask.value?.plan_json || null))
 const activeMemberSubtask = computed(() => selectedTask.value?.subtasks.find(subtask => subtask.id === activeMemberSubtaskId.value) || null)
 const activeMemberRunId = computed(() => {
   const subtask = activeMemberSubtask.value
@@ -2075,12 +2076,13 @@ const planWorkflowNodes = computed<WorkflowNodePlan[]>(() => {
     skipCondition: subtask.skipCondition,
   }))
 })
+const orderedPlanWorkflowNodes = computed(() => sortPlanNodesByExecutionOrder(planWorkflowNodes.value))
 const planAcceptanceCriteria = computed(() => acceptedPlan.value?.acceptanceCriteria || [])
 const workflowPhaseOrder: WorkflowPhase[] = ['research', 'product', 'design', 'engineering', 'testing', 'review', 'summary']
 const workflowNodesByPhase = computed(() => {
   const groups = new Map<WorkflowPhase, WorkflowNodePlan[]>()
   for (const phase of workflowPhaseOrder) groups.set(phase, [])
-  for (const node of planWorkflowNodes.value) {
+  for (const node of orderedPlanWorkflowNodes.value) {
     const phase = workflowPhaseOrder.includes(node.phase) ? node.phase : 'review'
     groups.get(phase)?.push(node)
   }
@@ -2091,41 +2093,47 @@ const workflowWorkPackages = computed<WorkflowWorkPackage[]>(() => {
   if (!task) return []
 
   const groups = new Map<string, Subtask[]>()
-  for (const subtask of task.subtasks || []) {
+  const executionIndex = new Map(orderedTaskSubtasks.value.map((subtask, index) => [subtask.id, index]))
+  for (const subtask of orderedTaskSubtasks.value) {
     const phase = normalizedWorkflowPhase(workflowContext(subtask).phase)
     const key = `${workflowPhaseOrder.indexOf(phase)}:${phase}:${subtask.assigned_agent_id}`
     groups.set(key, [...(groups.get(key) || []), subtask])
   }
 
   return [...groups.entries()]
-    .sort(([left], [right]) => left.localeCompare(right, 'zh-CN'))
+    .sort(([, leftNodes], [, rightNodes]) => {
+      const leftIndex = Math.min(...leftNodes.map(node => executionIndex.get(node.id) ?? Number.MAX_SAFE_INTEGER))
+      const rightIndex = Math.min(...rightNodes.map(node => executionIndex.get(node.id) ?? Number.MAX_SAFE_INTEGER))
+      return leftIndex - rightIndex
+    })
     .map(([key, nodes]) => {
-      const first = nodes[0]
+      const orderedNodes = [...nodes].sort((left, right) => (executionIndex.get(left.id) ?? 0) - (executionIndex.get(right.id) ?? 0))
+      const first = orderedNodes[0]
       const phase = normalizedWorkflowPhase(workflowContext(first).phase)
-      const nodeKeys = new Set(nodes.map(workflowNodeKey))
-      const dependsOn = nodes.flatMap((node) => {
+      const nodeKeys = new Set(orderedNodes.map(workflowNodeKey))
+      const dependsOn = orderedNodes.flatMap((node) => {
         const deps = workflowContext(node).dependsOn
         return Array.isArray(deps) ? deps.map(String) : []
       })
       const internalDependencyCount = dependsOn.filter(dep => nodeKeys.has(dep)).length
       const externalDependencyCount = new Set(dependsOn.filter(dep => !nodeKeys.has(dep))).size
-      const outputCount = selectedTaskOutputs.value.filter(output => output.subtask_id && nodes.some(node => node.id === output.subtask_id)).length
-      const progress = Math.round(nodes.reduce((sum, node) => sum + Number(node.progress || 0), 0) / Math.max(nodes.length, 1))
-      const readyCount = nodes.filter(node => node.status === 'ready').length
-      const runningCount = nodes.filter(node => ['queued', 'assigned', 'running'].includes(node.status)).length
-      const blockedCount = nodes.filter(node => node.status === 'blocked').length
-      const completedCount = nodes.filter(node => ['completed', 'skipped'].includes(node.status)).length
-      const status = workPackageStatus(nodes)
+      const outputCount = selectedTaskOutputs.value.filter(output => output.subtask_id && orderedNodes.some(node => node.id === output.subtask_id)).length
+      const progress = Math.round(orderedNodes.reduce((sum, node) => sum + Number(node.progress || 0), 0) / Math.max(orderedNodes.length, 1))
+      const readyCount = orderedNodes.filter(node => node.status === 'ready').length
+      const runningCount = orderedNodes.filter(node => ['queued', 'assigned', 'running'].includes(node.status)).length
+      const blockedCount = orderedNodes.filter(node => node.status === 'blocked').length
+      const completedCount = orderedNodes.filter(node => ['completed', 'skipped'].includes(node.status)).length
+      const status = workPackageStatus(orderedNodes)
 
       return {
         key,
         phase,
         agentId: first.assigned_agent_id,
         title: `${agentName(first.assigned_agent_id)} · ${phaseLabel(phase)}工作包`,
-        summary: nodes.length > 1
-          ? `同类${phaseLabel(phase)}工作汇总到 ${agentName(first.assigned_agent_id)}，内部 ${nodes.length} 个节点按依赖并行推进。`
+        summary: orderedNodes.length > 1
+          ? `同类${phaseLabel(phase)}工作汇总到 ${agentName(first.assigned_agent_id)}，内部 ${orderedNodes.length} 个节点按依赖并行推进。`
           : `由 ${agentName(first.assigned_agent_id)} 负责该${phaseLabel(phase)}节点。`,
-        nodes,
+        nodes: orderedNodes,
         progress,
         outputCount,
         readyCount,
@@ -2733,7 +2741,12 @@ async function previewOutput(output: TaskOutput | null | undefined) {
   }
   previewLoading.value = true
   try {
-    const data = await fetch(`/api/files/content?path=${encodeURIComponent(output.path)}`).then(res => res.json())
+    const search = new URLSearchParams({
+      path: output.path,
+      taskId: output.task_id || selectedTask.value?.id || '',
+      outputId: String(output.id || ''),
+    })
+    const data = await fetch(`/api/files/content?${search.toString()}`).then(res => res.json())
     if (!data.success) throw new Error(data.error || '读取失败')
     previewContent.value = data.content || ''
   } catch (err) {
@@ -2750,7 +2763,10 @@ async function openOutputDirectory(output: TaskOutput | null | undefined, event?
     return
   }
   try {
-    await taskApi.openFileDirectory(output.path)
+    await taskApi.openFileDirectory(output.path, {
+      taskId: output.task_id || selectedTask.value?.id || null,
+      outputId: output.id,
+    })
     ElMessage.success('已打开成果所在目录')
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '打开目录失败')
@@ -2798,6 +2814,113 @@ function agentName(agentId: string) {
 
 function phaseLabel(phase?: string) {
   return workflowPhaseLabels[(phase || 'review') as WorkflowPhase] || phase || '复盘'
+}
+
+function nodeSequenceFromId(id: string) {
+  const match = String(id || '').match(/(?:^|[-_])(\d+)$/)
+  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER
+}
+
+function planExecutionOrderMap(plan: TaskPlan | null | undefined) {
+  const map = new Map<string, number>()
+  const nodes = Array.isArray(plan?.workflow) && plan.workflow.length
+    ? plan.workflow
+    : Array.isArray(plan?.subtasks)
+      ? plan.subtasks
+      : []
+  nodes.forEach((node, index) => {
+    if (node.id) map.set(String(node.id), index + 1)
+  })
+  return map
+}
+
+function stableTopologicalSort<T>(
+  items: T[],
+  keyOf: (item: T, index: number) => string,
+  dependsOnOf: (item: T) => string[],
+  rankOf: (item: T, index: number) => number,
+) {
+  const entries = items.map((item, index) => ({
+    item,
+    key: keyOf(item, index),
+    rank: rankOf(item, index),
+    originalIndex: index,
+  }))
+  const knownKeys = new Set(entries.map(entry => entry.key))
+  const indegree = new Map(entries.map(entry => [entry.key, 0]))
+  const dependents = new Map<string, string[]>()
+
+  for (const entry of entries) {
+    const deps = dependsOnOf(entry.item).filter(dep => knownKeys.has(dep))
+    indegree.set(entry.key, deps.length)
+    for (const dep of deps) {
+      dependents.set(dep, [...(dependents.get(dep) || []), entry.key])
+    }
+  }
+
+  const byKey = new Map(entries.map(entry => [entry.key, entry]))
+  const compare = (left: typeof entries[number], right: typeof entries[number]) =>
+    left.rank - right.rank || left.originalIndex - right.originalIndex || left.key.localeCompare(right.key, 'zh-CN')
+  const queue = entries.filter(entry => indegree.get(entry.key) === 0).sort(compare)
+  const ordered: typeof entries = []
+
+  while (queue.length) {
+    const current = queue.shift()
+    if (!current) break
+    ordered.push(current)
+    for (const dependentKey of dependents.get(current.key) || []) {
+      indegree.set(dependentKey, Math.max(0, (indegree.get(dependentKey) || 0) - 1))
+      if (indegree.get(dependentKey) === 0) {
+        const dependent = byKey.get(dependentKey)
+        if (dependent) {
+          queue.push(dependent)
+          queue.sort(compare)
+        }
+      }
+    }
+  }
+
+  if (ordered.length < entries.length) {
+    const emitted = new Set(ordered.map(entry => entry.key))
+    ordered.push(...entries.filter(entry => !emitted.has(entry.key)).sort(compare))
+  }
+
+  return ordered.map(entry => entry.item)
+}
+
+function sortPlanNodesByExecutionOrder(nodes: WorkflowNodePlan[]) {
+  return stableTopologicalSort(
+    nodes,
+    (node, index) => String(node.id || `node-${String(index + 1).padStart(2, '0')}`),
+    node => Array.isArray(node.dependsOn) ? node.dependsOn.map(String) : [],
+    (node, index) => {
+      const explicitOrder = Number((node as WorkflowNodePlan & { executionOrder?: number }).executionOrder)
+      if (Number.isFinite(explicitOrder) && explicitOrder > 0) return explicitOrder
+      return nodeSequenceFromId(String(node.id || '')) !== Number.MAX_SAFE_INTEGER ? nodeSequenceFromId(String(node.id)) : index + 1
+    },
+  )
+}
+
+function sortSubtasksByExecutionOrder(subtasks: Subtask[], plan: TaskPlan | null | undefined) {
+  const planOrder = planExecutionOrderMap(plan)
+  return stableTopologicalSort(
+    subtasks,
+    subtask => workflowNodeKey(subtask),
+    subtask => {
+      const dependsOn = workflowContext(subtask).dependsOn
+      return Array.isArray(dependsOn) ? dependsOn.map(String) : []
+    },
+    (subtask, index) => {
+      const context = workflowContext(subtask)
+      const explicitOrder = Number(context.executionOrder)
+      if (Number.isFinite(explicitOrder) && explicitOrder > 0) return explicitOrder
+      const nodeKey = workflowNodeKey(subtask)
+      if (planOrder.has(nodeKey)) return planOrder.get(nodeKey) || index + 1
+      const idRank = nodeSequenceFromId(nodeKey)
+      if (idRank !== Number.MAX_SAFE_INTEGER) return idRank
+      return Number(subtask.created_at || 0) || index + 1
+    },
+  )
 }
 
 function normalizedWorkflowPhase(value: unknown): WorkflowPhase {

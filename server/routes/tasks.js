@@ -11,6 +11,7 @@ import {
   createTask,
   getSubtask,
   getTaskDetail,
+  getTaskOutput,
   listTaskEvents,
   listTaskOutputs,
   listAgentRunLogs,
@@ -147,11 +148,31 @@ function normalizeProjectCwd(value) {
   return resolved
 }
 
-function isOpenPathAllowed(targetPath) {
-  return openableRoots().some((root) => isInsidePath(targetPath, root))
+function isRegisteredOutputPath(targetPath, outputId, taskId = null) {
+  const id = Number(outputId)
+  if (!Number.isFinite(id) || id <= 0) return false
+  const output = getTaskOutput(id)
+  if (!output?.path) return false
+  if (taskId && output.task_id !== taskId) return false
+  const outputPath = resolve(output.path)
+  const outputDir = dirname(outputPath)
+  return resolve(targetPath) === outputPath || resolve(targetPath) === outputDir
 }
 
-function getOpenDirectoryTarget(rawPath) {
+function isTaskProjectPath(targetPath, taskId) {
+  if (!taskId) return false
+  const task = getTaskDetail(taskId)
+  if (!task?.project_cwd) return false
+  return isInsidePath(targetPath, task.project_cwd)
+}
+
+function isOpenPathAllowed(targetPath, context = {}) {
+  return openableRoots().some((root) => isInsidePath(targetPath, root)) ||
+    isTaskProjectPath(targetPath, context.taskId) ||
+    isRegisteredOutputPath(targetPath, context.outputId, context.taskId)
+}
+
+function getOpenDirectoryTarget(rawPath, context = {}) {
   if (!rawPath || typeof rawPath !== 'string') {
     const error = new Error('path is required')
     error.statusCode = 400
@@ -159,7 +180,7 @@ function getOpenDirectoryTarget(rawPath) {
   }
 
   const resolvedTarget = resolve(resolvePath(rawPath))
-  if (!isOpenPathAllowed(resolvedTarget)) {
+  if (!isOpenPathAllowed(resolvedTarget, context)) {
     const error = new Error('Access denied: path not in allowed roots')
     error.statusCode = 403
     throw error
@@ -463,8 +484,12 @@ router.patch('/tasks/outputs/:id', (req, res) => {
 
 router.post('/files/open-directory', async (req, res) => {
   try {
-    const targetPath = getOpenDirectoryTarget(req.body?.path || req.query.path)
-    if (!isOpenPathAllowed(targetPath)) {
+    const context = {
+      taskId: req.body?.taskId || req.query.taskId || null,
+      outputId: req.body?.outputId || req.query.outputId || null,
+    }
+    const targetPath = getOpenDirectoryTarget(req.body?.path || req.query.path, context)
+    if (!isOpenPathAllowed(targetPath, context)) {
       return res.status(403).json({ success: false, error: 'Access denied: path not in allowed roots' })
     }
     await openPathInFileManager(targetPath)

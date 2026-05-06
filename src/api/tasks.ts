@@ -416,10 +416,10 @@ export const taskApi = {
     })
   },
 
-  openFileDirectory(path: string) {
+  openFileDirectory(path: string, context: { taskId?: string | null; outputId?: number | string | null } = {}) {
     return request<OpenDirectoryResponse>('/api/files/open-directory', {
       method: 'POST',
-      body: JSON.stringify({ path }),
+      body: JSON.stringify({ path, taskId: context.taskId || null, outputId: context.outputId || null }),
     })
   },
 

@@ -18,7 +18,7 @@ import { createAutomationRouter } from './routes/automation.js'
 import { initializeSchema } from './db/index.js'
 import { initializeAgentSchema } from './db/agents.js'
 import { initializeTaskSchema } from './db/tasks.js'
-import { listTaskEvents, listTaskOutputs, listTasks } from './db/tasks.js'
+import { getTaskDetail, getTaskOutput, listTaskEvents, listTaskOutputs, listTasks } from './db/tasks.js'
 import { initializeAnalysisSchema } from './db/analysis.js'
 import { initializeMailSchema } from './db/mail.js'
 import { cleanupOrphanAgentRunsOnStartup } from './claude-runtime/index.js'
@@ -79,6 +79,34 @@ function isPathAllowed(resolvedPath) {
   if (FILE_ROOTS.length === 0) return true
   const normalized = resolve(resolvedPath)
   return FILE_ROOTS.some(root => normalized.startsWith(root + '/') || normalized === root)
+}
+
+function isInsidePath(targetPath, rootPath) {
+  const target = resolve(targetPath)
+  const root = resolve(rootPath)
+  return target === root || target.startsWith(`${root}/`)
+}
+
+function isRegisteredOutputPath(targetPath, outputId, taskId = null) {
+  const id = Number(outputId)
+  if (!Number.isFinite(id) || id <= 0) return false
+  const output = getTaskOutput(id)
+  if (!output?.path) return false
+  if (taskId && output.task_id !== taskId) return false
+  return resolve(targetPath) === resolve(output.path)
+}
+
+function isTaskProjectPath(targetPath, taskId) {
+  if (!taskId) return false
+  const task = getTaskDetail(taskId)
+  if (!task?.project_cwd) return false
+  return isInsidePath(targetPath, task.project_cwd)
+}
+
+function isPathAllowedForRequest(resolvedPath, query = {}) {
+  return isPathAllowed(resolvedPath) ||
+    isTaskProjectPath(resolvedPath, query.taskId) ||
+    isRegisteredOutputPath(resolvedPath, query.outputId, query.taskId)
 }
 
 /**
@@ -258,7 +286,7 @@ app.get('/api/files/scan', async (req, res) => {
     }
 
     const resolved = resolvePath(path)
-    if (!isPathAllowed(resolved)) {
+    if (!isPathAllowedForRequest(resolved, req.query)) {
       return res.status(403).json({ success: false, error: 'Access denied: path not in allowed roots' })
     }
 
@@ -302,7 +330,7 @@ app.get('/api/files/content', async (req, res) => {
     }
 
     const resolved = resolvePath(path)
-    if (!isPathAllowed(resolved)) {
+    if (!isPathAllowedForRequest(resolved, req.query)) {
       return res.status(403).json({ success: false, error: 'Access denied: path not in allowed roots' })
     }
 
@@ -337,7 +365,7 @@ app.get('/api/file', async (req, res) => {
     }
 
     const resolved = resolvePath(path)
-    if (!isPathAllowed(resolved)) {
+    if (!isPathAllowedForRequest(resolved, req.query)) {
       return res.status(403).json({ success: false, error: 'Access denied: path not in allowed roots' })
     }
 
