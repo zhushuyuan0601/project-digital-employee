@@ -158,6 +158,7 @@ export async function runClaudeQuery({
         durationMs: message.duration_ms || 0,
         error: message.errors?.join('\n') || message.stop_reason || '',
       })
+      break
     }
   }
 

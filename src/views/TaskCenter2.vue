@@ -5153,6 +5153,17 @@ watch(
   font-size: 12px;
 }
 
+.work-node-row--completed .work-node-row__id {
+  color: var(--color-success);
+}
+
+.work-node-row--failed .work-node-row__id,
+.work-node-row--blocked .work-node-row__id,
+.work-node-row--failed .work-node-row__top strong,
+.work-node-row--blocked .work-node-row__top strong {
+  color: var(--color-error);
+}
+
 .work-node-row p {
   margin: 0;
   color: var(--text-secondary);
