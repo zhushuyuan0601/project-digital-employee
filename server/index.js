@@ -16,6 +16,7 @@ import groupChatRouter from './routes/group-chat.js'
 import mailRouter from './routes/mail.js'
 import { createAutomationRouter } from './routes/automation.js'
 import { initializeSchema } from './db/index.js'
+import { initializeAgentSchema } from './db/agents.js'
 import { initializeTaskSchema } from './db/tasks.js'
 import { listTaskEvents, listTaskOutputs, listTasks } from './db/tasks.js'
 import { initializeAnalysisSchema } from './db/analysis.js'
@@ -1163,6 +1164,8 @@ function getActivityStatus(type) {
   return statusMap[type] || '进行中'
 }
 
+initializeSchema()
+initializeAgentSchema()
 initializeTaskSchema()
 initializeAnalysisSchema()
 initializeMailSchema()

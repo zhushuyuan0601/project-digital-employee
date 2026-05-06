@@ -1,4 +1,5 @@
 import { getDatabase } from './index.js'
+import { getAgentDefinition, runtimeAgentMap } from '../claude-runtime/agent-registry.js'
 
 export const TASK_STATUSES = ['draft', 'planning', 'clarifying', 'dispatching', 'running', 'reviewing', 'completed', 'failed', 'cancelled']
 export const SUBTASK_STATUSES = ['pending', 'ready', 'queued', 'assigned', 'running', 'waiting_user', 'blocked', 'completed', 'failed', 'skipped']
@@ -37,6 +38,12 @@ function normalizeTask(row, subtasks = [], outputs = [], events) {
     task.events = events
   }
   return task
+}
+
+function ensureColumn(db, tableName, columnName, definition) {
+  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all()
+  if (columns.some((column) => column.name === columnName)) return
+  db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`)
 }
 
 function normalizeSubtask(row) {
@@ -81,6 +88,7 @@ export function initializeTaskSchema() {
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       description TEXT NOT NULL,
+      project_cwd TEXT,
       status TEXT NOT NULL DEFAULT 'draft',
       coordinator_agent_id TEXT NOT NULL DEFAULT 'xiaomu',
       coordinator_session_key TEXT NOT NULL DEFAULT 'agent:ceo:main',
@@ -94,6 +102,8 @@ export function initializeTaskSchema() {
       completed_at INTEGER
     )
   `)
+
+  ensureColumn(db, 'tasks', 'project_cwd', 'TEXT')
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS subtasks (
@@ -204,23 +214,23 @@ export function initializeTaskSchema() {
   console.log('[DB] Task orchestration tables initialized')
 }
 
-export function createTask({ title, description, priority = 'normal', createdBy = 'operator' }) {
+export function createTask({ title, description, priority = 'normal', createdBy = 'operator', projectCwd = null }) {
   const db = getDatabase()
   const id = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const coordinatorSessionKey = `claude:task:${id}:xiaomu`
   const stmt = db.prepare(`
     INSERT INTO tasks (
-      id, title, description, status, coordinator_agent_id, coordinator_session_key,
+      id, title, description, project_cwd, status, coordinator_agent_id, coordinator_session_key,
       created_by, priority, created_at, updated_at
-    ) VALUES (?, ?, ?, 'planning', 'xiaomu', ?, ?, ?, unixepoch(), unixepoch())
+    ) VALUES (?, ?, ?, ?, 'planning', 'xiaomu', ?, ?, ?, unixepoch(), unixepoch())
   `)
-  stmt.run(id, title, description, coordinatorSessionKey, createdBy, priority)
+  stmt.run(id, title, description, projectCwd || null, coordinatorSessionKey, createdBy, priority)
   addTaskEvent({
     taskId: id,
     agentId: 'xiaomu',
     type: 'task.created',
     message: `任务已创建，等待小呦拆解：${title}`,
-    payload: { priority },
+    payload: { priority, projectCwd: projectCwd || null },
   })
   return getTaskDetail(id)
 }
@@ -415,7 +425,7 @@ export function markPlanInvalid(taskId, reason, payload) {
   return getTaskDetail(taskId)
 }
 
-export function createSubtasksFromPlan(taskId, plan, agentMap) {
+export function createSubtasksFromPlan(taskId, plan, agentMap = runtimeAgentMap()) {
   const db = getDatabase()
   const task = getTaskDetail(taskId)
   if (!task) return null
@@ -436,7 +446,10 @@ export function createSubtasksFromPlan(taskId, plan, agentMap) {
   const tx = db.transaction(() => {
     const workflow = Array.isArray(plan.workflow) ? plan.workflow : plan.subtasks
     workflow.forEach((node, index) => {
-      const agent = agentMap[node.assignedAgentId]
+      const agentDefinition = getAgentDefinition(node.assignedAgentId)
+      const agent = agentMap[node.assignedAgentId] || {
+        runtimeAgentId: agentDefinition?.runtimeAgentId || node.assignedAgentId,
+      }
       const workflowNodeId = node.id || `node-${String(index + 1).padStart(2, '0')}`
       const safeNodeId = String(workflowNodeId).replace(/[^\w-]+/g, '-')
       const subtaskId = `${taskId}-${safeNodeId}`
@@ -464,6 +477,7 @@ export function createSubtasksFromPlan(taskId, plan, agentMap) {
             updatedAt: new Date().toISOString(),
           },
           workflowNodeId,
+          topology: plan.topology || 'hierarchical',
           phase: node.phase || 'review',
           dependsOn,
           requiredInputs: node.requiredInputs || [],
@@ -471,6 +485,19 @@ export function createSubtasksFromPlan(taskId, plan, agentMap) {
           executionMode: node.executionMode || 'report',
           successCriteria: node.successCriteria || [],
           skipCondition: node.skipCondition || '',
+          requiredTools: node.requiredTools || [],
+          riskLevel: node.riskLevel || agentDefinition?.riskLevel || '',
+          agentCapabilityHints: node.agentCapabilityHints || [],
+          agentDefinitionSnapshot: agentDefinition ? {
+            id: agentDefinition.id,
+            name: agentDefinition.name,
+            roleName: agentDefinition.roleName,
+            runtimeAgentId: agentDefinition.runtimeAgentId,
+            capabilities: agentDefinition.capabilities,
+            allowedTools: agentDefinition.allowedTools,
+            maxConcurrency: agentDefinition.maxConcurrency,
+            riskLevel: agentDefinition.riskLevel,
+          } : null,
           expectedOutput: (node.expectedOutputs || [node.expectedOutput]).filter(Boolean).join('\n'),
           acceptanceCriteria: plan.acceptanceCriteria || [],
         })

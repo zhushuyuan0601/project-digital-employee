@@ -1,40 +1,21 @@
-export const ROLE_DEFINITIONS = {
-  xiaomu: {
-    name: '小呦',
-    roleName: '项目统筹',
-    reportName: '小呦-任务拆解',
-    description: '统筹、任务拆解、最终汇总',
-    boundary: '只负责诊断、规划、协调、阶段复盘和最终汇总，不承担具体调研、产品、研发或测试执行。',
+import {
+  agentPromptList,
+  getCoordinatorAgent,
+  roleDefinitions,
+} from './agent-registry.js'
+
+export const ROLE_DEFINITIONS = new Proxy({}, {
+  get(_target, prop) {
+    const roles = roleDefinitions()
+    return roles[prop] || roles.xiaomu
   },
-  xiaokai: {
-    name: '研发工程师',
-    roleName: '技术开发',
-    reportName: '研发工程师-技术方案报告',
-    description: '技术方案、代码阅读、实现建议',
-    boundary: '负责技术方案、代码阅读、工程实现和落地建议；不得替产品定义需求，不得替测试出最终验收结论。',
+  ownKeys() {
+    return Reflect.ownKeys(roleDefinitions())
   },
-  xiaochan: {
-    name: '产品经理',
-    roleName: '产品设计',
-    reportName: '产品经理-需求分析报告',
-    description: '需求分析、PRD、流程方案',
-    boundary: '负责需求、PRD、流程、用户场景和验收口径；不得替研发做实现，不得替测试执行验证。',
+  getOwnPropertyDescriptor() {
+    return { enumerable: true, configurable: true }
   },
-  xiaoyan: {
-    name: '研究员',
-    roleName: '调研分析',
-    reportName: '研究员-调研报告',
-    description: '调研、竞品、资料分析',
-    boundary: '负责背景、市场、竞品、资料和事实依据分析；不得直接给出工程实现或测试验收结论。',
-  },
-  xiaoce: {
-    name: '测试员',
-    roleName: '质量检查',
-    reportName: '测试员-测试验收报告',
-    description: '测试方案、验收标准、风险清单',
-    boundary: '负责基于产品/研发产物做测试设计、风险验证和验收建议；没有可验证产物时必须说明阻塞。',
-  },
-}
+})
 
 const REPORT_ONLY_CONSTRAINT = `工作模式约束：
 - 你只产出 Markdown 报告，不修改项目源码。
@@ -47,12 +28,57 @@ const REPORT_ONLY_CONSTRAINT = `工作模式约束：
 - 信息不足时明确列出假设。
 - 报告必须包含：结论、依据、风险、建议、交付物。`
 
-export function buildAgentPrompt(agentId, taskContext) {
-  const role = ROLE_DEFINITIONS[agentId] || ROLE_DEFINITIONS.xiaomu
+const PLAN_CONSTRAINT = `计划模式约束：
+- 你只负责诊断和拆解，不修改项目源码。
+- 不调用工具，不读取 .env、密钥文件、令牌、私有凭证。
+- 不要读取、引用或推断其他 taskId 的历史报告、历史成果或历史会话。
+- 信息不足时明确列出假设或澄清问题。`
+
+const CODE_EXECUTION_CONSTRAINT = `编码执行约束：
+- 你必须在当前工作目录内完成实际文件修改；不要只给代码建议。
+- 当前工作目录就是本节点允许操作的目标项目目录。
+- 允许使用读写文件工具和 Bash 执行项目已有的构建、测试或语法检查命令。
+- 不读取 .env、密钥文件、令牌、私有凭证。
+- 不执行破坏性命令，不删除无关文件，不重构无关代码，不安装依赖，除非任务明确要求且风险已说明。
+- 若无法安全修改，必须明确说明阻塞原因，并不要伪造已修改文件。
+- 最终仍需输出 Markdown 报告，包含：结论、修改文件、实现说明、验证结果、风险。`
+
+const TEST_EXECUTION_CONSTRAINT = `测试执行约束：
+- 你必须基于当前工作目录中的真实项目状态执行可用验证；不要只给测试建议。
+- 允许使用读写文件工具和 Bash 执行项目已有的构建、测试或语法检查命令。
+- 如需新增低风险测试文件或修正测试配置，可在当前工作目录内修改。
+- 不读取 .env、密钥文件、令牌、私有凭证。
+- 不执行破坏性命令，不删除无关文件，不安装依赖，除非任务明确要求且风险已说明。
+- 若无法执行验证，必须明确说明阻塞原因和已检查依据。
+- 最终输出 Markdown 报告，包含：结论、验证命令、验证结果、修改文件、风险。`
+
+function coordinatorId() {
+  return getCoordinatorAgent()?.id || 'xiaomu'
+}
+
+export function getRoleDefinition(agentId) {
+  const roles = roleDefinitions()
+  return roles[agentId] || roles[coordinatorId()] || roles.xiaomu || {
+    name: String(agentId || 'agent'),
+    roleName: String(agentId || 'agent'),
+    reportName: `${String(agentId || 'agent')}-报告`,
+    description: '通用任务执行',
+    boundary: '严格基于任务上下文执行，不越权完成其他角色职责。',
+  }
+}
+
+function constraintForExecutionMode(executionMode = 'report') {
+  if (executionMode === 'code') return CODE_EXECUTION_CONSTRAINT
+  if (executionMode === 'test') return TEST_EXECUTION_CONSTRAINT
+  return REPORT_ONLY_CONSTRAINT
+}
+
+export function buildAgentPrompt(agentId, taskContext, options = {}) {
+  const role = getRoleDefinition(agentId)
   return `你是${role.name}，角色定位：${role.description}。
 角色边界：${role.boundary}
 
-${REPORT_ONLY_CONSTRAINT}
+${constraintForExecutionMode(options.executionMode)}
 
 任务上下文：
 ${taskContext}
@@ -73,12 +99,13 @@ export function buildCoordinatorPlanPrompt(task) {
 
   return `你是小呦，负责先诊断任务是否清楚，再动态规划多 Agent 协作流程。
 
-${REPORT_ONLY_CONSTRAINT}
+${PLAN_CONSTRAINT}
 
-必须只输出符合 schema 的 JSON，不要输出解释文字。
+必须只输出一个 JSON 对象，不要输出 Markdown、代码围栏或解释文字。平台会直接解析你的 JSON。
 
 任务 ID: ${task.id}
 任务标题: ${task.title}
+目标项目目录: ${task.project_cwd || '未指定，使用系统默认 Runtime CWD'}
 任务描述:
 ${task.description}
 ${clarificationContext}
@@ -90,22 +117,26 @@ ${feedbackContext}
 - 不要引用其他 taskId、其他项目或群聊中的历史上下文。
 - 若 session 记忆与本提示中的任务描述/补充信息冲突，以本提示为准。
 
-可选执行 Agent：
-- xiaoyan: 研究员，负责调研、竞品、资料分析
-- xiaochan: 产品经理，负责需求分析、PRD、流程方案
-- xiaokai: 研发工程师，负责技术方案、代码阅读、实现建议
-- xiaoce: 测试员，负责测试方案、验收标准、风险清单
+可选执行 Agent 来自平台 Registry，只能选择下列 enabled 且非统筹的 Agent：
+${agentPromptList() || '- 暂无可执行 Agent。'}
 
 诊断原则：
 - 如果目标、范围、输入材料、时间要求或验收口径不足以真实拆解，输出 decision=need_clarification，并提出最少但关键的问题。
 - 如果信息足够，输出 decision=ready_to_plan。
-- 不要默认四个 Agent 都参与，只让任务真正需要的角色参与。
-- participants 必须覆盖 xiaoyan、xiaochan、xiaokai、xiaoce，并写明参与或不参与原因。
-- workflow 是阶段 + DAG。每个节点必须写清 phase、dependsOn、requiredInputs、expectedOutputs、executionMode、successCriteria。
-- 测试节点必须依赖至少一个研发节点；研发节点如依赖产品方案，必须显式 dependsOn 产品节点。
+- 不要为了使用 Agent 而使用 Agent，只选择任务真正需要的专业 Agent。
+- 简单任务可以只生成 1 个执行节点；复杂任务可以拆成多个节点。
+- 不要套用固定流程；不强制研究、产品、研发、测试全部参与。
+- participants 只列出本次任务实际需要的 Agent，并写明选择原因。
+- workflow 是 1-N 个节点的阶段 + DAG。每个节点必须写清 phase、dependsOn、requiredInputs、expectedOutputs、executionMode、successCriteria。
+- phase 只用于展示和归类，真实执行顺序由 dependsOn 决定。
 - 小呦不作为 workflow 执行节点，只负责规划和最终汇总。
-- 默认 executionMode=report。只有任务明确需要开发实现时，研发可用 code；只有存在研发产物时，测试可用 test。
-- 如果这是基于用户反馈的重新规划，必须保留合理的原计划内容，只调整用户要求或明显不合理的部分。`
+- 默认 topology=hierarchical；如果多个无依赖节点适合并发可用 parallel；高风险交付可用 review-gate。
+- 默认 executionMode=report。只有任务明确需要开发实现时才使用 code；只有存在可验证产物时才使用 test。
+- 如果这是基于用户反馈的重新规划，必须保留合理的原计划内容，只调整用户要求或明显不合理的部分。
+
+JSON 输出结构：
+- 需要澄清时：{"decision":"need_clarification","taskTitle":"...","knownFacts":["..."],"missingInformation":["..."],"questions":[{"id":"q1","question":"...","reason":"...","required":true}]}
+- 可以执行时：{"decision":"ready_to_plan","taskTitle":"...","topology":"hierarchical|parallel|review-gate","goal":"...","knownFacts":["..."],"missingInformation":[],"questions":[],"planningNotes":["..."],"changeSummary":["..."],"participants":[{"agentId":"xiaokai","needed":true,"reason":"..."}],"workflow":[{"id":"node-01","title":"...","phase":"engineering","assignedAgentId":"xiaokai","objective":"...","dependsOn":[],"requiredInputs":["..."],"expectedOutputs":["..."],"executionMode":"code","successCriteria":["..."],"requiredTools":["Read","Glob","Grep"],"riskLevel":"medium","agentCapabilityHints":["..."]}],"acceptanceCriteria":["..."]}`
 }
 
 export function buildSubtaskPrompt(task, subtask) {
@@ -114,24 +145,29 @@ export function buildSubtaskPrompt(task, subtask) {
   const upstreamSubtasks = (task.subtasks || []).filter((item) => dependsOn.includes(item.context_json?.workflowNodeId || item.id))
   const upstreamOutputs = (task.outputs || []).filter((output) => upstreamSubtasks.some((item) => item.id === output.subtask_id))
   const upstreamSummary = upstreamSubtasks.length
-    ? upstreamSubtasks.map((item) => `- ${item.title} (${ROLE_DEFINITIONS[item.assigned_agent_id]?.name || item.assigned_agent_id})\n  状态: ${item.status}\n  摘要: ${item.result_summary || '暂无摘要'}`).join('\n')
+    ? upstreamSubtasks.map((item) => `- ${item.title} (${getRoleDefinition(item.assigned_agent_id)?.name || item.assigned_agent_id})\n  状态: ${item.status}\n  摘要: ${item.result_summary || '暂无摘要'}`).join('\n')
     : '- 无前置节点'
   const upstreamFiles = upstreamOutputs.length
     ? upstreamOutputs.map((output) => `- ${output.name}: ${output.path || output.git_url || '无路径'}`).join('\n')
     : '- 无前置文件'
-  const role = ROLE_DEFINITIONS[subtask.assigned_agent_id] || ROLE_DEFINITIONS.xiaomu
+  const role = getRoleDefinition(subtask.assigned_agent_id)
   const executionMode = nodeContext.executionMode || 'report'
   const successCriteria = Array.isArray(nodeContext.successCriteria) && nodeContext.successCriteria.length
     ? nodeContext.successCriteria.map((item) => `- ${item}`).join('\n')
     : '- 输出满足节点目标并可供下游使用'
+  const requiredTools = Array.isArray(nodeContext.requiredTools) && nodeContext.requiredTools.length
+    ? nodeContext.requiredTools.join('、')
+    : '按平台为该节点裁剪后的工具权限执行'
 
   const context = `taskId: ${task.id}
 subTaskId: ${subtask.id}
 主任务标题: ${task.title}
 主任务目标: ${task.plan_json?.goal || task.description}
+目标项目目录: ${task.project_cwd || '未指定，使用系统默认 Runtime CWD'}
 当前阶段: ${subtask.context_json?.phase || 'review'}
 执行模式: ${executionMode}
 角色边界: ${role.boundary}
+节点所需工具: ${requiredTools}
 子任务标题: ${subtask.title}
 子任务描述:
 ${subtask.description}
@@ -150,20 +186,22 @@ ${successCriteria}
 
 请严格基于上游产物和当前节点目标执行，不要越权完成其他角色职责。`
 
-  return buildAgentPrompt(subtask.assigned_agent_id, context)
+  return buildAgentPrompt(subtask.assigned_agent_id, context, { executionMode })
 }
 
 export function buildFinalSummaryPrompt(task) {
   const subtasks = (task.subtasks || [])
-    .map((subtask) => `- ${subtask.title} (${ROLE_DEFINITIONS[subtask.assigned_agent_id]?.name || subtask.assigned_agent_id}): ${subtask.result_summary || subtask.status}`)
+    .map((subtask) => `- ${subtask.title} (${getRoleDefinition(subtask.assigned_agent_id)?.name || subtask.assigned_agent_id}): ${subtask.result_summary || subtask.status}`)
     .join('\n')
   const outputs = (task.outputs || [])
     .map((output) => `- ${output.name} (${output.agent_id || 'unknown'}): ${output.path || output.git_url || '无路径'}`)
     .join('\n') || '- 暂无文件产出'
 
-  return buildAgentPrompt('xiaomu', `任务 ID: ${task.id}
+  return buildAgentPrompt(coordinatorId(), `任务 ID: ${task.id}
 任务标题: ${task.title}
 任务目标: ${task.plan_json?.goal || task.description}
+目标项目目录: ${task.project_cwd || '未指定，使用系统默认 Runtime CWD'}
+调度拓扑: ${task.plan_json?.topology || 'hierarchical'}
 
 子任务状态:
 ${subtasks}
@@ -183,6 +221,7 @@ export const PLAN_OUTPUT_FORMAT = {
     properties: {
       decision: { type: 'string', enum: ['need_clarification', 'ready_to_plan'] },
       taskTitle: { type: 'string' },
+      topology: { type: 'string', enum: ['hierarchical', 'parallel', 'review-gate'] },
       knownFacts: { type: 'array', items: { type: 'string' } },
       missingInformation: { type: 'array', items: { type: 'string' } },
       questions: {
@@ -209,7 +248,7 @@ export const PLAN_OUTPUT_FORMAT = {
           additionalProperties: false,
           required: ['agentId', 'needed', 'reason'],
           properties: {
-            agentId: { type: 'string', enum: ['xiaoyan', 'xiaochan', 'xiaokai', 'xiaoce'] },
+            agentId: { type: 'string' },
             needed: { type: 'boolean' },
             reason: { type: 'string' },
           },
@@ -225,7 +264,7 @@ export const PLAN_OUTPUT_FORMAT = {
             id: { type: 'string' },
             title: { type: 'string' },
             phase: { type: 'string', enum: ['research', 'product', 'design', 'engineering', 'testing', 'review', 'summary'] },
-            assignedAgentId: { type: 'string', enum: ['xiaoyan', 'xiaochan', 'xiaokai', 'xiaoce'] },
+            assignedAgentId: { type: 'string' },
             objective: { type: 'string' },
             dependsOn: { type: 'array', items: { type: 'string' } },
             requiredInputs: { type: 'array', items: { type: 'string' } },
@@ -233,6 +272,9 @@ export const PLAN_OUTPUT_FORMAT = {
             executionMode: { type: 'string', enum: ['report', 'code', 'test'] },
             successCriteria: { type: 'array', items: { type: 'string' } },
             skipCondition: { type: 'string' },
+            requiredTools: { type: 'array', items: { type: 'string' } },
+            riskLevel: { type: 'string' },
+            agentCapabilityHints: { type: 'array', items: { type: 'string' } },
           },
         },
       },

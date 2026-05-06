@@ -45,11 +45,12 @@ export async function runClaudeQuery({
   resume,
   cwd,
   executionMode = 'report',
+  tools = null,
   abortController,
   onEvent = () => {},
 }) {
   if (config.mock) {
-    const mockText = outputFormat
+    const mockText = outputFormat || executionMode === 'plan'
       ? JSON.stringify({
           decision: 'ready_to_plan',
           taskTitle: '模拟任务拆解',
@@ -101,18 +102,19 @@ export async function runClaudeQuery({
     }
   }
 
-  const allowWriteTools = !config.reportOnly && ['code', 'test'].includes(executionMode)
-  const readonlyDisallowed = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']
+  const allowWriteTools = ['code', 'test'].includes(executionMode)
+  const readonlyDisallowed = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Bash']
+  const runtimeTools = Array.isArray(tools) ? tools : config.allowedTools
   const options = {
     cwd: cwd || config.cwd,
-    tools: config.allowedTools,
-    allowedTools: config.allowedTools,
+    tools: runtimeTools,
+    allowedTools: runtimeTools,
     disallowedTools: allowWriteTools ? [] : readonlyDisallowed,
     permissionMode: 'dontAsk',
     includePartialMessages: true,
     maxTurns: config.maxTurns,
     abortController,
-    outputFormat,
+    ...(outputFormat ? { outputFormat } : {}),
     ...(config.model ? { model: config.model } : {}),
     ...(resume ? { resume } : {}),
   }
@@ -175,10 +177,22 @@ export async function runClaudeQuery({
     }
   }
 
+  const resultText = result.result || text
+  if (/^\s*API Error:/i.test(resultText)) {
+    return {
+      ok: false,
+      sessionId: result.session_id || sessionId,
+      text: resultText,
+      error: normalizeErrorMessage(resultText, config),
+      costUsd: result.total_cost_usd || 0,
+      durationMs: result.duration_ms || 0,
+    }
+  }
+
   return {
     ok: true,
     sessionId: result.session_id || sessionId,
-    text: result.result || text,
+    text: resultText,
     structuredOutput: result.structured_output || null,
     costUsd: result.total_cost_usd || 0,
     durationMs: result.duration_ms || 0,

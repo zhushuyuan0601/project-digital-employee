@@ -80,16 +80,18 @@ async function copyTree(source, target, sourceRoot, workspaceRoot) {
   }
 }
 
-export async function ensureTaskWorkspace({ config, task }) {
-  if (!config.workspaceIsolation) {
+export async function ensureTaskWorkspace({ config, task, executionMode = 'report' }) {
+  const sourceRoot = resolve(task?.project_cwd || config.cwd)
+  const writesProject = ['code', 'test'].includes(executionMode)
+  if (!config.workspaceIsolation || writesProject) {
     return {
-      cwd: config.cwd,
-      workspacePath: config.cwd,
+      cwd: sourceRoot,
+      workspacePath: sourceRoot,
       isolated: false,
+      writesProject,
     }
   }
 
-  const sourceRoot = resolve(config.cwd)
   const workspaceRoot = resolve(config.workspaceRoot)
   const taskRoot = join(workspaceRoot, task.id)
   const projectPath = join(taskRoot, 'project')
@@ -115,5 +117,6 @@ export async function ensureTaskWorkspace({ config, task }) {
     cwd: projectPath,
     workspacePath: projectPath,
     isolated: true,
+    writesProject: false,
   }
 }

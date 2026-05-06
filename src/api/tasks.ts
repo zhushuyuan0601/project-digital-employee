@@ -43,6 +43,29 @@ export interface RuntimeAgentStat {
   avgDurationMs: number
 }
 
+export interface AgentDefinition {
+  id: string
+  name: string
+  roleName: string
+  reportName?: string
+  description: string
+  boundary: string
+  runtimeAgentId: string
+  roleId: string
+  capabilities: string[]
+  allowedTools: string[]
+  inputContract: string[]
+  outputContract: string[]
+  riskLevel: string
+  defaultModel?: string
+  maxConcurrency: number
+  enabled: boolean
+  sortOrder: number
+  coordinator: boolean
+  createdAt?: number
+  updatedAt?: number
+}
+
 export interface RuntimeConfig {
   runtime: string
   maxConcurrency: number
@@ -90,6 +113,15 @@ interface RuntimeStatusResponse {
     agentStats?: RuntimeAgentStat[]
     failureReasons?: Array<{ reason: string; count: number }>
     recentRuns?: AgentRun[]
+    agentConcurrency?: Array<{
+      agentId: string
+      roleName: string
+      enabled: boolean
+      maxConcurrency: number
+      running: number
+      queued: number
+    }>
+    agentDefinitionsVersion?: number
     dbPath?: string
     dbWritable?: boolean
     cwdExists?: boolean
@@ -143,6 +175,17 @@ interface OpenDirectoryResponse {
 interface AgentRunLogsResponse {
   success: boolean
   logs: AgentRunLog[]
+}
+
+interface AgentsResponse {
+  success: boolean
+  agents: AgentDefinition[]
+}
+
+interface AgentResponse {
+  success: boolean
+  agent: AgentDefinition
+  agents?: AgentDefinition[]
 }
 
 export const taskApi = {
@@ -297,6 +340,21 @@ export const taskApi = {
 
   runtimeStatus() {
     return request<RuntimeStatusResponse>('/api/runtime/status')
+  },
+
+  listAgents(params: { enabledOnly?: boolean; includeCoordinator?: boolean } = {}) {
+    const search = new URLSearchParams()
+    if (params.enabledOnly) search.set('enabledOnly', '1')
+    if (params.includeCoordinator === false) search.set('includeCoordinator', '0')
+    const query = search.toString()
+    return request<AgentsResponse>(`/api/tasks/agents${query ? `?${query}` : ''}`)
+  },
+
+  updateAgent(agentId: string, payload: Partial<Pick<AgentDefinition, 'enabled' | 'maxConcurrency' | 'allowedTools' | 'riskLevel' | 'sortOrder' | 'defaultModel'>>) {
+    return request<AgentResponse>(`/api/tasks/agents/${encodeURIComponent(agentId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    })
   },
 
   runtimeConfig() {

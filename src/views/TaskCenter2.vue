@@ -715,6 +715,24 @@
             </span>
             <span class="outputs-open-card__count">{{ orderedTaskOutputs.length }}</span>
           </button>
+          <div v-if="taskCodeOutputGroups.length" class="code-output-summary">
+            <div v-for="group in taskCodeOutputGroups" :key="group.key" class="code-output-summary__group">
+              <span>{{ group.label }}</span>
+              <div class="code-output-summary__files">
+                <button
+                  v-for="output in group.outputs.slice(0, 4)"
+                  :key="output.id"
+                  class="code-output-summary__file"
+                  type="button"
+                  @click="previewOutput(output)"
+                >
+                  <i :class="fileIcon(output.name)"></i>
+                  <span>{{ output.name }}</span>
+                </button>
+              </div>
+              <small v-if="group.outputs.length > 4">+{{ group.outputs.length - 4 }}</small>
+            </div>
+          </div>
         </section>
 
         <section
@@ -773,25 +791,36 @@
       </div>
       <div v-if="orderedTaskOutputs.length === 0" class="preview-state">暂无绑定成果。</div>
       <div v-else class="outputs-dialog-list">
-        <article
-          v-for="output in orderedTaskOutputs"
-          :key="output.id"
-          class="outputs-dialog-row"
-          :class="{ 'outputs-dialog-row--summary': isSummaryOutput(output) }"
+        <section
+          v-for="group in outputDialogGroups"
+          :key="group.key"
+          class="outputs-dialog-group"
         >
-          <i :class="fileIcon(output.name)"></i>
-          <div class="outputs-dialog-row__content">
-            <strong>{{ output.name }}</strong>
-            <small>{{ agentName(output.agent_id || '') }} · {{ output.subtask_title || output.subtask_id || '主任务' }}</small>
+          <div class="outputs-dialog-group__head">
+            <strong>{{ group.label }}</strong>
+            <span>{{ group.outputs.length }} 个</span>
           </div>
-          <span v-if="isSummaryOutput(output)" class="output-badge">汇总报告</span>
-          <button class="ghost-btn ghost-btn--compact" type="button" @click="previewOutput(output)">
-            查看文件
-          </button>
-          <button class="output-row__dir" type="button" title="打开所在目录" @click="openOutputDirectory(output, $event)">
-            <i class="ri-folder-open-line"></i>
-          </button>
-        </article>
+          <article
+            v-for="output in group.outputs"
+            :key="output.id"
+            class="outputs-dialog-row"
+            :class="{ 'outputs-dialog-row--summary': isSummaryOutput(output), 'outputs-dialog-row--code': isCodeOutput(output) }"
+          >
+            <i :class="fileIcon(output.name)"></i>
+            <div class="outputs-dialog-row__content">
+              <strong>{{ output.name }}</strong>
+              <small>{{ agentName(output.agent_id || '') }} · {{ output.subtask_title || output.subtask_id || '主任务' }}</small>
+            </div>
+            <span v-if="isCodeOutput(output)" class="output-badge output-badge--code">{{ codeOutputLabel(output) }}</span>
+            <span v-else-if="isSummaryOutput(output)" class="output-badge">汇总报告</span>
+            <button class="ghost-btn ghost-btn--compact" type="button" @click="previewOutput(output)">
+              查看文件
+            </button>
+            <button class="output-row__dir" type="button" title="打开所在目录" @click="openOutputDirectory(output, $event)">
+              <i class="ri-folder-open-line"></i>
+            </button>
+          </article>
+        </section>
       </div>
     </el-dialog>
 
@@ -808,6 +837,14 @@
         <label>
           <span>任务描述</span>
           <textarea v-model="createForm.description" class="field field--textarea" placeholder="描述目标、背景和期望交付物"></textarea>
+        </label>
+        <label>
+          <span>项目目录（可选）</span>
+          <input
+            v-model="createForm.projectCwd"
+            class="field"
+            placeholder="留空使用系统默认项目，例如 /Users/lh/git/gui-web"
+          />
         </label>
         <label>
           <span>优先级</span>
@@ -937,7 +974,7 @@
             <div class="member-story__section-head">
               <div>
                 <p class="eyebrow">产出</p>
-                <h3>报告和文件</h3>
+                <h3>报告和代码文件</h3>
               </div>
               <span>{{ activeMemberStoryOutputs.length }} 个文件</span>
             </div>
@@ -945,28 +982,38 @@
               暂无报告产出，完成后会在这里显示入口。
             </div>
             <div v-else class="story-output-list">
-              <div
-                v-for="output in activeMemberStoryOutputs"
-                :key="output.id"
-                class="story-output-row"
+              <section
+                v-for="group in activeMemberOutputGroups"
+                :key="group.key"
+                class="story-output-group"
               >
-                <button class="story-output-row__main" type="button" @click="previewOutput(output)">
-                  <i :class="fileIcon(output.name)"></i>
-                  <span>
-                    <strong>{{ output.name }}</strong>
-                    <small>{{ formatOutputTime(output) }}</small>
-                  </span>
-                  <i class="ri-arrow-right-up-line"></i>
-                </button>
-                <button
-                  class="story-output-dir"
-                  type="button"
-                  title="打开所在目录"
-                  @click="openOutputDirectory(output, $event)"
+                <div class="story-output-group__head">
+                  <span>{{ group.label }}</span>
+                  <small>{{ group.outputs.length }}</small>
+                </div>
+                <div
+                  v-for="output in group.outputs"
+                  :key="output.id"
+                  class="story-output-row"
                 >
-                  <i class="ri-folder-open-line"></i>
-                </button>
-              </div>
+                  <button class="story-output-row__main" type="button" @click="previewOutput(output)">
+                    <i :class="fileIcon(output.name)"></i>
+                    <span>
+                      <strong>{{ output.name }}</strong>
+                      <small>{{ isCodeOutput(output) ? codeOutputLabel(output) : formatOutputTime(output) }}</small>
+                    </span>
+                    <i class="ri-arrow-right-up-line"></i>
+                  </button>
+                  <button
+                    class="story-output-dir"
+                    type="button"
+                    title="打开所在目录"
+                    @click="openOutputDirectory(output, $event)"
+                  >
+                    <i class="ri-folder-open-line"></i>
+                  </button>
+                </div>
+              </section>
             </div>
           </section>
         </div>
@@ -1127,6 +1174,7 @@ const md = new MarkdownIt({ html: false, linkify: true, typographer: true })
 const createForm = reactive({
   title: '',
   description: '',
+  projectCwd: '',
   priority: 'normal',
 })
 const createDialog = ref(false)
@@ -1370,6 +1418,7 @@ const IMPORTANT_EVENT_TYPES = new Set([
   'agent.run.queued',
   'agent.start',
   'outputs.bound',
+  'code.assets.bound',
   'outputs.scanned',
   'agent.done',
   'agent.error',
@@ -1403,6 +1452,7 @@ const EVENT_BADGES: Record<string, string> = {
   'agent.assistant': '输出',
   'agent.tool': '工具',
   'outputs.bound': '文件',
+  'code.assets.bound': '代码',
   'outputs.scanned': '扫描',
   'agent.done': '完成',
   'agent.error': '异常',
@@ -1444,6 +1494,53 @@ function isSummaryOutput(output: TaskOutput) {
   return /汇总|总结|final|summary/i.test(`${output.name || ''} ${output.path || ''}`)
 }
 
+function isCodeOutput(output: TaskOutput | null | undefined) {
+  return /^code_(added|modified|deleted)$/.test(String(output?.type || ''))
+}
+
+function codeOutputLabel(output: TaskOutput | null | undefined) {
+  const type = String(output?.type || '')
+  if (type === 'code_added') return '新增代码'
+  if (type === 'code_modified') return '修改代码'
+  if (type === 'code_deleted') return '删除代码'
+  return '代码文件'
+}
+
+function outputGroupLabel(key: string) {
+  const labels: Record<string, string> = {
+    code_added: '新增代码',
+    code_modified: '修改代码',
+    code_deleted: '删除代码',
+    report: '报告文件',
+    summary: '汇总报告',
+    other: '其他成果',
+  }
+  return labels[key] || key
+}
+
+function outputGroupKey(output: TaskOutput) {
+  if (isCodeOutput(output)) return output.type
+  if (isSummaryOutput(output)) return 'summary'
+  if (output.type === 'markdown') return 'report'
+  return 'other'
+}
+
+function groupOutputs(outputs: TaskOutput[]) {
+  const order = ['code_added', 'code_modified', 'code_deleted', 'summary', 'report', 'other']
+  const groups = new Map<string, TaskOutput[]>()
+  for (const output of outputs) {
+    const key = outputGroupKey(output)
+    groups.set(key, [...(groups.get(key) || []), output])
+  }
+  return order
+    .filter((key) => groups.has(key))
+    .map((key) => ({
+      key,
+      label: outputGroupLabel(key),
+      outputs: groups.get(key) || [],
+    }))
+}
+
 function formatOutputTime(output: TaskOutput | null | undefined) {
   if (!output) return '--'
   if (output.mtime) return formatMsTime(output.mtime)
@@ -1452,7 +1549,7 @@ function formatOutputTime(output: TaskOutput | null | undefined) {
 
 function eventTone(type: string): EventTone {
   if (['agent.error', 'plan.invalid', 'agent.cancelled'].includes(type)) return 'danger'
-  if (['outputs.bound'].includes(type)) return 'output'
+  if (['outputs.bound', 'code.assets.bound'].includes(type)) return 'output'
   if (['agent.done', 'workflow.node.completed', 'workflow.completed', 'task.completed', 'subtask.completed'].includes(type)) return 'success'
   if (['coordinator.clarification_required', 'subtask.retry.queued', 'agent.run.queued', 'summary.request.queued', 'task.dispatch.queued', 'session.resume_failed'].includes(type)) return 'warning'
   if (['plan.generated', 'plan.confirmed', 'plan.feedback.queued', 'workflow.node.ready', 'workflow.dependency.unlocked', 'agent.start', 'agent.tool', 'agent.assistant', 'outputs.scanned'].includes(type)) return 'progress'
@@ -1585,7 +1682,7 @@ function runLogString(log: AgentRunLog, key: string) {
 function runLogTone(type: string): EventTone {
   if (['error', 'cancelled'].includes(type)) return 'danger'
   if (['done', 'result'].includes(type)) return 'success'
-  if (['output'].includes(type)) return 'output'
+  if (['output', 'code.assets'].includes(type)) return 'output'
   if (['queue'].includes(type)) return 'warning'
   if (['start', 'system', 'tool', 'assistant.delta', 'assistant.snapshot'].includes(type)) return 'progress'
   return 'neutral'
@@ -1600,6 +1697,7 @@ function runLogLabel(type: string) {
     'assistant.delta': 'CLAUDE',
     'assistant.snapshot': 'CLAUDE',
     output: 'OUTPUT',
+    'code.assets': 'CODE',
     result: 'RESULT',
     done: 'DONE',
     error: 'ERROR',
@@ -1823,6 +1921,8 @@ const activeMemberStoryOutputs = computed(() => {
     .sort((a, b) => outputTimestampMs(b) - outputTimestampMs(a))
 })
 
+const activeMemberOutputGroups = computed(() => groupOutputs(activeMemberStoryOutputs.value))
+
 function storyStepDefinition(log: TerminalLogEntry) {
   const source = log.sourceType
   const label = log.label
@@ -1838,8 +1938,11 @@ function storyStepDefinition(log: TerminalLogEntry) {
   if (source === 'agent.assistant' || label === 'CLAUDE') {
     return { key: 'assistant', title: '生成内容', icon: 'ri-quill-pen-line', tone: 'progress' as EventTone }
   }
+  if (source === 'code.assets' || source === 'code.assets.bound' || label === 'CODE') {
+    return { key: 'code', title: '绑定代码产出', icon: 'ri-code-box-line', tone: 'output' as EventTone }
+  }
   if (source === 'output' || source === 'outputs.bound' || label === 'OUTPUT') {
-    return { key: 'output', title: '绑定产出', icon: 'ri-file-markdown-line', tone: 'output' as EventTone }
+    return { key: 'output', title: '绑定报告产出', icon: 'ri-file-markdown-line', tone: 'output' as EventTone }
   }
   if (['done', 'result', 'agent.done'].includes(source) || ['DONE', 'RESULT'].includes(label)) {
     return { key: 'done', title: '执行完成', icon: 'ri-checkbox-circle-line', tone: 'success' as EventTone }
@@ -2304,14 +2407,20 @@ const taskDetailBody = computed(() => {
 const orderedTaskOutputs = computed(() => {
   const outputs = [...(selectedTask.value?.outputs || [])]
   return outputs.sort((a, b) => {
+    const codeDiff = Number(isCodeOutput(b)) - Number(isCodeOutput(a))
+    if (codeDiff !== 0) return codeDiff
     const summaryDiff = Number(isSummaryOutput(b)) - Number(isSummaryOutput(a))
     if (summaryDiff !== 0) return summaryDiff
     return Number(b.mtime || b.created_at || 0) - Number(a.mtime || a.created_at || 0)
   })
 })
+const outputDialogGroups = computed(() => groupOutputs(orderedTaskOutputs.value))
+const taskCodeOutputGroups = computed(() => groupOutputs(orderedTaskOutputs.value.filter(isCodeOutput)))
 const latestOutputHint = computed(() => {
   const latest = orderedTaskOutputs.value[0]
   if (!latest) return '暂无绑定成果'
+  const codeCount = orderedTaskOutputs.value.filter(isCodeOutput).length
+  if (codeCount) return `代码产出 ${codeCount} 个，最新 ${latest.name}`
   const suffix = orderedTaskOutputs.value.length > 1 ? ` 等 ${orderedTaskOutputs.value.length} 个文件` : ''
   return `${latest.name}${suffix}`
 })
@@ -2343,8 +2452,20 @@ async function handleRefresh() {
   await Promise.all([
     tasksStore.fetchTasks(),
     refreshRuntimeStatus(),
+    refreshAgentLabels(),
   ])
   if (tasksStore.error) ElMessage.error(tasksStore.error)
+}
+
+async function refreshAgentLabels() {
+  try {
+    const response = await taskApi.listAgents()
+    for (const agent of response.agents) {
+      agentLabels[agent.id] = agent.name
+    }
+  } catch {
+    // Keep built-in labels as fallback.
+  }
 }
 
 async function refreshRuntimeStatus() {
@@ -2375,11 +2496,13 @@ async function createTask() {
       title: createForm.title.trim(),
       description: createForm.description.trim(),
       priority: createForm.priority,
+      projectCwd: createForm.projectCwd.trim() || undefined,
     })
     await tasksStore.fetchTask(response.task.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
     await scrollTaskRowIntoView(response.task.id)
     createForm.title = ''
     createForm.description = ''
+    createForm.projectCwd = ''
     createDialog.value = false
     ElMessage.success('任务已创建，小呦拆解已进入 Claude Runtime 队列')
     await refreshRuntimeStatus()
@@ -2600,6 +2723,10 @@ async function previewOutput(output: TaskOutput | null | undefined) {
   previewContent.value = ''
   previewType.value = output.type
   previewError.value = null
+  if (output.type === 'code_deleted') {
+    previewContent.value = `${output.name}\n\n该文件已在执行中删除，无法预览文件内容。`
+    return
+  }
   if (!output.path) {
     previewContent.value = output.git_url || '该成果没有可预览路径'
     return
@@ -5057,6 +5184,63 @@ watch(
   font-weight: 800;
 }
 
+.code-output-summary {
+  display: grid;
+  gap: 8px;
+}
+
+.code-output-summary__group {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.2);
+  border-radius: 8px;
+  background: rgba(var(--color-primary-rgb), 0.06);
+}
+
+.code-output-summary__group > span {
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.code-output-summary__files {
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.code-output-summary__file {
+  min-width: 0;
+  max-width: 160px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 5px 8px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.code-output-summary__file span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.code-output-summary small {
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
 .event-item {
   display: grid;
   grid-template-columns: 12px 1fr;
@@ -5229,6 +5413,12 @@ watch(
   background: var(--color-primary);
 }
 
+.output-badge--code {
+  color: var(--color-primary);
+  border: 1px solid rgba(var(--color-primary-rgb), 0.34);
+  background: rgba(var(--color-primary-rgb), 0.1);
+}
+
 .quiet-state,
 .empty-mission {
   color: var(--text-secondary);
@@ -5304,11 +5494,30 @@ watch(
 
 .outputs-dialog-list {
   display: grid;
-  gap: 8px;
+  gap: 12px;
   max-height: min(560px, 62vh);
   overflow: auto;
   overscroll-behavior: contain;
   padding-right: 4px;
+}
+
+.outputs-dialog-group {
+  display: grid;
+  gap: 8px;
+}
+
+.outputs-dialog-group__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.outputs-dialog-group__head small {
+  font-weight: 700;
 }
 
 .outputs-dialog-row {
@@ -5327,6 +5536,13 @@ watch(
   border-color: rgba(var(--color-primary-rgb), 0.5);
   background:
     linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.14), transparent 64%),
+    var(--bg-card);
+}
+
+.outputs-dialog-row--code {
+  border-color: rgba(var(--color-primary-rgb), 0.34);
+  background:
+    linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.1), transparent 62%),
     var(--bg-card);
 }
 
@@ -5728,6 +5944,24 @@ watch(
   overflow: auto;
   overscroll-behavior: contain;
   padding-right: 4px;
+}
+
+.story-output-group {
+  display: grid;
+  gap: 6px;
+}
+
+.story-output-group__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.story-output-group__head small {
+  font-weight: 700;
 }
 
 .story-output-row {

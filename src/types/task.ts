@@ -4,6 +4,7 @@ export type TaskOutputStatus = 'pending_review' | 'accepted' | 'rejected'
 
 export type WorkflowPhase = 'research' | 'product' | 'design' | 'engineering' | 'testing' | 'review' | 'summary'
 export type WorkflowExecutionMode = 'report' | 'code' | 'test'
+export type WorkflowTopology = 'hierarchical' | 'parallel' | 'review-gate'
 
 export interface TaskClarificationQuestion {
   id: string
@@ -31,6 +32,9 @@ export interface WorkflowNodePlan {
   executionMode: WorkflowExecutionMode
   successCriteria: string[]
   skipCondition?: string
+  requiredTools?: string[]
+  riskLevel?: string
+  agentCapabilityHints?: string[]
 }
 
 export interface TaskPlanSubtask {
@@ -46,12 +50,16 @@ export interface TaskPlanSubtask {
   executionMode?: WorkflowExecutionMode
   successCriteria?: string[]
   skipCondition?: string
+  requiredTools?: string[]
+  riskLevel?: string
+  agentCapabilityHints?: string[]
 }
 
 export interface TaskPlan {
   decision?: 'need_clarification' | 'ready_to_plan'
   taskTitle: string
   goal?: string
+  topology?: WorkflowTopology
   planningNotes?: string[]
   changeSummary?: string[]
   knownFacts?: string[]
@@ -130,6 +138,7 @@ export interface Task {
   id: string
   title: string
   description: string
+  project_cwd?: string | null
   status: TaskStatus
   coordinator_agent_id: string
   coordinator_session_key: string
@@ -154,6 +163,7 @@ export interface CreateTaskRequest {
   title: string
   description: string
   priority?: string
+  projectCwd?: string
 }
 
 export interface TaskDispatch {

@@ -1,14 +1,24 @@
-export const RUNTIME_AGENT_MAP = {
-  xiaomu: { name: '小呦', runtimeAgentId: 'ceo', sessionKey: 'claude:xiaomu:main', roleId: 'ceo' },
-  xiaoyan: { name: '研究员', runtimeAgentId: 'researcher', sessionKey: 'claude:xiaoyan:main', roleId: 'researcher' },
-  xiaochan: { name: '产品经理', runtimeAgentId: 'pm', sessionKey: 'claude:xiaochan:main', roleId: 'pm' },
-  xiaokai: { name: '研发工程师', runtimeAgentId: 'tech-lead', sessionKey: 'claude:xiaokai:main', roleId: 'tech-lead' },
-  xiaoce: { name: '测试员', runtimeAgentId: 'team-qa', sessionKey: 'claude:xiaoce:main', roleId: 'team-qa' },
-}
+import {
+  getAgentDefinition,
+  getExecutableAgents,
+  runtimeAgentMap,
+} from './agent-registry.js'
 
-const AGENT_IDS = ['xiaoyan', 'xiaochan', 'xiaokai', 'xiaoce']
+export const RUNTIME_AGENT_MAP = new Proxy({}, {
+  get(_target, prop) {
+    return runtimeAgentMap()[prop]
+  },
+  ownKeys() {
+    return Reflect.ownKeys(runtimeAgentMap())
+  },
+  getOwnPropertyDescriptor() {
+    return { enumerable: true, configurable: true }
+  },
+})
+
 const PHASES = ['research', 'product', 'design', 'engineering', 'testing', 'review', 'summary']
 const EXECUTION_MODES = ['report', 'code', 'test']
+const TOPOLOGIES = ['hierarchical', 'parallel', 'review-gate']
 
 export function extractJsonPlan(input) {
   if (!input) throw new Error('Plan content is required')
@@ -35,46 +45,46 @@ function stringArray(value) {
   return value.map((item) => String(item || '').trim()).filter(Boolean)
 }
 
-function normalizeParticipant(raw, agentId) {
-  const known = RUNTIME_AGENT_MAP[raw?.agentId] && raw.agentId !== 'xiaomu'
-    ? raw.agentId
-    : agentId
+function executableAgentIds() {
+  return new Set(getExecutableAgents().map((agent) => agent.id))
+}
+
+function normalizeParticipant(raw) {
   return {
-    agentId: known,
-    needed: Boolean(raw?.needed),
-    reason: String(raw?.reason || (raw?.needed ? '该角色参与当前任务。' : '当前任务暂不需要该角色。')).trim(),
+    agentId: String(raw?.agentId || '').trim(),
+    needed: raw?.needed !== false,
+    reason: String(raw?.reason || '该角色被分配了工作流节点。').trim(),
   }
 }
 
 function normalizeParticipants(participants = [], workflow = []) {
+  const validAgents = executableAgentIds()
   const byAgent = new Map()
   for (const item of participants || []) {
-    if (!RUNTIME_AGENT_MAP[item?.agentId] || item.agentId === 'xiaomu') continue
-    byAgent.set(item.agentId, normalizeParticipant(item, item.agentId))
+    const participant = normalizeParticipant(item)
+    if (!validAgents.has(participant.agentId)) continue
+    byAgent.set(participant.agentId, participant)
   }
 
-  const usedAgents = new Set(workflow.map((node) => node.assignedAgentId).filter(Boolean))
-  for (const agentId of AGENT_IDS) {
-    if (byAgent.has(agentId)) continue
+  for (const agentId of workflow.map((node) => node.assignedAgentId).filter(Boolean)) {
+    if (!validAgents.has(agentId) || byAgent.has(agentId)) continue
+    const agent = getAgentDefinition(agentId)
     byAgent.set(agentId, {
       agentId,
-      needed: usedAgents.has(agentId),
-      reason: usedAgents.has(agentId)
-        ? '该角色被分配了工作流节点。'
-        : '小呦未为该角色生成执行节点，当前任务暂不需要参与。',
+      needed: true,
+      reason: `该角色承担本次任务中的 ${agent?.roleName || agentId} 节点。`,
     })
   }
 
-  return AGENT_IDS.map((agentId) => byAgent.get(agentId))
+  return [...byAgent.values()]
 }
 
 function normalizeWorkflowNode(raw, index, knownIds) {
   const explicitId = String(raw?.id || '').trim()
   const id = explicitId || `node-${String(index + 1).padStart(2, '0')}`
   const phase = PHASES.includes(raw?.phase) ? raw.phase : 'review'
-  const assignedAgentId = RUNTIME_AGENT_MAP[raw?.assignedAgentId] && raw.assignedAgentId !== 'xiaomu'
-    ? raw.assignedAgentId
-    : ''
+  const validAgents = executableAgentIds()
+  const assignedAgentId = validAgents.has(raw?.assignedAgentId) ? raw.assignedAgentId : ''
   const dependsOn = stringArray(raw?.dependsOn).filter((item) => knownIds.has(item))
   const objective = String(raw?.objective || raw?.description || '').trim()
   const expectedOutputs = stringArray(raw?.expectedOutputs?.length ? raw.expectedOutputs : [raw?.expectedOutput])
@@ -93,6 +103,9 @@ function normalizeWorkflowNode(raw, index, knownIds) {
     executionMode: EXECUTION_MODES.includes(raw?.executionMode) ? raw.executionMode : 'report',
     successCriteria: stringArray(raw?.successCriteria),
     skipCondition: String(raw?.skipCondition || '').trim(),
+    requiredTools: stringArray(raw?.requiredTools),
+    riskLevel: String(raw?.riskLevel || '').trim(),
+    agentCapabilityHints: stringArray(raw?.agentCapabilityHints),
   }
 }
 
@@ -102,16 +115,10 @@ function validateWorkflowGraph(nodes, errors) {
   for (const node of nodes) {
     if (!node.title) errors.push(`节点 ${node.id} 缺少 title`)
     if (!node.objective) errors.push(`节点 ${node.id} 缺少 objective`)
-    if (!node.assignedAgentId) errors.push(`节点 ${node.id} assignedAgentId 不合法`)
+    if (!node.assignedAgentId) errors.push(`节点 ${node.id} assignedAgentId 不合法或 Agent 已禁用`)
     for (const depId of node.dependsOn) {
       if (!byId.has(depId)) errors.push(`节点 ${node.id} 依赖不存在：${depId}`)
       if (depId === node.id) errors.push(`节点 ${node.id} 不能依赖自己`)
-    }
-    if (node.executionMode === 'test') {
-      const hasEngineeringDependency = node.dependsOn.some((depId) => byId.get(depId)?.phase === 'engineering')
-      if (!hasEngineeringDependency) {
-        errors.push(`测试节点 ${node.id} 必须依赖至少一个 engineering 节点`)
-      }
     }
   }
 
@@ -150,11 +157,15 @@ function normalizeLegacyPlan(plan) {
     executionMode: subtask.executionMode || 'report',
     successCriteria: stringArray(subtask.successCriteria),
     skipCondition: subtask.skipCondition || '',
+    requiredTools: stringArray(subtask.requiredTools),
+    riskLevel: subtask.riskLevel || '',
+    agentCapabilityHints: stringArray(subtask.agentCapabilityHints),
   }))
   return {
     decision: 'ready_to_plan',
     taskTitle: plan.taskTitle || '',
     goal: plan.goal || '',
+    topology: TOPOLOGIES.includes(plan.topology) ? plan.topology : 'hierarchical',
     planningNotes: stringArray(plan.planningNotes),
     changeSummary: stringArray(plan.changeSummary),
     participants: normalizeParticipants(plan.participants, workflow),
@@ -215,6 +226,7 @@ export function validatePlan(plan) {
     decision: 'ready_to_plan',
     taskTitle: source.taskTitle || '',
     goal: source.goal || '',
+    topology: TOPOLOGIES.includes(source.topology) ? source.topology : 'hierarchical',
     planningNotes: stringArray(source.planningNotes),
     changeSummary: stringArray(source.changeSummary),
     participants: normalizeParticipants(source.participants, workflow),
@@ -232,6 +244,9 @@ export function validatePlan(plan) {
       executionMode: node.executionMode,
       successCriteria: node.successCriteria,
       skipCondition: node.skipCondition,
+      requiredTools: node.requiredTools,
+      riskLevel: node.riskLevel,
+      agentCapabilityHints: node.agentCapabilityHints,
     })),
     acceptanceCriteria: stringArray(source.acceptanceCriteria),
   }

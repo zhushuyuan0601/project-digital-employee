@@ -101,6 +101,82 @@
       </div>
     </section>
 
+    <section class="agent-panel">
+      <div class="runtime-panel__head">
+        <div>
+          <p class="eyebrow">Agent Registry</p>
+          <h2>内置 Agent 能力目录</h2>
+        </div>
+        <div class="runtime-panel__chips">
+          <span>启用 {{ enabledAgentCount }}</span>
+          <span>总数 {{ agentDefinitions.length }}</span>
+        </div>
+      </div>
+
+      <div class="agent-grid">
+        <article v-for="agent in agentDefinitions" :key="agent.id" class="agent-config">
+          <div class="agent-config__head">
+            <div>
+              <strong>{{ agent.name }}</strong>
+              <span>{{ agent.roleName }} · {{ agent.id }}</span>
+            </div>
+            <label class="agent-switch">
+              <input
+                type="checkbox"
+                :checked="agent.enabled"
+                :disabled="agent.coordinator || savingAgentId === agent.id"
+                @change="updateAgent(agent, { enabled: ($event.target as HTMLInputElement).checked })"
+              />
+              <span>{{ agent.enabled ? '启用' : '停用' }}</span>
+            </label>
+          </div>
+          <p>{{ agent.description }}</p>
+          <div class="agent-tags">
+            <span v-for="capability in agent.capabilities" :key="capability">{{ capability }}</span>
+          </div>
+          <div class="agent-form">
+            <label>
+              <span>Agent 并发</span>
+              <input
+                class="field"
+                type="number"
+                min="1"
+                :value="agent.maxConcurrency"
+                :disabled="savingAgentId === agent.id"
+                @change="updateAgent(agent, { maxConcurrency: Number(($event.target as HTMLInputElement).value) || 1 })"
+              />
+            </label>
+            <label>
+              <span>风险等级</span>
+              <select
+                class="field"
+                :value="agent.riskLevel"
+                :disabled="savingAgentId === agent.id"
+                @change="updateAgent(agent, { riskLevel: ($event.target as HTMLSelectElement).value })"
+              >
+                <option value="low">low</option>
+                <option value="medium">medium</option>
+                <option value="high">high</option>
+              </select>
+            </label>
+            <label class="agent-form__tools">
+              <span>允许工具</span>
+              <input
+                class="field"
+                :value="agent.allowedTools.join(',')"
+                :disabled="savingAgentId === agent.id"
+                @change="updateAgent(agent, { allowedTools: parseTools(($event.target as HTMLInputElement).value) })"
+              />
+            </label>
+          </div>
+          <div class="agent-contracts">
+            <span>输入 {{ agent.inputContract.join(' / ') || '未配置' }}</span>
+            <span>输出 {{ agent.outputContract.join(' / ') || '未配置' }}</span>
+          </div>
+        </article>
+      </div>
+    </section>
+
     <div class="config-tree">
       <div
         v-for="config in configs"
@@ -124,7 +200,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { taskApi, type RuntimeConfig } from '@/api/tasks'
+import { taskApi, type AgentDefinition, type RuntimeConfig } from '@/api/tasks'
 
 type ConfigItem = {
   id: string
@@ -138,6 +214,8 @@ type ConfigItem = {
 const loading = ref(false)
 const saving = ref(false)
 const runtimeConfig = ref<RuntimeConfig | null>(null)
+const agentDefinitions = ref<AgentDefinition[]>([])
+const savingAgentId = ref('')
 const runtimeStatus = ref<{
   healthy: boolean
   running: number
@@ -170,6 +248,8 @@ const allowedToolsText = computed({
       .filter(Boolean)
   },
 })
+
+const enabledAgentCount = computed(() => agentDefinitions.value.filter(agent => agent.enabled).length)
 
 const configs = ref<ConfigItem[]>([
   {
@@ -213,15 +293,41 @@ const toggleConfig = (config: ConfigItem) => {
 async function refreshConfig() {
   loading.value = true
   try {
-    const [configResponse, statusResponse] = await Promise.all([
+    const [configResponse, statusResponse, agentsResponse] = await Promise.all([
       taskApi.runtimeConfig(),
       taskApi.runtimeStatus(),
+      taskApi.listAgents(),
     ])
     applyRuntimeConfig(configResponse.config, statusResponse.status)
+    agentDefinitions.value = agentsResponse.agents
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '读取 Runtime 配置失败')
   } finally {
     loading.value = false
+  }
+}
+
+function parseTools(value: string) {
+  return value
+    .split(',')
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
+async function updateAgent(agent: AgentDefinition, payload: Partial<Pick<AgentDefinition, 'enabled' | 'maxConcurrency' | 'allowedTools' | 'riskLevel' | 'sortOrder' | 'defaultModel'>>) {
+  savingAgentId.value = agent.id
+  try {
+    const response = await taskApi.updateAgent(agent.id, payload)
+    if (response.agents) {
+      agentDefinitions.value = response.agents
+    } else {
+      agentDefinitions.value = agentDefinitions.value.map(item => item.id === agent.id ? response.agent : item)
+    }
+    ElMessage.success(`${agent.name} 配置已更新`)
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '保存 Agent 配置失败')
+  } finally {
+    savingAgentId.value = ''
   }
 }
 
@@ -289,6 +395,14 @@ onMounted(() => {
   background: var(--bg-panel);
 }
 
+.agent-panel {
+  margin: 16px 32px 0;
+  padding: 16px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-panel);
+}
+
 .runtime-panel__head,
 .runtime-actions {
   display: flex;
@@ -335,6 +449,90 @@ onMounted(() => {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-top: 16px;
+}
+
+.agent-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.agent-config {
+  padding: 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-card);
+}
+
+.agent-config__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agent-config__head strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.agent-config__head span,
+.agent-config p,
+.agent-contracts {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.agent-config p {
+  min-height: 34px;
+  margin: 10px 0;
+  line-height: 1.45;
+}
+
+.agent-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.agent-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 25px;
+}
+
+.agent-tags span {
+  padding: 4px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.agent-form {
+  display: grid;
+  grid-template-columns: 0.8fr 0.8fr 1.4fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.agent-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.agent-contracts {
+  display: grid;
+  gap: 4px;
+  margin-top: 10px;
 }
 
 .runtime-form label {
@@ -533,6 +731,11 @@ onMounted(() => {
 
 @media (max-width: 900px) {
   .runtime-form {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-grid,
+  .agent-form {
     grid-template-columns: 1fr;
   }
 

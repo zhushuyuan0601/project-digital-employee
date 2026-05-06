@@ -38,6 +38,12 @@ import {
 import { getClaudeRuntimeConfig } from '../claude-runtime/config.js'
 import { claudeRuntimeEvents } from '../claude-runtime/event-bus.js'
 import { RUNTIME_AGENT_MAP, extractJsonPlan as extractRuntimePlan, validatePlan as validateRuntimePlan } from '../claude-runtime/plan-utils.js'
+import {
+  getAgentDefinition,
+  listAgentDefinitions,
+  runtimeAgentMap,
+  updateAgentDefinition,
+} from '../claude-runtime/agent-registry.js'
 import { DEFAULT_SERVER_CONFIG, PROJECT_ROOT, envString } from '../config/defaults.js'
 
 const router = express.Router()
@@ -59,13 +65,11 @@ const RUNTIME_ENV_KEYS = [
   'CLAUDE_RUNTIME_MOCK',
 ]
 
-const AGENT_MAP = {
-  xiaomu: { name: '小呦', runtimeAgentId: 'ceo', sessionKey: 'claude:xiaomu:main', roleId: 'ceo' },
-  xiaoyan: { name: '研究员', runtimeAgentId: 'researcher', sessionKey: 'claude:xiaoyan:main', roleId: 'researcher' },
-  xiaochan: { name: '产品经理', runtimeAgentId: 'pm', sessionKey: 'claude:xiaochan:main', roleId: 'pm' },
-  xiaokai: { name: '研发工程师', runtimeAgentId: 'tech-lead', sessionKey: 'claude:xiaokai:main', roleId: 'tech-lead' },
-  xiaoce: { name: '测试员', runtimeAgentId: 'team-qa', sessionKey: 'claude:xiaoce:main', roleId: 'team-qa' },
-}
+const AGENT_MAP = new Proxy({}, {
+  get(_target, prop) {
+    return runtimeAgentMap()[prop]
+  },
+})
 
 function resolvePath(path) {
   if (path.startsWith('~/')) return join(HOME_DIR, path.slice(2))
@@ -124,6 +128,23 @@ function openableRoots() {
     config.workspaceRoot,
     ...fileRoots,
   ].filter(Boolean).map((item) => resolve(item)))]
+}
+
+function normalizeProjectCwd(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+  const resolved = resolve(resolvePath(raw))
+  if (!existsSync(resolved)) {
+    const error = new Error('Project directory does not exist')
+    error.statusCode = 400
+    throw error
+  }
+  if (!statSync(resolved).isDirectory()) {
+    const error = new Error('Project path must be a directory')
+    error.statusCode = 400
+    throw error
+  }
+  return resolved
 }
 
 function isOpenPathAllowed(targetPath) {
@@ -394,6 +415,38 @@ router.get('/tasks/outputs', (req, res) => {
   }
 })
 
+router.get('/tasks/agents', (req, res) => {
+  try {
+    const enabledOnly = parseBooleanFlag(req.query.enabledOnly, false)
+    const includeCoordinator = parseBooleanFlag(req.query.includeCoordinator, true)
+    res.json({
+      success: true,
+      agents: listAgentDefinitions({ enabledOnly, includeCoordinator }),
+    })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.patch('/tasks/agents/:id', (req, res) => {
+  try {
+    const current = getAgentDefinition(req.params.id)
+    if (!current) return res.status(404).json({ success: false, error: 'Agent not found' })
+    const body = req.body || {}
+    const agent = updateAgentDefinition(req.params.id, {
+      enabled: body.enabled,
+      maxConcurrency: body.maxConcurrency,
+      allowedTools: body.allowedTools,
+      riskLevel: body.riskLevel,
+      sortOrder: body.sortOrder,
+      defaultModel: body.defaultModel,
+    })
+    res.json({ success: true, agent, agents: listAgentDefinitions() })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
 router.patch('/tasks/outputs/:id', (req, res) => {
   try {
     const { status } = req.body || {}
@@ -428,12 +481,13 @@ router.post('/tasks/:id/open-workspace', async (req, res) => {
 
     const config = getClaudeRuntimeConfig()
     const isolatedWorkspace = resolve(join(config.workspaceRoot, task.id, 'project'))
-    const fallbackProject = resolve(config.cwd)
+    const fallbackProject = resolve(task.project_cwd || config.cwd)
     const targetPath = config.workspaceIsolation && existsSync(isolatedWorkspace)
       ? isolatedWorkspace
       : fallbackProject
 
-    if (!isOpenPathAllowed(targetPath)) {
+    const taskProjectRoot = task.project_cwd ? resolve(task.project_cwd) : null
+    if (!isOpenPathAllowed(targetPath) && !(taskProjectRoot && isInsidePath(targetPath, taskProjectRoot))) {
       return res.status(403).json({ success: false, error: 'Access denied: path not in allowed roots' })
     }
     if (!existsSync(targetPath)) {
@@ -458,19 +512,20 @@ router.post('/tasks', (req, res) => {
       return res.status(400).json({ success: false, error: 'title and description are required' })
     }
 
-    const task = createTask({ title, description, priority })
+    const projectCwd = normalizeProjectCwd(req.body?.projectCwd || req.body?.project_cwd)
+    const task = createTask({ title, description, priority, projectCwd })
     addTaskEvent({
       taskId: task.id,
       agentId: 'xiaomu',
       type: 'plan.request.queued',
       message: '已生成小呦任务诊断请求，进入 Claude Runtime 队列',
-      payload: { sessionKey: task.coordinator_session_key, mode: 'claude-runtime' },
+      payload: { sessionKey: task.coordinator_session_key, mode: 'claude-runtime', projectCwd },
     })
 
     const run = enqueuePlanRun(task.id)
     res.json({ success: true, task: getTaskDetail(task.id), planRunId: run.id, run })
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message })
+    res.status(err.statusCode || 500).json({ success: false, error: err.message })
   }
 })
 
