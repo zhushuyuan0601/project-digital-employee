@@ -207,13 +207,14 @@ export function initializeTaskSchema() {
 export function createTask({ title, description, priority = 'normal', createdBy = 'operator' }) {
   const db = getDatabase()
   const id = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const coordinatorSessionKey = `claude:task:${id}:xiaomu`
   const stmt = db.prepare(`
     INSERT INTO tasks (
       id, title, description, status, coordinator_agent_id, coordinator_session_key,
       created_by, priority, created_at, updated_at
-    ) VALUES (?, ?, ?, 'planning', 'xiaomu', 'claude:xiaomu:main', ?, ?, unixepoch(), unixepoch())
+    ) VALUES (?, ?, ?, 'planning', 'xiaomu', ?, ?, ?, unixepoch(), unixepoch())
   `)
-  stmt.run(id, title, description, createdBy, priority)
+  stmt.run(id, title, description, coordinatorSessionKey, createdBy, priority)
   addTaskEvent({
     taskId: id,
     agentId: 'xiaomu',
@@ -322,8 +323,60 @@ function keyValue(value) {
   return value
 }
 
-export function savePlan(taskId, plan) {
+function taskPlanContext(taskId) {
+  const row = getDatabase().prepare('SELECT plan_json FROM tasks WHERE id = ?').get(taskId)
+  return parseJson(row?.plan_json, {}) || {}
+}
+
+function mergeRuntimeSessions(current = {}, next = {}) {
+  return Object.entries(next || {}).reduce((merged, [key, value]) => ({
+    ...merged,
+    [key]: {
+      ...(merged[key] || {}),
+      ...(value || {}),
+      updatedAt: new Date().toISOString(),
+    },
+  }), { ...(current || {}) })
+}
+
+function planWithPreservedSessionState(taskId, plan, options = {}) {
+  const previous = taskPlanContext(taskId)
+  const preserved = {}
+  if (previous.clarificationAnswers) preserved.clarificationAnswers = previous.clarificationAnswers
+  if (previous.clarificationAnsweredAt) preserved.clarificationAnsweredAt = previous.clarificationAnsweredAt
+  if (previous.planFeedback || previous.lastPlanFeedback) {
+    preserved.lastPlanFeedback = previous.planFeedback || previous.lastPlanFeedback
+    preserved.lastPlanFeedbackAt = previous.planFeedbackAt || previous.lastPlanFeedbackAt
+    if (previous.planFeedback) preserved.planFeedbackResolvedAt = new Date().toISOString()
+  }
+  if (previous.planFeedbackHistory) preserved.planFeedbackHistory = previous.planFeedbackHistory
+  if (previous.runtimeSessions || options.runtimeSessions) {
+    preserved.runtimeSessions = mergeRuntimeSessions(previous.runtimeSessions, options.runtimeSessions)
+  }
+  return { ...plan, ...preserved }
+}
+
+export function patchTaskRuntimeSession(taskId, sessionName, updates) {
   const db = getDatabase()
+  const previous = taskPlanContext(taskId)
+  const runtimeSessions = mergeRuntimeSessions(previous.runtimeSessions, {
+    [sessionName]: updates,
+  })
+  const nextPlan = {
+    ...previous,
+    runtimeSessions,
+  }
+  db.prepare(`
+    UPDATE tasks
+    SET plan_json = ?, updated_at = unixepoch()
+    WHERE id = ?
+  `).run(JSON.stringify(nextPlan), taskId)
+  return runtimeSessions[sessionName]
+}
+
+export function savePlan(taskId, plan, options = {}) {
+  const db = getDatabase()
+  const planToSave = planWithPreservedSessionState(taskId, plan, options)
   const isClarifying = plan?.decision === 'need_clarification'
   const status = isClarifying ? 'clarifying' : 'dispatching'
   const eventType = isClarifying ? 'coordinator.clarification_required' : 'plan.generated'
@@ -334,13 +387,13 @@ export function savePlan(taskId, plan) {
     UPDATE tasks
     SET plan_json = ?, status = ?, updated_at = unixepoch()
     WHERE id = ?
-  `).run(JSON.stringify(plan), status, taskId)
+  `).run(JSON.stringify(planToSave), status, taskId)
   addTaskEvent({
     taskId,
     agentId: 'xiaomu',
     type: eventType,
     message,
-    payload: plan,
+    payload: planToSave,
   })
   return getTaskDetail(taskId)
 }
@@ -389,6 +442,7 @@ export function createSubtasksFromPlan(taskId, plan, agentMap) {
       const subtaskId = `${taskId}-${safeNodeId}`
       const dependsOn = Array.isArray(node.dependsOn) ? node.dependsOn : []
       const initialStatus = dependsOn.length ? 'blocked' : 'ready'
+      const sessionKey = `claude:task:${taskId}:node:${safeNodeId}:${node.assignedAgentId}`
       insert.run(
         subtaskId,
         taskId,
@@ -397,10 +451,18 @@ export function createSubtasksFromPlan(taskId, plan, agentMap) {
         (node.expectedOutputs || [node.expectedOutput]).filter(Boolean).join('\n'),
         node.assignedAgentId,
         agent.runtimeAgentId,
-        agent.sessionKey,
+        sessionKey,
         initialStatus,
         initialStatus === 'ready' ? 10 : 0,
         JSON.stringify({
+          session: {
+            sessionKey,
+            claudeSessionId: null,
+            lastRunId: null,
+            resumeCount: 0,
+            fallbackCount: 0,
+            updatedAt: new Date().toISOString(),
+          },
           workflowNodeId,
           phase: node.phase || 'review',
           dependsOn,

@@ -45,6 +45,12 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, roles: ['admin'] as UserRole[] }
   },
   {
+    path: '/mail-center',
+    name: 'mail-center',
+    component: () => import('@/views/MailCenter.vue'),
+    meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
+  },
+  {
     path: '/logs',
     redirect: { path: '/dashboard', query: { tab: 'events' } }
   },
@@ -97,12 +103,6 @@ const routes: RouteRecordRaw[] = [
     name: 'analysis',
     component: () => import('@/views/AnalysisWorkbench.vue'),
     meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
-  },
-  {
-    path: '/security',
-    name: 'security',
-    component: () => import('@/views/Security.vue'),
-    meta: { requiresAuth: true, roles: ['admin'] as UserRole[] }
   },
   {
     path: '/cron',

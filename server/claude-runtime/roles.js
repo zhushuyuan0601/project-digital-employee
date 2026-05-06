@@ -85,6 +85,11 @@ ${clarificationContext}
 ${existingPlanContext}
 ${feedbackContext}
 
+会话维护规则：
+- 如果当前 Claude session 是续接会话，只能延续本 taskId 的澄清、方案反馈和规划上下文。
+- 不要引用其他 taskId、其他项目或群聊中的历史上下文。
+- 若 session 记忆与本提示中的任务描述/补充信息冲突，以本提示为准。
+
 可选执行 Agent：
 - xiaoyan: 研究员，负责调研、竞品、资料分析
 - xiaochan: 产品经理，负责需求分析、PRD、流程方案

@@ -3,11 +3,11 @@ import {
   DataLine,
   Connection,
   DataBoard,
+  Message,
   OfficeBuilding,
   Operation,
   Setting,
   Timer,
-  WarningFilled,
 } from '@element-plus/icons-vue'
 import type { UserRole } from '@/stores/auth'
 
@@ -38,6 +38,7 @@ export const navigationSections: NavigationSection[] = [
     label: '系统管理',
     items: [
       { to: '/automation', label: '自动化与集成中心', meta: '调度、回调与自动联动', icon: markRaw(Timer), roles: ['admin', 'operator'] },
+      { to: '/mail-center', label: '邮件触发中心', meta: '邮箱扫描与任务入口', icon: markRaw(Message), roles: ['admin', 'operator'] },
       { to: '/configs', label: '系统配置', meta: '环境与参数', icon: markRaw(Setting), roles: ['admin'] },
     ],
   },
@@ -45,7 +46,6 @@ export const navigationSections: NavigationSection[] = [
     label: '高级能力',
     items: [
       { to: '/analysis', label: '数据分析工作台', meta: '结构化分析与报告导出', icon: markRaw(DataLine), roles: ['admin', 'operator'] },
-      { to: '/security', label: '安全治理中心', meta: '密钥、MCP 与审计事件', icon: markRaw(WarningFilled), roles: ['admin'] },
     ],
   },
 ]

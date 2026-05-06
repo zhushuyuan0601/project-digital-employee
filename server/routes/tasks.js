@@ -653,12 +653,20 @@ router.post('/tasks/:id/plan/feedback', (req, res) => {
     if (!feedback) return res.status(400).json({ success: false, error: 'feedback is required' })
 
     const previousPlan = task.plan_json || {}
+    const feedbackItem = {
+      feedback,
+      createdAt: new Date().toISOString(),
+    }
     updateTask(task.id, {
       status: 'planning',
       plan_json: {
         ...previousPlan,
         planFeedback: feedback,
-        planFeedbackAt: new Date().toISOString(),
+        planFeedbackAt: feedbackItem.createdAt,
+        planFeedbackHistory: [
+          ...(Array.isArray(previousPlan.planFeedbackHistory) ? previousPlan.planFeedbackHistory : []),
+          feedbackItem,
+        ].slice(-10),
       },
     })
     addTaskEvent({

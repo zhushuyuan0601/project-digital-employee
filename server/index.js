@@ -15,7 +15,6 @@ import analysisRouter from './routes/analysis.js'
 import groupChatRouter from './routes/group-chat.js'
 import mailRouter from './routes/mail.js'
 import { createAutomationRouter } from './routes/automation.js'
-import { createOpsRouter } from './routes/ops.js'
 import { initializeSchema } from './db/index.js'
 import { initializeTaskSchema } from './db/tasks.js'
 import { listTaskEvents, listTaskOutputs, listTasks } from './db/tasks.js'
@@ -1172,7 +1171,6 @@ if (runtimeRecovery.cleaned > 0) {
   console.log(`[Claude Runtime] Startup recovery cleaned ${runtimeRecovery.cleaned} orphan queued/running runs`)
 }
 startMailScanner()
-app.use('/api', createOpsRouter())
 app.use('/api', createAutomationRouter())
 app.use('/api', taskRouter)
 app.use('/api', groupChatRouter)
@@ -1200,8 +1198,6 @@ const server = app.listen(PORT, () => {
 ║  - POST /api/skills/install        - 安装技能            ║
 ║  - POST /api/skills/:id/update     - 更新技能            ║
 ║  - DELETE /api/skills/:id          - 卸载技能            ║
-║  - GET /api/security/audit         - 安全审计            ║
-║  - POST /api/security/scan         - 运行安全扫描        ║
 ║  - GET /api/mail/channels          - 邮件渠道配置        ║
 ║  - POST /api/mail/channels/:id/scan- 扫描邮件触发任务    ║
 ║  - GET /api/cron/tasks             - 定时任务列表        ║

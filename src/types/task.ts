@@ -60,6 +60,19 @@ export interface TaskPlan {
   clarificationAnswers?: Record<string, string>
   planFeedback?: string
   planFeedbackAt?: string
+  lastPlanFeedback?: string
+  lastPlanFeedbackAt?: string
+  planFeedbackResolvedAt?: string
+  planFeedbackHistory?: Array<{ feedback: string; createdAt: string }>
+  runtimeSessions?: Record<string, {
+    sessionKey?: string
+    claudeSessionId?: string | null
+    lastRunId?: string | null
+    lastPhase?: string
+    resumeCount?: number
+    fallbackCount?: number
+    updatedAt?: string
+  }>
   participants?: TaskPlanParticipant[]
   workflow?: WorkflowNodePlan[]
   subtasks?: TaskPlanSubtask[]

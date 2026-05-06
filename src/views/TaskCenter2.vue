@@ -172,7 +172,7 @@
           <div class="surface-heading">
             <div>
               <p class="eyebrow">执行板</p>
-              <h2>流程节点与依赖</h2>
+              <h2>工作包与内部节点</h2>
             </div>
             <button class="scan-btn" type="button" :disabled="scanningOutputs" @click="scanOutputs">
               <i class="ri-folder-search-line"></i>
@@ -181,57 +181,92 @@
           </div>
 
           <div v-if="selectedTask.subtasks.length === 0" class="quiet-state">等待小呦完成诊断并确认协作流程。</div>
-          <div v-else class="subtask-grid">
-            <article v-for="subtask in selectedTask.subtasks" :key="subtask.id" class="subtask-card">
-              <div class="subtask-card__head">
-                <span class="agent-token">{{ phaseLabel(String(workflowContext(subtask).phase || 'review')) }}</span>
-                <span class="status-chip" :class="`status-chip--${subtask.status}`">{{ subtaskStatusText(subtask.status) }}</span>
+          <div v-else class="work-package-board">
+            <article
+              v-for="pack in workflowWorkPackages"
+              :key="pack.key"
+              class="work-package"
+              :class="`work-package--${workPackageStatusClass(pack)}`"
+            >
+              <div class="work-package__head">
+                <div class="work-package__identity">
+                  <span class="agent-token">{{ phaseLabel(pack.phase) }}</span>
+                  <div>
+                    <h3>{{ pack.title }}</h3>
+                    <p>{{ pack.summary }}</p>
+                  </div>
+                </div>
+                <span class="status-chip" :class="`status-chip--${workPackageStatusClass(pack)}`">{{ workPackageStatusText(pack) }}</span>
               </div>
-              <h3>{{ subtask.title }}</h3>
-              <p>{{ subtask.description }}</p>
-              <div class="workflow-node-meta">
-                <span>{{ agentName(subtask.assigned_agent_id) }}</span>
-                <span>{{ executionModeLabel(subtask) }}</span>
-                <span>{{ workflowNodeKey(subtask) }}</span>
+
+              <div class="work-package__stats">
+                <span><strong>{{ pack.nodes.length }}</strong>内部节点</span>
+                <span><strong>{{ pack.readyCount }}</strong>可并行</span>
+                <span><strong>{{ pack.runningCount }}</strong>执行中</span>
+                <span><strong>{{ pack.outputCount }}</strong>产出</span>
               </div>
-              <div class="workflow-node-deps">
-                <span>前置依赖</span>
-                <p>{{ dependencyLabels(subtask).join(' / ') }}</p>
+
+              <div class="subtask-progress work-package__progress">
+                <span :style="{ width: `${pack.progress}%` }"></span>
               </div>
-              <div class="workflow-node-deps">
-                <span>预期产出</span>
-                <p>{{ expectedOutputs(subtask).join(' / ') }}</p>
+              <div class="work-package__hint">
+                <i class="ri-git-branch-line"></i>
+                <span>{{ workPackageParallelHint(pack) }}</span>
               </div>
-              <div class="subtask-progress">
-                <span :style="{ width: `${subtask.progress || 0}%` }"></span>
-              </div>
-              <div class="subtask-meta">
-                <span>{{ subtask.progress || 0 }}%</span>
-                <span>{{ subtask.session_key }}</span>
-              </div>
-              <p v-if="subtask.error" class="error-line">{{ subtask.error }}</p>
-              <div class="subtask-actions">
-                <button
-                  v-if="subtask.status === 'ready'"
-                  class="primary-btn primary-btn--compact"
-                  type="button"
-                  @click="runSingleSubtask(subtask.id)"
+
+              <div class="work-node-list">
+                <article
+                  v-for="subtask in pack.nodes"
+                  :key="subtask.id"
+                  class="work-node-row"
+                  :class="`work-node-row--${subtask.status}`"
                 >
-                  <i class="ri-play-line"></i>
-                  运行
-                </button>
-                <button class="ghost-btn ghost-btn--compact" type="button" @click="retrySubtask(subtask.id)">
-                  <i class="ri-restart-line"></i>
-                  重试
-                </button>
-                <button class="ghost-btn ghost-btn--compact" type="button" :disabled="['completed', 'skipped'].includes(subtask.status)" @click="completeSubtask(subtask.id)">
-                  <i class="ri-check-line"></i>
-                  标记完成
-                </button>
-                <button class="ghost-btn ghost-btn--compact" type="button" :disabled="['completed', 'skipped'].includes(subtask.status)" @click="skipWorkflowNode(subtask.id)">
-                  <i class="ri-skip-forward-line"></i>
-                  跳过
-                </button>
+                  <div class="work-node-row__top">
+                    <span class="work-node-row__id">{{ workflowNodeKey(subtask) }}</span>
+                    <strong>{{ subtask.title }}</strong>
+                    <span class="status-chip" :class="`status-chip--${subtask.status}`">{{ subtaskStatusText(subtask.status) }}</span>
+                  </div>
+                  <p>{{ subtask.description }}</p>
+                  <div class="workflow-node-meta work-node-row__meta">
+                    <span>{{ executionModeLabel(subtask) }}</span>
+                    <span>{{ subtask.progress || 0 }}%</span>
+                    <span>{{ shortSessionKey(subtask.session_key) }}</span>
+                  </div>
+                  <div class="work-node-row__details">
+                    <div class="workflow-node-deps">
+                      <span>前置依赖</span>
+                      <p>{{ dependencyLabels(subtask).join(' / ') }}</p>
+                    </div>
+                    <div class="workflow-node-deps">
+                      <span>预期产出</span>
+                      <p>{{ expectedOutputs(subtask).join(' / ') }}</p>
+                    </div>
+                  </div>
+                  <p v-if="subtask.error" class="error-line">{{ subtask.error }}</p>
+                  <div class="subtask-actions work-node-row__actions">
+                    <button
+                      v-if="subtask.status === 'ready'"
+                      class="primary-btn primary-btn--compact"
+                      type="button"
+                      @click="runSingleSubtask(subtask.id)"
+                    >
+                      <i class="ri-play-line"></i>
+                      运行
+                    </button>
+                    <button class="ghost-btn ghost-btn--compact" type="button" @click="retrySubtask(subtask.id)">
+                      <i class="ri-restart-line"></i>
+                      重试
+                    </button>
+                    <button class="ghost-btn ghost-btn--compact" type="button" :disabled="['completed', 'skipped'].includes(subtask.status)" @click="completeSubtask(subtask.id)">
+                      <i class="ri-check-line"></i>
+                      标记完成
+                    </button>
+                    <button class="ghost-btn ghost-btn--compact" type="button" :disabled="['completed', 'skipped'].includes(subtask.status)" @click="skipWorkflowNode(subtask.id)">
+                      <i class="ri-skip-forward-line"></i>
+                      跳过
+                    </button>
+                  </div>
+                </article>
               </div>
             </article>
           </div>
@@ -662,26 +697,24 @@
               <p class="eyebrow">成果资产</p>
               <h2>任务归属</h2>
             </div>
+            <span v-if="selectedTask?.outputs?.length" class="outputs-count-tip">{{ orderedTaskOutputs.length }} 个文件</span>
           </div>
           <div v-if="!selectedTask?.outputs?.length" class="quiet-state">暂无绑定成果。</div>
-          <div
-            v-for="output in orderedTaskOutputs"
-            :key="output.id"
-            class="output-row"
-            :class="{ 'output-row--summary': isSummaryOutput(output) }"
+          <button
+            v-else
+            class="outputs-open-card"
+            type="button"
+            @click="outputsDialog = true"
           >
-            <button class="output-row__main" type="button" @click="previewOutput(output)">
-              <i :class="fileIcon(output.name)"></i>
-              <span class="output-row__content">
-                <strong>{{ output.name }}</strong>
-                <small>{{ agentName(output.agent_id || '') }}</small>
-              </span>
-            </button>
-            <span v-if="isSummaryOutput(output)" class="output-badge">汇总报告</span>
-            <button class="output-row__dir" type="button" title="打开所在目录" @click="openOutputDirectory(output, $event)">
-              <i class="ri-folder-open-line"></i>
-            </button>
-          </div>
+            <span class="outputs-open-card__icon">
+              <i class="ri-folder-chart-line"></i>
+            </span>
+            <span class="outputs-open-card__copy">
+              <strong>查看成果文件</strong>
+              <small>{{ latestOutputHint }}</small>
+            </span>
+            <span class="outputs-open-card__count">{{ orderedTaskOutputs.length }}</span>
+          </button>
         </section>
 
         <section
@@ -730,6 +763,35 @@
       <div v-else-if="previewFileItem" class="preview-content">
         <div v-if="previewType === 'markdown'" class="markdown-rendered" v-html="renderPreview()"></div>
         <pre v-else>{{ previewContent }}</pre>
+      </div>
+    </el-dialog>
+
+    <el-dialog v-model="outputsDialog" title="任务成果文件" width="760px" class="outputs-dialog">
+      <div class="outputs-dialog__summary">
+        <span>{{ selectedTask?.title || '当前任务' }}</span>
+        <strong>{{ orderedTaskOutputs.length }} 个文件</strong>
+      </div>
+      <div v-if="orderedTaskOutputs.length === 0" class="preview-state">暂无绑定成果。</div>
+      <div v-else class="outputs-dialog-list">
+        <article
+          v-for="output in orderedTaskOutputs"
+          :key="output.id"
+          class="outputs-dialog-row"
+          :class="{ 'outputs-dialog-row--summary': isSummaryOutput(output) }"
+        >
+          <i :class="fileIcon(output.name)"></i>
+          <div class="outputs-dialog-row__content">
+            <strong>{{ output.name }}</strong>
+            <small>{{ agentName(output.agent_id || '') }} · {{ output.subtask_title || output.subtask_id || '主任务' }}</small>
+          </div>
+          <span v-if="isSummaryOutput(output)" class="output-badge">汇总报告</span>
+          <button class="ghost-btn ghost-btn--compact" type="button" @click="previewOutput(output)">
+            查看文件
+          </button>
+          <button class="output-row__dir" type="button" title="打开所在目录" @click="openOutputDirectory(output, $event)">
+            <i class="ri-folder-open-line"></i>
+          </button>
+        </article>
       </div>
     </el-dialog>
 
@@ -1039,6 +1101,7 @@ const EVENT_SYNC_TYPES = new Set([
   'coordinator.clarification_required',
   'coordinator.clarification_answered',
   'plan.invalid',
+  'session.resume_failed',
   'task.dispatch.queued',
   'workflow.node.ready',
   'workflow.node.completed',
@@ -1081,6 +1144,7 @@ const clarificationAnswers = ref<Record<string, string>>({})
 const summaryDraft = ref('')
 const currentTimeMs = ref(Date.now())
 const previewDialog = ref(false)
+const outputsDialog = ref(false)
 const previewFileItem = ref<TaskOutput | null>(null)
 const previewContent = ref('')
 const previewType = ref('')
@@ -1124,6 +1188,24 @@ type AgentWorkbenchSummary = {
   latestOutput: TaskOutput | null
   outputCount: number
   statusNote: string
+}
+type WorkPackageStatus = SubtaskStatus | 'mixed'
+type WorkflowWorkPackage = {
+  key: string
+  phase: WorkflowPhase
+  agentId: string
+  title: string
+  summary: string
+  nodes: Subtask[]
+  progress: number
+  outputCount: number
+  readyCount: number
+  runningCount: number
+  blockedCount: number
+  completedCount: number
+  internalDependencyCount: number
+  externalDependencyCount: number
+  status: WorkPackageStatus
 }
 type TerminalLogEntry = {
   id: string
@@ -1208,7 +1290,12 @@ const activeMemberSessionId = computed(() => {
   const latestLog = [...(memberRunLogs.value[subtask.id] || [])]
     .reverse()
     .find(log => runLogString(log, 'sessionId'))
-  const contextSessionId = typeof subtask.context_json?.lastClaudeSessionId === 'string' ? subtask.context_json.lastClaudeSessionId : ''
+  const session = subtask.context_json?.session as { claudeSessionId?: string | null } | undefined
+  const contextSessionId = typeof session?.claudeSessionId === 'string'
+    ? session.claudeSessionId
+    : typeof subtask.context_json?.lastClaudeSessionId === 'string'
+      ? subtask.context_json.lastClaudeSessionId
+      : ''
   return latestLog ? runLogString(latestLog, 'sessionId') : contextSessionId
 })
 const taskRowRefs: Record<string, HTMLButtonElement | null> = {}
@@ -1272,6 +1359,7 @@ const IMPORTANT_EVENT_TYPES = new Set([
   'coordinator.clarification_required',
   'coordinator.clarification_answered',
   'plan.invalid',
+  'session.resume_failed',
   'task.dispatch.queued',
   'subtask.retry.queued',
   'workflow.node.ready',
@@ -1302,6 +1390,7 @@ const EVENT_BADGES: Record<string, string> = {
   'coordinator.clarification_required': '需要补充',
   'coordinator.clarification_answered': '已补充',
   'plan.invalid': '计划异常',
+  'session.resume_failed': '会话续接',
   'task.dispatch.queued': '派发',
   'subtask.retry.queued': '重试',
   'workflow.node.ready': '可执行',
@@ -1365,7 +1454,7 @@ function eventTone(type: string): EventTone {
   if (['agent.error', 'plan.invalid', 'agent.cancelled'].includes(type)) return 'danger'
   if (['outputs.bound'].includes(type)) return 'output'
   if (['agent.done', 'workflow.node.completed', 'workflow.completed', 'task.completed', 'subtask.completed'].includes(type)) return 'success'
-  if (['coordinator.clarification_required', 'subtask.retry.queued', 'agent.run.queued', 'summary.request.queued', 'task.dispatch.queued'].includes(type)) return 'warning'
+  if (['coordinator.clarification_required', 'subtask.retry.queued', 'agent.run.queued', 'summary.request.queued', 'task.dispatch.queued', 'session.resume_failed'].includes(type)) return 'warning'
   if (['plan.generated', 'plan.confirmed', 'plan.feedback.queued', 'workflow.node.ready', 'workflow.dependency.unlocked', 'agent.start', 'agent.tool', 'agent.assistant', 'outputs.scanned'].includes(type)) return 'progress'
   return 'neutral'
 }
@@ -1414,6 +1503,8 @@ function insightHeadline(event: TaskEvent) {
       return '协作流程已完成'
     case 'agent.error':
       return '执行过程中出现异常'
+    case 'session.resume_failed':
+      return '历史会话续接失败，已创建新会话'
     case 'agent.start':
       return 'Agent 开始执行'
     case 'agent.run.queued':
@@ -1892,6 +1983,58 @@ const workflowNodesByPhase = computed(() => {
   }
   return [...groups.entries()].filter(([, nodes]) => nodes.length)
 })
+const workflowWorkPackages = computed<WorkflowWorkPackage[]>(() => {
+  const task = selectedTask.value
+  if (!task) return []
+
+  const groups = new Map<string, Subtask[]>()
+  for (const subtask of task.subtasks || []) {
+    const phase = normalizedWorkflowPhase(workflowContext(subtask).phase)
+    const key = `${workflowPhaseOrder.indexOf(phase)}:${phase}:${subtask.assigned_agent_id}`
+    groups.set(key, [...(groups.get(key) || []), subtask])
+  }
+
+  return [...groups.entries()]
+    .sort(([left], [right]) => left.localeCompare(right, 'zh-CN'))
+    .map(([key, nodes]) => {
+      const first = nodes[0]
+      const phase = normalizedWorkflowPhase(workflowContext(first).phase)
+      const nodeKeys = new Set(nodes.map(workflowNodeKey))
+      const dependsOn = nodes.flatMap((node) => {
+        const deps = workflowContext(node).dependsOn
+        return Array.isArray(deps) ? deps.map(String) : []
+      })
+      const internalDependencyCount = dependsOn.filter(dep => nodeKeys.has(dep)).length
+      const externalDependencyCount = new Set(dependsOn.filter(dep => !nodeKeys.has(dep))).size
+      const outputCount = selectedTaskOutputs.value.filter(output => output.subtask_id && nodes.some(node => node.id === output.subtask_id)).length
+      const progress = Math.round(nodes.reduce((sum, node) => sum + Number(node.progress || 0), 0) / Math.max(nodes.length, 1))
+      const readyCount = nodes.filter(node => node.status === 'ready').length
+      const runningCount = nodes.filter(node => ['queued', 'assigned', 'running'].includes(node.status)).length
+      const blockedCount = nodes.filter(node => node.status === 'blocked').length
+      const completedCount = nodes.filter(node => ['completed', 'skipped'].includes(node.status)).length
+      const status = workPackageStatus(nodes)
+
+      return {
+        key,
+        phase,
+        agentId: first.assigned_agent_id,
+        title: `${agentName(first.assigned_agent_id)} · ${phaseLabel(phase)}工作包`,
+        summary: nodes.length > 1
+          ? `同类${phaseLabel(phase)}工作汇总到 ${agentName(first.assigned_agent_id)}，内部 ${nodes.length} 个节点按依赖并行推进。`
+          : `由 ${agentName(first.assigned_agent_id)} 负责该${phaseLabel(phase)}节点。`,
+        nodes,
+        progress,
+        outputCount,
+        readyCount,
+        runningCount,
+        blockedCount,
+        completedCount,
+        internalDependencyCount,
+        externalDependencyCount,
+        status,
+      }
+    })
+})
 
 function subtaskActivityTimestampMs(subtask: Subtask) {
   const latestEvent = [...selectedTaskEvents.value]
@@ -2095,7 +2238,22 @@ const taskHeaderTips = computed(() => {
     })
   }
 
-  return tips.slice(0, 4)
+  const coordinatorSession = task.plan_json?.runtimeSessions?.coordinator
+  if (coordinatorSession?.claudeSessionId) {
+    tips.push({
+      label: `小呦会话 ${shortSessionId(coordinatorSession.claudeSessionId)}`,
+      detail: [
+        `sessionKey: ${coordinatorSession.sessionKey || task.coordinator_session_key}`,
+        `claudeSessionId: ${coordinatorSession.claudeSessionId}`,
+        `lastRunId: ${coordinatorSession.lastRunId || '--'}`,
+        `lastPhase: ${coordinatorSession.lastPhase || '--'}`,
+        `resumeCount: ${coordinatorSession.resumeCount || 0}`,
+        `fallbackCount: ${coordinatorSession.fallbackCount || 0}`,
+      ].join('\n'),
+    })
+  }
+
+  return tips.slice(0, 5)
 })
 
 const taskDetailMeta = computed(() => {
@@ -2150,6 +2308,12 @@ const orderedTaskOutputs = computed(() => {
     if (summaryDiff !== 0) return summaryDiff
     return Number(b.mtime || b.created_at || 0) - Number(a.mtime || a.created_at || 0)
   })
+})
+const latestOutputHint = computed(() => {
+  const latest = orderedTaskOutputs.value[0]
+  if (!latest) return '暂无绑定成果'
+  const suffix = orderedTaskOutputs.value.length > 1 ? ` 等 ${orderedTaskOutputs.value.length} 个文件` : ''
+  return `${latest.name}${suffix}`
 })
 
 function agentWorkbench(subtask: Subtask): AgentWorkbenchSummary {
@@ -2509,6 +2673,11 @@ function phaseLabel(phase?: string) {
   return workflowPhaseLabels[(phase || 'review') as WorkflowPhase] || phase || '复盘'
 }
 
+function normalizedWorkflowPhase(value: unknown): WorkflowPhase {
+  const phase = String(value || 'review') as WorkflowPhase
+  return workflowPhaseOrder.includes(phase) ? phase : 'review'
+}
+
 function workflowContext(subtask: Subtask) {
   return subtask.context_json || {}
 }
@@ -2536,6 +2705,46 @@ function expectedOutputs(subtask: Subtask) {
 function executionModeLabel(subtask: Subtask) {
   const mode = typeof workflowContext(subtask).executionMode === 'string' ? String(workflowContext(subtask).executionMode) : 'report'
   return executionModeLabels[mode] || mode
+}
+
+function workPackageStatus(nodes: Subtask[]): WorkPackageStatus {
+  if (nodes.every(node => node.status === 'skipped')) return 'skipped'
+  if (nodes.every(node => ['completed', 'skipped'].includes(node.status))) return 'completed'
+  if (nodes.some(node => node.status === 'failed')) return 'failed'
+  if (nodes.some(node => ['assigned', 'running'].includes(node.status))) return 'running'
+  if (nodes.some(node => node.status === 'queued')) return 'queued'
+  if (nodes.some(node => node.status === 'ready')) return 'ready'
+  if (nodes.every(node => node.status === 'blocked')) return 'blocked'
+  return 'mixed'
+}
+
+function workPackageStatusClass(pack: WorkflowWorkPackage) {
+  return pack.status === 'mixed' ? 'running' : pack.status
+}
+
+function workPackageStatusText(pack: WorkflowWorkPackage) {
+  if (pack.status === 'mixed') return '推进中'
+  if (pack.status === 'completed') return `完成 ${pack.completedCount}/${pack.nodes.length}`
+  return subtaskStatusText(pack.status)
+}
+
+function workPackageParallelHint(pack: WorkflowWorkPackage) {
+  if (pack.nodes.length <= 1) {
+    return pack.externalDependencyCount
+      ? `等待 ${pack.externalDependencyCount} 个外部输入满足后执行。`
+      : '单节点工作包，可直接按节点状态执行。'
+  }
+  if (pack.internalDependencyCount === 0) {
+    return `内部 ${pack.nodes.length} 个节点互不依赖，可由同一 Agent 并行推进。`
+  }
+  const activeOrReady = pack.readyCount + pack.runningCount
+  return `内部含 ${pack.internalDependencyCount} 条依赖，当前 ${activeOrReady} 个节点可执行或正在执行。`
+}
+
+function shortSessionKey(sessionKey = '') {
+  if (!sessionKey) return '--'
+  const parts = sessionKey.split(':').filter(Boolean)
+  return parts.length >= 2 ? parts.slice(-2).join(':') : sessionKey
 }
 
 function agentInitial(agentId: string) {
@@ -2629,6 +2838,12 @@ function shortRunId(runId = '') {
   if (!runId) return '--'
   const parts = runId.split('-')
   return parts.length >= 3 ? `${parts[0]}-${parts.at(-1)}` : runId.slice(0, 12)
+}
+
+function shortSessionId(sessionId = '') {
+  if (!sessionId) return '--'
+  if (sessionId.length <= 12) return sessionId
+  return `${sessionId.slice(0, 6)}...${sessionId.slice(-4)}`
 }
 
 function isLongTerminalLog(log: TerminalLogEntry) {
@@ -2744,6 +2959,7 @@ function shouldRefreshEventsForSync(type: string) {
     'coordinator.clarification_required',
     'coordinator.clarification_answered',
     'plan.invalid',
+    'session.resume_failed',
     'workflow.node.ready',
     'workflow.node.completed',
     'workflow.node.skipped',
@@ -4531,6 +4747,189 @@ watch(
   gap: 12px;
 }
 
+.work-package-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.work-package {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.08), transparent 46%),
+    var(--bg-card);
+}
+
+.work-package::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--color-primary);
+  opacity: 0.45;
+}
+
+.work-package--running::before,
+.work-package--queued::before {
+  opacity: 0.9;
+}
+
+.work-package--completed::before,
+.work-package--skipped::before {
+  background: var(--color-success);
+}
+
+.work-package--failed::before {
+  background: var(--color-error);
+}
+
+.work-package__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 10px;
+}
+
+.work-package__identity {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.work-package__identity h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 16px;
+}
+
+.work-package__identity p,
+.work-package__hint {
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.work-package__stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 16px;
+}
+
+.work-package__stats span {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 8px 9px;
+  color: var(--text-tertiary);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 12px;
+}
+
+.work-package__stats strong {
+  color: var(--text-primary);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.work-package__progress {
+  margin: 12px 16px 0;
+}
+
+.work-package__hint {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 10px 16px 12px;
+  padding: 9px 10px;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.16);
+  border-radius: 8px;
+  background: rgba(var(--color-primary-rgb), 0.06);
+}
+
+.work-package__hint i {
+  color: var(--color-primary);
+}
+
+.work-node-list {
+  display: grid;
+  border-top: 1px solid var(--border-default);
+}
+
+.work-node-row {
+  display: grid;
+  gap: 9px;
+  padding: 13px 16px;
+}
+
+.work-node-row + .work-node-row {
+  border-top: 1px solid var(--border-subtle);
+}
+
+.work-node-row--running,
+.work-node-row--queued {
+  background: rgba(var(--color-primary-rgb), 0.05);
+}
+
+.work-node-row__top {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+}
+
+.work-node-row__top strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.work-node-row__id {
+  color: var(--color-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.work-node-row p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.work-node-row__meta {
+  margin: 0;
+}
+
+.work-node-row__details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.work-node-row__details .workflow-node-deps {
+  margin-top: 0;
+}
+
+.work-node-row__actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  margin-top: 0;
+}
+
 .subtask-card {
   border: 1px solid var(--border-default);
   border-radius: 8px;
@@ -4574,10 +4973,88 @@ watch(
 }
 
 .outputs-panel {
-  max-height: 320px;
-  overflow: auto;
-  overscroll-behavior: contain;
-  padding-right: 4px;
+  overflow: visible;
+}
+
+.outputs-count-tip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 9px;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.24);
+  border-radius: 999px;
+  color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb), 0.08);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.outputs-open-card {
+  width: 100%;
+  min-height: 70px;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.28);
+  border-radius: 10px;
+  padding: 12px;
+  background:
+    linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.14), transparent 62%),
+    var(--bg-card);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.outputs-open-card:hover {
+  border-color: rgba(var(--color-primary-rgb), 0.5);
+  background:
+    linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.2), transparent 62%),
+    var(--bg-card);
+}
+
+.outputs-open-card__icon {
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  color: #08111f;
+  background: var(--color-primary);
+  font-size: 20px;
+}
+
+.outputs-open-card__copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.outputs-open-card__copy strong,
+.outputs-open-card__copy small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outputs-open-card__copy small {
+  color: var(--text-tertiary);
+}
+
+.outputs-open-card__count {
+  min-width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(var(--color-primary-rgb), 0.38);
+  border-radius: 999px;
+  color: var(--color-primary);
+  background: rgba(var(--color-primary-rgb), 0.1);
+  font-weight: 800;
 }
 
 .event-item {
@@ -4798,6 +5275,77 @@ watch(
   color: var(--text-tertiary);
   font-family: var(--font-mono);
   font-size: 12px;
+}
+
+.outputs-dialog__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+}
+
+.outputs-dialog__summary span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outputs-dialog__summary strong {
+  color: var(--color-primary);
+  white-space: nowrap;
+}
+
+.outputs-dialog-list {
+  display: grid;
+  gap: 8px;
+  max-height: min(560px, 62vh);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+.outputs-dialog-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto auto 34px;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+.outputs-dialog-row--summary {
+  border-color: rgba(var(--color-primary-rgb), 0.5);
+  background:
+    linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.14), transparent 64%),
+    var(--bg-card);
+}
+
+.outputs-dialog-row__content {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.outputs-dialog-row__content strong,
+.outputs-dialog-row__content small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outputs-dialog-row__content small {
+  color: var(--text-tertiary);
 }
 
 .preview-content {
@@ -5829,7 +6377,9 @@ watch(
   }
 
   .participant-matrix,
-  .workflow-phase-lanes {
+  .workflow-phase-lanes,
+  .work-package-board,
+  .work-node-row__details {
     grid-template-columns: 1fr;
   }
 
@@ -5936,6 +6486,18 @@ watch(
     grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   }
 
+  .work-package-board {
+    grid-template-columns: 1fr;
+  }
+
+  .work-package__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .work-node-row__details {
+    grid-template-columns: 1fr;
+  }
+
   .plan-review__summary {
     grid-template-columns: 1fr;
   }
@@ -5946,10 +6508,6 @@ watch(
 
   .event-list {
     max-height: 300px;
-  }
-
-  .outputs-panel {
-    max-height: 260px;
   }
 
   .event-item--rich {
@@ -5963,11 +6521,11 @@ watch(
     -webkit-box-orient: vertical;
   }
 
-  .output-row {
-    grid-template-columns: 20px minmax(0, 1fr);
+  .outputs-dialog-row {
+    grid-template-columns: 22px minmax(0, 1fr) auto 34px;
   }
 
-  .output-badge {
+  .outputs-dialog-row .output-badge {
     display: none;
   }
 }
