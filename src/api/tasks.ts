@@ -19,6 +19,7 @@ export interface AgentRun {
   agent_id: string
   role_name?: string | null
   claude_session_id?: string | null
+  kind?: string | null
   model?: string | null
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
   cwd?: string | null
@@ -393,6 +394,13 @@ export const taskApi = {
     if (params.limit) search.set('limit', String(params.limit))
     const query = search.toString()
     return request<RunsResponse>(`/api/runs${query ? `?${query}` : ''}`)
+  },
+
+  sendAgentConsoleMessage(payload: { taskId: string; agentIds: string[]; content: string }) {
+    return request<{ success: boolean; task: Task; runs: AgentRun[] }>('/api/agent-console/messages', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
   },
 
   cancelRun(runId: string) {

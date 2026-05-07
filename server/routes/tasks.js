@@ -28,6 +28,7 @@ import {
 import { getDatabasePath } from '../db/index.js'
 import {
   cancelRun,
+  enqueueConsoleRun,
   enqueuePlanRun,
   enqueueSubtaskRun,
   enqueueSummaryRun,
@@ -665,6 +666,28 @@ router.patch('/runtime/config', async (req, res) => {
     })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/agent-console/messages', (req, res) => {
+  try {
+    const task = getTaskDetail(req.body?.taskId)
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+    const content = String(req.body?.content || '').trim()
+    if (!content) return res.status(400).json({ success: false, error: 'content is required' })
+    const agentIds = [...new Set(Array.isArray(req.body?.agentIds)
+      ? req.body.agentIds.map((agentId) => String(agentId || '').trim()).filter(Boolean)
+      : [])]
+    if (!agentIds.length) return res.status(400).json({ success: false, error: 'agentIds is required' })
+
+    const runs = agentIds.map((agentId) => enqueueConsoleRun({
+      taskId: task.id,
+      agentId,
+      content,
+    }))
+    res.json({ success: true, task: getTaskDetail(task.id), runs })
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ success: false, error: err.message })
   }
 })
 

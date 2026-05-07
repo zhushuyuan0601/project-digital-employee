@@ -6,6 +6,7 @@ import {
   getAgentRun,
   getSubtask,
   getTaskDetail,
+  listTaskEvents,
   listActiveAgentRuns,
   listActiveRunsForSubtask,
   listAgentRuns,
@@ -103,19 +104,15 @@ function resolveExecutionSettings(job, config = getClaudeRuntimeConfig()) {
     : subtask
       ? subtask.context_json?.executionMode || job.executionMode || 'report'
       : job.executionMode || 'report'
-  const baseTools = subtask
-    ? effectiveToolsForJob({
-      systemTools: config.allowedTools,
-      agentId: job.agentId,
-      requiredTools: subtask.context_json?.requiredTools || [],
-    })
-    : []
+  const baseTools = effectiveToolsForJob({
+    systemTools: config.allowedTools,
+    agentId: job.agentId,
+    requiredTools: subtask?.context_json?.requiredTools || [],
+  })
   return {
     executionMode,
     model: resolveAgentModel(job.agentId, config),
-    effectiveTools: subtask
-      ? toolsForExecutionMode(baseTools, executionMode)
-      : [],
+    effectiveTools: toolsForExecutionMode(baseTools, executionMode),
   }
 }
 
@@ -153,8 +150,10 @@ function emitRunLog(job, type, message, payload = {}) {
 }
 
 function inferRunKind(run) {
+  if (run?.kind) return run.kind
   if (run?.subtask_id) return 'subtask'
   if (String(run?.id || '').startsWith('summary-')) return 'summary'
+  if (String(run?.id || '').startsWith('console-')) return 'console'
   return 'plan'
 }
 
@@ -171,6 +170,57 @@ function sessionNow() {
 
 function taskSourceCwd(task, config) {
   return task?.project_cwd || config.cwd
+}
+
+function buildConsolePrompt({ task, agentId, content }) {
+  const events = listTaskEvents(task.id, { limit: 24 })
+    .map((event) => {
+      const actor = ROLE_DEFINITIONS[event.agent_id]?.name || event.agent_id || 'system'
+      return `- [${event.type}] ${actor}: ${event.message}`
+    })
+    .join('\n') || '- 暂无近期事件'
+  const subtasks = (task.subtasks || [])
+    .map((subtask) => `- ${subtask.title} / ${ROLE_DEFINITIONS[subtask.assigned_agent_id]?.name || subtask.assigned_agent_id} / ${subtask.status} / ${subtask.result_summary || subtask.error || subtask.description}`)
+    .join('\n') || '- 暂无子任务'
+  const outputs = (task.outputs || [])
+    .slice(0, 12)
+    .map((output) => `- ${output.name}${output.path ? ` (${output.path})` : ''}`)
+    .join('\n') || '- 暂无成果'
+  const role = getRoleDefinition(agentId)
+
+  return `你是${role?.roleName || agentId}，正在 Agent 实时控制台中响应用户对当前任务的旁路追问。
+
+重要约束：
+- 这是控制台追问 run，不要更新任务状态，不要声称已完成正式流程节点。
+- 优先以工作日志/分析过程/可继续追问的回答形式输出。
+- 可以读取项目与任务上下文；除非用户明确要求，不要修改文件。
+- 如果信息不足，明确说明需要补充的信息和你的假设。
+
+任务 ID: ${task.id}
+任务标题: ${task.title}
+任务描述:
+${task.description}
+
+计划摘要:
+${task.plan_json ? JSON.stringify({
+  goal: task.plan_json.goal,
+  topology: task.plan_json.topology,
+  acceptanceCriteria: task.plan_json.acceptanceCriteria,
+}, null, 2) : '暂无计划'}
+
+子任务状态:
+${subtasks}
+
+近期事件:
+${events}
+
+成果文件:
+${outputs}
+
+用户消息:
+${String(content || '').trim()}
+
+请直接回答用户，并在必要时说明你的依据、执行中的工具观察和下一步建议。`
 }
 
 function isLikelyResumeFailure(error) {
@@ -447,6 +497,8 @@ class ClaudeRuntimeQueue {
         await this.completePlanJob(job, result)
       } else if (job.kind === 'summary') {
         await this.completeSummaryJob(job, result)
+      } else if (job.kind === 'console') {
+        await this.completeConsoleJob(job, result)
       } else {
         await this.completeSubtaskJob(job, result)
       }
@@ -729,6 +781,33 @@ class ClaudeRuntimeQueue {
     emitTaskEvent('agent.done', { taskId: job.taskId, agentId: job.agentId, runId: job.run.id, outputPath: report.path })
   }
 
+  async completeConsoleJob(job, result) {
+    updateAgentRun(job.run.id, {
+      status: 'completed',
+      claude_session_id: result.sessionId,
+      result_summary: summarize(result.text),
+      completed_at: nowSeconds(),
+    })
+    emitRunLog(job, 'done', `${ROLE_DEFINITIONS[job.agentId]?.name || job.agentId} 已完成控制台回复`, {
+      sessionId: result.sessionId,
+      costUsd: result.costUsd,
+      durationMs: result.durationMs,
+    })
+    addTaskEvent({
+      taskId: job.taskId,
+      agentId: job.agentId,
+      type: 'agent.console.completed',
+      message: `${ROLE_DEFINITIONS[job.agentId]?.name || job.agentId} 已完成控制台回复`,
+      payload: { runId: job.run.id, sessionId: result.sessionId, costUsd: result.costUsd, durationMs: result.durationMs },
+    })
+    emitTaskEvent('agent.console.completed', {
+      taskId: job.taskId,
+      agentId: job.agentId,
+      runId: job.run.id,
+      sessionId: result.sessionId,
+    })
+  }
+
   async failJob(job, error, result = {}) {
     const failedSessionId = result.sessionId || getAgentRun(job.run.id)?.claude_session_id || null
     updateAgentRun(job.run.id, {
@@ -896,6 +975,7 @@ function createRunAndJob({ taskId, subtaskId = null, agentId, kind, prompt, outp
     roleName: getRoleDefinition(agentId)?.roleName || agentId,
     claudeSessionId: resume || null,
     status: 'queued',
+    kind,
     cwd,
     prompt,
     model,
@@ -923,13 +1003,11 @@ function createRunAndJob({ taskId, subtaskId = null, agentId, kind, prompt, outp
     executionMode,
     model,
     topology: task?.plan_json?.topology || 'hierarchical',
-    effectiveTools: subtaskId
-      ? toolsForExecutionMode(effectiveToolsForJob({
-        systemTools: config.allowedTools,
-        agentId,
-        requiredTools: subtask?.context_json?.requiredTools || [],
-      }), executionMode)
-      : [],
+    effectiveTools: toolsForExecutionMode(effectiveToolsForJob({
+      systemTools: config.allowedTools,
+      agentId,
+      requiredTools: subtask?.context_json?.requiredTools || [],
+    }), executionMode),
     agentDefinitionSnapshot: getAgentDefinition(agentId),
   }
 }
@@ -1085,6 +1163,33 @@ export function enqueueSummaryRun(taskId) {
   return claudeRuntimeQueue.enqueue(job)
 }
 
+export function enqueueConsoleRun({ taskId, agentId, content }) {
+  const task = getTaskDetail(taskId)
+  if (!task) throw new Error('Task not found')
+  const agent = getAgentDefinition(agentId)
+  if (!agent?.enabled) throw new Error(`Agent is disabled or not found: ${agentId}`)
+  const message = String(content || '').trim()
+  if (!message) throw new Error('content is required')
+  const job = createRunAndJob({
+    taskId,
+    agentId,
+    kind: 'console',
+    prompt: buildConsolePrompt({ task, agentId, content: message }),
+    outputFormat: null,
+    resume: null,
+  })
+  emitRunLog(job, 'user', message, { source: 'agent-console' })
+  addTaskEvent({
+    taskId,
+    agentId,
+    type: 'agent.console.message',
+    message,
+    payload: { runId: job.run.id, kind: 'console' },
+  })
+  emitTaskEvent('agent.console.message', { taskId, agentId, runId: job.run.id, kind: 'console', message })
+  return claudeRuntimeQueue.enqueue(job)
+}
+
 export function retrySubtaskRun(subtaskId, { resumeSession = false } = {}) {
   const subtask = getSubtask(subtaskId)
   if (!subtask) throw new Error('Subtask not found')
@@ -1116,6 +1221,7 @@ export function getRuntimeStatus() {
     agent_id: run.agent_id,
     role_name: run.role_name,
     claude_session_id: run.claude_session_id,
+    kind: inferRunKind(run),
     model: run.model || '',
     status: run.status,
     cwd: run.cwd,

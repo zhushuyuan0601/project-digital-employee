@@ -169,6 +169,7 @@ export function initializeTaskSchema() {
       role_name TEXT,
       claude_session_id TEXT,
       status TEXT NOT NULL DEFAULT 'queued',
+      kind TEXT DEFAULT '',
       cwd TEXT,
       prompt TEXT,
       model TEXT,
@@ -183,6 +184,7 @@ export function initializeTaskSchema() {
     )
   `)
   ensureColumn(db, 'agent_runs', 'model', 'TEXT')
+  ensureColumn(db, 'agent_runs', 'kind', 'TEXT DEFAULT ""')
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS agent_run_logs (
@@ -701,6 +703,7 @@ export function createAgentRun({
   roleName = '',
   claudeSessionId = null,
   status = 'queued',
+  kind = '',
   cwd = '',
   prompt = '',
   model = '',
@@ -709,9 +712,9 @@ export function createAgentRun({
   db.prepare(`
     INSERT INTO agent_runs (
       id, task_id, subtask_id, agent_id, role_name, claude_session_id,
-      status, cwd, prompt, model, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch())
-  `).run(id, taskId, subtaskId, agentId, roleName, claudeSessionId, status, cwd, prompt, model)
+      status, kind, cwd, prompt, model, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch())
+  `).run(id, taskId, subtaskId, agentId, roleName, claudeSessionId, status, kind, cwd, prompt, model)
   return getAgentRun(id)
 }
 
@@ -719,6 +722,7 @@ export function updateAgentRun(runId, updates) {
   const allowed = [
     'claude_session_id',
     'status',
+    'kind',
     'cwd',
     'prompt',
     'model',
