@@ -171,6 +171,7 @@ export function initializeTaskSchema() {
       status TEXT NOT NULL DEFAULT 'queued',
       cwd TEXT,
       prompt TEXT,
+      model TEXT,
       result_summary TEXT,
       output_path TEXT,
       error TEXT,
@@ -181,6 +182,7 @@ export function initializeTaskSchema() {
       FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
     )
   `)
+  ensureColumn(db, 'agent_runs', 'model', 'TEXT')
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS agent_run_logs (
@@ -701,14 +703,15 @@ export function createAgentRun({
   status = 'queued',
   cwd = '',
   prompt = '',
+  model = '',
 }) {
   const db = getDatabase()
   db.prepare(`
     INSERT INTO agent_runs (
       id, task_id, subtask_id, agent_id, role_name, claude_session_id,
-      status, cwd, prompt, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch())
-  `).run(id, taskId, subtaskId, agentId, roleName, claudeSessionId, status, cwd, prompt)
+      status, cwd, prompt, model, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch())
+  `).run(id, taskId, subtaskId, agentId, roleName, claudeSessionId, status, cwd, prompt, model)
   return getAgentRun(id)
 }
 
@@ -718,6 +721,7 @@ export function updateAgentRun(runId, updates) {
     'status',
     'cwd',
     'prompt',
+    'model',
     'result_summary',
     'output_path',
     'error',

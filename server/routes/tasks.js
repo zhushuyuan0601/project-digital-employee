@@ -2,8 +2,9 @@ import express from 'express'
 import { promises as fs } from 'fs'
 import { accessSync, constants, existsSync, statSync } from 'fs'
 import { homedir } from 'os'
-import { dirname, join, resolve } from 'path'
+import { dirname, join, resolve, delimiter } from 'path'
 import { execFile } from 'child_process'
+import { createRequire } from 'module'
 import {
   addTaskEvent,
   completeTask,
@@ -63,8 +64,11 @@ const RUNTIME_ENV_KEYS = [
   'CLAUDE_WORKSPACE_ROOT',
   'CLAUDE_ALLOWED_TOOLS',
   'CLAUDE_OUTPUT_ROOT',
+  'CLAUDE_AGENT_MODEL',
   'CLAUDE_RUNTIME_MOCK',
 ]
+
+const require = createRequire(import.meta.url)
 
 const AGENT_MAP = new Proxy({}, {
   get(_target, prop) {
@@ -106,6 +110,41 @@ function canWritePath(path) {
     return true
   } catch {
     return false
+  }
+}
+
+function canExecutePath(path) {
+  try {
+    accessSync(path, constants.X_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function findExecutable(name) {
+  const pathEnv = process.env.PATH || ''
+  for (const entry of pathEnv.split(delimiter).filter(Boolean)) {
+    const candidate = join(entry, name)
+    if (existsSync(candidate) && canExecutePath(candidate)) return candidate
+  }
+  return null
+}
+
+function bundledClaudePackageName() {
+  const platform = process.platform
+  const arch = process.arch
+  const normalizedArch = arch === 'x64' ? 'x64' : arch === 'arm64' ? 'arm64' : arch
+  if (!['darwin', 'linux', 'win32'].includes(platform)) return null
+  if (!['x64', 'arm64'].includes(normalizedArch)) return null
+  return `@anthropic-ai/claude-agent-sdk-${platform}-${normalizedArch}`
+}
+
+async function readJsonFile(path) {
+  try {
+    return JSON.parse(await fs.readFile(path, 'utf8'))
+  } catch {
+    return null
   }
 }
 
@@ -218,10 +257,34 @@ function openPathInFileManager(targetPath) {
 async function runtimeDiagnostics() {
   const config = getClaudeRuntimeConfig()
   let sdkAvailable = false
+  let sdkPath = null
+  let claudeSdkVersion = null
+  let claudeBundledPath = null
+  let claudeCodeVersion = null
   try {
     await import('@anthropic-ai/claude-agent-sdk')
     sdkAvailable = true
+    const sdkPackagePath = require.resolve('@anthropic-ai/claude-agent-sdk/package.json')
+    sdkPath = dirname(sdkPackagePath)
+    const sdkPackage = await readJsonFile(sdkPackagePath)
+    claudeSdkVersion = sdkPackage?.version || null
   } catch {}
+  const bundledPackage = bundledClaudePackageName()
+  if (bundledPackage) {
+    try {
+      const bundledPackagePath = require.resolve(`${bundledPackage}/package.json`)
+      const bundledRoot = dirname(bundledPackagePath)
+      const executableName = process.platform === 'win32' ? 'claude.exe' : 'claude'
+      const candidate = join(bundledRoot, executableName)
+      claudeBundledPath = existsSync(candidate) ? candidate : null
+      const bundledMeta = await readJsonFile(bundledPackagePath)
+      claudeCodeVersion = bundledMeta?.version || null
+    } catch {}
+  }
+  const claudeCliPath = findExecutable(process.platform === 'win32' ? 'claude.cmd' : 'claude')
+  const agentDefaults = Object.fromEntries(
+    listAgentDefinitions().map((agent) => [agent.id, agent.defaultModel || ''])
+  )
 
   return {
     dbPath: getDatabasePath(),
@@ -230,6 +293,21 @@ async function runtimeDiagnostics() {
     outputRootWritable: existsSync(config.outputRoot) && canWritePath(config.outputRoot),
     workspaceRootWritable: existsSync(config.workspaceRoot) && canWritePath(config.workspaceRoot),
     sdkAvailable,
+    sdkPath,
+    claudePath: claudeCliPath || claudeBundledPath || null,
+    claudeCliPath,
+    claudeBundledPath,
+    runtimeDriver: sdkAvailable ? 'claude-agent-sdk' : 'unavailable',
+    claudeSdkVersion,
+    claudeCodeVersion,
+    nodePath: process.execPath,
+    pathEnv: process.env.PATH || '',
+    modelRouting: {
+      globalModel: config.model || '',
+      defaultModel: config.model || 'Claude Code default',
+      agentDefaults,
+      precedence: ['agent.defaultModel', 'CLAUDE_AGENT_MODEL', 'Claude Code default'],
+    },
     hasEnvFile: existsSync(join(PROJECT_ROOT, '.env')),
     configSource: existsSync(join(PROJECT_ROOT, '.env')) ? 'defaults + .env overrides' : 'built-in defaults',
     envOverrides: Object.fromEntries(
@@ -570,7 +648,7 @@ router.get('/runtime/config', (_req, res) => {
   }
 })
 
-router.patch('/runtime/config', (req, res) => {
+router.patch('/runtime/config', async (req, res) => {
   try {
     const body = req.body || {}
     if (body.maxConcurrency != null) process.env.CLAUDE_AGENT_MAX_CONCURRENCY = String(Math.max(1, Number(body.maxConcurrency) || 3))
@@ -579,7 +657,12 @@ router.patch('/runtime/config', (req, res) => {
     if (body.workspaceIsolation != null) process.env.CLAUDE_WORKSPACE_ISOLATION = body.workspaceIsolation ? 'true' : 'false'
     if (body.mock != null) process.env.CLAUDE_RUNTIME_MOCK = body.mock ? 'true' : 'false'
     if (Array.isArray(body.allowedTools)) process.env.CLAUDE_ALLOWED_TOOLS = body.allowedTools.join(',')
-    res.json({ success: true, config: getClaudeRuntimeConfig(), status: getRuntimeStatus() })
+    if (body.model != null) process.env.CLAUDE_AGENT_MODEL = String(body.model || '').trim()
+    res.json({
+      success: true,
+      config: getClaudeRuntimeConfig(),
+      status: { ...getRuntimeStatus(), ...(await runtimeDiagnostics()) },
+    })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }
@@ -906,7 +989,7 @@ router.post('/subtasks/:id/retry', (req, res) => {
       message: '已生成流程节点重试请求，进入 Claude Runtime 队列',
       payload: { sessionKey: subtask.session_key, mode: 'claude-runtime' },
     })
-    const run = retrySubtaskRun(subtask.id)
+    const run = retrySubtaskRun(subtask.id, { resumeSession: Boolean(req.body?.resumeSession) })
     res.json({ success: true, task: getTaskDetail(subtask.task_id), run })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
@@ -918,7 +1001,7 @@ router.post('/workflow-nodes/:id/retry', (req, res) => {
     const subtask = getSubtask(req.params.id)
     if (!subtask) return res.status(404).json({ success: false, error: 'Workflow node not found' })
     updateSubtask(subtask.id, { status: 'ready', progress: 10, error: null })
-    const run = retrySubtaskRun(subtask.id)
+    const run = retrySubtaskRun(subtask.id, { resumeSession: Boolean(req.body?.resumeSession) })
     res.json({ success: true, task: getTaskDetail(subtask.task_id), run })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })

@@ -25,14 +25,6 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true }
   },
   {
-    path: '/agents',
-    redirect: { path: '/team-output', query: { tab: 'team' } }
-  },
-  {
-    path: '/digital-employee',
-    redirect: { path: '/team-output', query: { tab: 'projects' } }
-  },
-  {
     path: '/task-center-2',
     name: 'task-center-2',
     component: () => import('@/views/TaskCenter2.vue'),
@@ -51,30 +43,10 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
   },
   {
-    path: '/logs',
-    redirect: { path: '/dashboard', query: { tab: 'events' } }
-  },
-  {
-    path: '/status',
-    redirect: { path: '/dashboard', query: { tab: 'health' } }
-  },
-  {
-    path: '/capability',
-    redirect: '/dashboard'
-  },
-  {
-    path: '/chat',
-    redirect: '/dashboard'
-  },
-  {
     path: '/automation',
     name: 'automation',
     component: () => import('@/views/AutomationIntegrationCenter.vue'),
     meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
-  },
-  {
-    path: '/tools',
-    redirect: '/dashboard'
   },
   {
     path: '/group-chat',
@@ -83,34 +55,10 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
   },
   {
-    path: '/skills',
-    redirect: '/dashboard'
-  },
-  {
-    path: '/skills-old',
-    redirect: '/dashboard'
-  },
-  {
-    path: '/tokens',
-    redirect: '/dashboard'
-  },
-  {
-    path: '/memory',
-    redirect: '/dashboard'
-  },
-  {
     path: '/analysis',
     name: 'analysis',
     component: () => import('@/views/AnalysisWorkbench.vue'),
     meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
-  },
-  {
-    path: '/cron',
-    redirect: { path: '/automation', query: { tab: 'cron' } }
-  },
-  {
-    path: '/webhooks',
-    redirect: { path: '/automation', query: { tab: 'webhooks' } }
   }
 ]
 

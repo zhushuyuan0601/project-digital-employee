@@ -1,4 +1,4 @@
-# 修复说明 - 模拟数据问题
+# 修复说明 - 本地 API 与 Runtime 验证
 
 ## 问题描述
 
@@ -88,34 +88,6 @@ curl http://localhost:18888/api/tokens/stats | python3 -m json.tool
 ./test-apis.sh  # 创建此脚本运行测试
 ```
 
-## 对接 OpenClaw (端口 3100)
-
-如果你的 OpenClaw 后端在 `http://localhost:3100`，有两种对接方式：
-
-### 方式 1: 修改 Vite 代理（推荐用于开发）
-
-编辑 `vite.config.ts`，将代理目标改为 OpenClaw：
-
-```typescript
-'/api/skills': {
-  target: 'http://localhost:3100',
-  changeOrigin: true
-}
-```
-
-### 方式 2: 修改 server/index.js 转发（推荐用于生产）
-
-在 `server/index.js` 中添加 OpenClaw 代理逻辑，保持混合模式：
-
-```javascript
-const OPENCLAW_HOST = 'localhost'
-const OPENCLAW_PORT = 3100
-
-// 在各 API 端点中优先从 OpenClaw 获取数据
-```
-
-详细参考：[OPENCLAW_INTEGRATION.md](./OPENCLAW_INTEGRATION.md)
-
 ## Mission Control 参考
 
 参考 Mission Control 项目 (https://github.com/builderz-labs/mission-control) 的设计：
@@ -126,7 +98,7 @@ const OPENCLAW_PORT = 3100
 - **多技能根目录**: `~/.agents/skills/`, `~/.claude/skills/` 等
 - **安全扫描**: prompt injection, credential leaks 等检测
 
-详细数据模型参考：[OPENCLAW_INTEGRATION.md](./OPENCLAW_INTEGRATION.md#mission-control-参考数据模型)
+当前项目以本地 Node API、SQLite、Claude Agent SDK Runtime、成果目录和观测接口为主要验证对象。
 
 ## 文件清单
 
@@ -138,8 +110,6 @@ const OPENCLAW_PORT = 3100
 | `src/api/index.ts` | 使用相对路径 API |
 | `vite.config.ts` | 添加所有 API 代理配置 |
 | `start-dev.sh` | 开发环境启动脚本 |
-| `OPENCLAW_INTEGRATION.md` | OpenClaw 对接指南 |
-| `API_CONFIGURATION.md` | API 配置说明 |
 | `BUG_FIX_REPORT.md` | 本文档 |
 
 ### 模拟数据来源
@@ -152,9 +122,9 @@ const OPENCLAW_PORT = 3100
 
 ## 下一步
 
-1. **确认 OpenClaw API**: 检查 `http://localhost:3100` 的 API 端点
-2. **数据格式对齐**: 确保 OpenClaw 返回的数据格式与前端期望一致
-3. **实现转发逻辑**: 在 `server/index.js` 中添加 OpenClaw 转发
+1. **验证 Runtime 配置**: 检查 `/api/runtime/status` 和 `/api/runtime/config`
+2. **验证任务编排**: 创建任务，确认计划、子任务、自动汇总和成果绑定正常
+3. **验证观测接口**: 检查 runs、events、outputs、runtime diagnostics
 4. **测试所有页面**: 访问每个页面确认数据正确显示
 
 ---

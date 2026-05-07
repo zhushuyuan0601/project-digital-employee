@@ -19,6 +19,7 @@ export interface AgentRun {
   agent_id: string
   role_name?: string | null
   claude_session_id?: string | null
+  model?: string | null
   status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
   cwd?: string | null
   prompt?: string | null
@@ -128,6 +129,21 @@ interface RuntimeStatusResponse {
     outputRootWritable?: boolean
     workspaceRootWritable?: boolean
     sdkAvailable?: boolean
+    sdkPath?: string | null
+    claudePath?: string | null
+    claudeCliPath?: string | null
+    claudeBundledPath?: string | null
+    runtimeDriver?: string
+    claudeSdkVersion?: string | null
+    claudeCodeVersion?: string | null
+    nodePath?: string
+    pathEnv?: string
+    modelRouting?: {
+      globalModel?: string
+      defaultModel?: string
+      agentDefaults?: Record<string, string>
+      precedence?: string[]
+    }
     hasEnvFile?: boolean
     configSource?: string
     envOverrides?: Record<string, boolean>
@@ -270,9 +286,10 @@ export const taskApi = {
     })
   },
 
-  retrySubtask(subtaskId: string) {
+  retrySubtask(subtaskId: string, options: { resumeSession?: boolean } = {}) {
     return request<TaskResponse>(`/api/subtasks/${encodeURIComponent(subtaskId)}/retry`, {
       method: 'POST',
+      body: JSON.stringify(options),
     })
   },
 

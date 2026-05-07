@@ -82,6 +82,15 @@
               <h1>{{ selectedTask.title }}</h1>
             </div>
             <div class="mission-hero__tools">
+              <button
+                v-if="acceptedPlan"
+                class="ghost-btn ghost-btn--compact"
+                type="button"
+                @click="planDialog = true"
+              >
+                <i class="ri-node-tree"></i>
+                拆解计划
+              </button>
               <button class="ghost-btn ghost-btn--compact" type="button" @click="openCurrentTaskWorkspace">
                 <i class="ri-folder-open-line"></i>
                 打开项目文件夹
@@ -248,14 +257,21 @@
                       v-if="subtask.status === 'ready'"
                       class="primary-btn primary-btn--compact"
                       type="button"
+                      :disabled="isSubtaskRerunning(subtask.id)"
                       @click="runSingleSubtask(subtask.id)"
                     >
                       <i class="ri-play-line"></i>
-                      运行
+                      {{ isSubtaskRerunning(subtask.id) ? '提交中' : '运行' }}
                     </button>
-                    <button class="ghost-btn ghost-btn--compact" type="button" @click="retrySubtask(subtask.id)">
+                    <button
+                      v-if="['failed', 'blocked', 'waiting_user'].includes(subtask.status)"
+                      class="ghost-btn ghost-btn--compact"
+                      type="button"
+                      :disabled="isSubtaskRerunning(subtask.id)"
+                      @click="retrySubtask(subtask.id)"
+                    >
                       <i class="ri-restart-line"></i>
-                      重试
+                      {{ isSubtaskRerunning(subtask.id) ? '提交中' : '重新执行' }}
                     </button>
                     <button class="ghost-btn ghost-btn--compact" type="button" :disabled="['completed', 'skipped'].includes(subtask.status)" @click="completeSubtask(subtask.id)">
                       <i class="ri-check-line"></i>
@@ -297,7 +313,7 @@
           </div>
           <div class="team-live-grid">
             <article
-              v-for="subtask in orderedTaskSubtasks"
+              v-for="subtask in collaborationNodes"
               :key="subtask.id"
               class="member-card"
               :class="{
@@ -372,8 +388,8 @@
               <div class="member-card__footer">
                 <span>{{ agentWorkbench(subtask).outputCount }} 个文件</span>
                 <span>{{ agentWorkbench(subtask).statusNote }}</span>
-                <button class="ghost-btn ghost-btn--compact" type="button" @click="openMemberConversation(subtask)">
-                  查看细节
+                <button class="ghost-btn ghost-btn--compact" type="button" @click="openCollaborationNode(subtask)">
+                  {{ subtask.id === REVIEW_NODE_ID && reviewSummaryReady ? '查看汇总' : '查看细节' }}
                 </button>
               </div>
             </article>
@@ -381,7 +397,7 @@
         </section>
 
         <section
-          v-if="selectedTask && (needsPlan(selectedTask) || acceptedPlan)"
+          v-if="selectedTask && needsPlan(selectedTask)"
           ref="planSectionRef"
           class="surface plan-console"
           :class="{ 'plan-console--focus': taskFlowCurrentKey === 'plan' }"
@@ -572,13 +588,13 @@
               <textarea
                 v-model="planFeedback"
                 class="field field--textarea"
-                :disabled="isPlanFeedbackPending"
-                placeholder="输入对当前方案的问题或修改意见"
+                :disabled="isPlanFeedbackBusy"
+                :placeholder="isPlanFeedbackBusy ? '小呦正在调整方案' : '输入对当前方案的问题或修改意见'"
               ></textarea>
               <button
                 class="ghost-btn"
                 type="button"
-                :disabled="submittingPlanFeedback || isPlanFeedbackPending || !planFeedback.trim()"
+                :disabled="isPlanFeedbackBusy || !planFeedback.trim()"
                 @click="submitPlanFeedback"
               >
                 <i class="ri-chat-check-line"></i>
@@ -748,13 +764,18 @@
             </div>
           </div>
           <p class="review-hint">{{ reviewHint }}</p>
+          <div class="review-steps">
+            <span :class="{ active: reviewNodeStatus === 'ready' || reviewNodeStatus === 'running', done: reviewSummaryReady }">
+              1. 自动汇总
+            </span>
+            <span :class="{ active: reviewSummaryReady && selectedTask.status !== 'completed', done: selectedTask.status === 'completed' }">
+              2. 验收归档
+            </span>
+          </div>
           <textarea v-model="summaryDraft" class="field field--textarea" placeholder="最终验收备注，可留空。"></textarea>
           <div class="review-actions">
-            <button class="ghost-btn" type="button" :disabled="!canRequestSummary" @click="finalizeTask">
-              <i class="ri-file-list-3-line"></i>
-              {{ reviewRequestButtonText }}
-            </button>
-            <button class="primary-btn" type="button" :disabled="selectedTask.status === 'completed'" @click="completeTask">
+            <span class="status-chip" :class="`status-chip--${reviewNodeStatus}`">{{ reviewStatusText }}</span>
+            <button class="primary-btn" type="button" :disabled="!canArchiveTask" @click="completeTask">
               <i class="ri-archive-line"></i>
               验收归档
             </button>
@@ -781,6 +802,47 @@
       <div v-else-if="previewFileItem" class="preview-content">
         <div v-if="previewType === 'markdown'" class="markdown-rendered" v-html="renderPreview()"></div>
         <pre v-else>{{ previewContent }}</pre>
+      </div>
+    </el-dialog>
+
+    <el-dialog v-model="planDialog" title="拆解计划" width="min(1080px, 92vw)" class="plan-dialog">
+      <div v-if="acceptedPlan" class="plan-console plan-console--modal">
+        <div class="plan-review__summary">
+          <div>
+            <span>目标</span>
+            <strong>{{ acceptedPlan.goal || acceptedPlan.taskTitle }}</strong>
+          </div>
+          <div>
+            <span>拓扑</span>
+            <strong>{{ acceptedPlan.topology || 'hierarchical' }}</strong>
+          </div>
+        </div>
+        <div class="plan-review__grid">
+          <article
+            v-for="(subtask, index) in planWorkflowNodes"
+            :key="`${subtask.assignedAgentId}-${subtask.title}-${index}`"
+            class="plan-review-card"
+          >
+            <div class="plan-review-card__head">
+              <span>{{ index + 1 }}</span>
+              <div>
+                <strong>{{ subtask.title }}</strong>
+                <small>{{ agentName(subtask.assignedAgentId) }}</small>
+              </div>
+            </div>
+            <p>{{ subtask.objective }}</p>
+            <div class="plan-review-card__output">
+              <span>交付物</span>
+              <p>{{ subtask.expectedOutputs.length ? subtask.expectedOutputs.join(' / ') : '未指定，按角色报告规范交付。' }}</p>
+            </div>
+          </article>
+        </div>
+        <div class="plan-review__acceptance">
+          <span>验收标准</span>
+          <ol>
+            <li v-for="item in planAcceptanceCriteria" :key="item">{{ item }}</li>
+          </ol>
+        </div>
       </div>
     </el-dialog>
 
@@ -895,10 +957,21 @@
                 v-if="activeMemberRunId && ['queued', 'assigned', 'running'].includes(activeMemberSubtask.status)"
                 class="ghost-btn ghost-btn--compact"
                 type="button"
+                :disabled="memberCancellingRunId === activeMemberRunId"
                 @click="cancelActiveMemberRun"
               >
                 <i class="ri-stop-circle-line"></i>
-                停止运行
+                {{ memberCancellingRunId === activeMemberRunId ? '停止中' : '停止运行' }}
+              </button>
+              <button
+                v-if="['ready', 'failed', 'blocked', 'waiting_user'].includes(activeMemberSubtask.status)"
+                class="ghost-btn ghost-btn--compact"
+                type="button"
+                :disabled="isSubtaskRerunning(activeMemberSubtask.id)"
+                @click="activeMemberSubtask.status === 'ready' ? runSingleSubtask(activeMemberSubtask.id) : retrySubtask(activeMemberSubtask.id)"
+              >
+                <i class="ri-restart-line"></i>
+                {{ isSubtaskRerunning(activeMemberSubtask.id) ? '提交中' : activeMemberSubtask.status === 'ready' ? '运行节点' : '重新执行' }}
               </button>
               <button class="primary-btn primary-btn--compact" type="button" @click="memberLogsDrawer = true">
                 <i class="ri-terminal-box-line"></i>
@@ -1140,6 +1213,7 @@ const TASK_EVENT_LIMIT = 400
 const TASK_SYNC_DEBOUNCE_MS = 1200
 const TASK_POLL_INTERVAL_MS = 20000
 const MEMBER_CHANGE_WINDOW_MS = 12000
+const REVIEW_NODE_ID = '__task-review-summary__'
 const EVENT_SYNC_TYPES = new Set([
   'plan.accepted',
   'plan.generated',
@@ -1183,15 +1257,19 @@ const applyingPlan = ref(false)
 const confirmingPlan = ref(false)
 const submittingClarifications = ref(false)
 const submittingPlanFeedback = ref(false)
+const pendingPlanFeedbackTaskId = ref('')
 const rerunningPlan = ref(false)
 const scanningOutputs = ref(false)
 const finalizingSummary = ref(false)
+const rerunningSubtaskIds = ref(new Set<string>())
+const memberCancellingRunId = ref('')
 const planDraft = ref('')
 const planFeedback = ref('')
 const clarificationAnswers = ref<Record<string, string>>({})
 const summaryDraft = ref('')
 const currentTimeMs = ref(Date.now())
 const previewDialog = ref(false)
+const planDialog = ref(false)
 const outputsDialog = ref(false)
 const previewFileItem = ref<TaskOutput | null>(null)
 const previewContent = ref('')
@@ -1311,20 +1389,63 @@ const currentUserLabel = computed(() => authStore.user?.username || 'Admin')
 const canCreateTask = computed(() => createForm.title.trim().length > 0 && createForm.description.trim().length > 0)
 const canFinalize = computed(() => !!selectedTask.value?.subtasks.length && selectedTask.value.subtasks.every(subtask => ['completed', 'skipped'].includes(subtask.status)))
 const hasReviewSummary = computed(() => !!selectedTask.value?.summary?.trim())
-const canRequestSummary = computed(() =>
-  !!selectedTask.value &&
-  canFinalize.value &&
-  !finalizingSummary.value &&
-  selectedTask.value.status !== 'reviewing' &&
-  selectedTask.value.status !== 'completed' &&
-  !hasReviewSummary.value
-)
-const reviewRequestButtonText = computed(() => {
-  if (finalizingSummary.value) return '请求中'
-  if (selectedTask.value?.status === 'reviewing' || hasReviewSummary.value) return '已请求汇总'
-  return '请求汇总'
+const summaryRequested = computed(() => selectedTaskEvents.value.some(event => event.type === 'summary.request.queued'))
+const hasSummaryOutput = computed(() => selectedTaskOutputs.value.some(output => isSummaryOutput(output)))
+const hasActiveSummaryRun = computed(() => selectedTaskEvents.value.some(event => {
+  if (event.type !== 'agent.run.queued' && event.type !== 'agent.start') return false
+  const payload = event.payload_json || {}
+  return String(payload.kind || '').includes('summary') || String(payload.runId || '').startsWith('summary-')
+}))
+const reviewSummaryReady = computed(() => hasReviewSummary.value || hasSummaryOutput.value)
+const reviewNodeStatus = computed<SubtaskStatus>(() => {
+  if (!selectedTask.value || !canFinalize.value) return 'blocked'
+  if (selectedTask.value.status === 'completed' || reviewSummaryReady.value) return 'completed'
+  if (summaryRequested.value || finalizingSummary.value || hasActiveSummaryRun.value) return 'running'
+  return 'ready'
 })
+const reviewStatusText = computed(() => {
+  if (!canFinalize.value) return '等待子任务完成'
+  if (reviewSummaryReady.value) return '汇总已生成'
+  if (summaryRequested.value || hasActiveSummaryRun.value) return '小呦汇总中'
+  return '等待自动汇总'
+})
+const canArchiveTask = computed(() =>
+  !!selectedTask.value &&
+  selectedTask.value.status !== 'completed' &&
+  reviewSummaryReady.value
+)
 const orderedTaskSubtasks = computed(() => sortSubtasksByExecutionOrder(selectedTask.value?.subtasks || [], selectedTask.value?.plan_json || null))
+const summaryNodeEvents = computed(() =>
+  selectedTaskEvents.value.filter(event => event.type.startsWith('summary.') || event.type === 'workflow.completed')
+)
+const reviewNode = computed<Subtask | null>(() => {
+  const task = selectedTask.value
+  if (!task?.subtasks.length || !canFinalize.value) return null
+  return {
+    id: REVIEW_NODE_ID,
+    task_id: task.id,
+    title: '最终汇总验收',
+    description: '小呦基于全部节点成果自动生成最终汇总，完成后即可验收归档。',
+    expected_output: '最终汇总报告',
+    assigned_agent_id: 'xiaomu',
+    gateway_agent_id: 'ceo',
+    session_key: task.coordinator_session_key,
+    status: reviewNodeStatus.value,
+    progress: reviewSummaryReady.value ? 100 : reviewNodeStatus.value === 'running' ? 65 : 10,
+    result_summary: task.summary || null,
+    error: null,
+    context_json: { executionMode: 'report' },
+    created_at: task.created_at,
+    updated_at: task.updated_at,
+    started_at: null,
+    completed_at: reviewSummaryReady.value ? task.updated_at : null,
+  }
+})
+const collaborationNodes = computed(() => {
+  const nodes = [...orderedTaskSubtasks.value]
+  if (reviewNode.value) nodes.push(reviewNode.value)
+  return nodes
+})
 const activeMemberSubtask = computed(() => selectedTask.value?.subtasks.find(subtask => subtask.id === activeMemberSubtaskId.value) || null)
 const activeMemberRunId = computed(() => {
   const subtask = activeMemberSubtask.value
@@ -1653,7 +1774,18 @@ function terminalEventContent(event: TaskEvent) {
   const payload = eventPayload(event)
   if (event.type === 'agent.tool') {
     const toolName = payloadString(payload, 'toolName')
-    return toolName ? `invoke readonly tool: ${toolName}` : event.message
+    const category = payloadString(payload, 'toolCategory')
+    const categoryLabel = {
+      read: 'read tool',
+      write: 'write tool',
+      command: 'command tool',
+      tool: 'tool',
+    }[category] || (['Edit', 'Write', 'MultiEdit', 'NotebookEdit'].includes(toolName)
+      ? 'write tool'
+      : toolName === 'Bash'
+        ? 'command tool'
+        : 'read tool')
+    return toolName ? `invoke ${categoryLabel}: ${toolName}` : event.message
   }
   if (event.type === 'agent.assistant') {
     return String(event.message || '')
@@ -2050,11 +2182,15 @@ const isClarificationPending = computed(() =>
 )
 const isReadyWorkflowPlan = computed(() => acceptedPlan.value?.decision === 'ready_to_plan' || !!acceptedPlan.value?.workflow?.length || !!acceptedPlan.value?.subtasks?.length)
 const isPlanFeedbackPending = computed(() =>
-  isReadyWorkflowPlan.value &&
-  selectedTask.value?.status === 'planning' &&
-  !!acceptedPlan.value?.planFeedback &&
-  selectedTask.value.subtasks.length === 0
+  pendingPlanFeedbackTaskId.value === selectedTask.value?.id ||
+  (
+    isReadyWorkflowPlan.value &&
+    selectedTask.value?.status === 'planning' &&
+    !!acceptedPlan.value?.planFeedback &&
+    selectedTask.value.subtasks.length === 0
+  )
 )
+const isPlanFeedbackBusy = computed(() => submittingPlanFeedback.value || isPlanFeedbackPending.value)
 const planQuestions = computed<TaskClarificationQuestion[]>(() => acceptedPlan.value?.questions || [])
 const planParticipants = computed<TaskPlanParticipant[]>(() => acceptedPlan.value?.participants || [])
 const planWorkflowNodes = computed<WorkflowNodePlan[]>(() => {
@@ -2164,11 +2300,11 @@ function isSubtaskRecentlyUpdated(subtask: Subtask) {
 }
 
 const liveSubtaskCount = computed(() =>
-  selectedTask.value?.subtasks.filter(subtask => isSubtaskWorking(subtask)).length || 0
+  collaborationNodes.value.filter(subtask => isSubtaskWorking(subtask)).length || 0
 )
 
 const recentTeamChangeCount = computed(() =>
-  selectedTask.value?.subtasks.filter(subtask => isSubtaskRecentlyUpdated(subtask)).length || 0
+  collaborationNodes.value.filter(subtask => isSubtaskRecentlyUpdated(subtask)).length || 0
 )
 
 const taskFlowCurrentKey = computed<'create' | 'plan' | 'execute' | 'review' | 'archive'>(() => {
@@ -2217,11 +2353,11 @@ const taskFlowSteps = computed<TaskFlowStep[]>(() => {
     },
     {
       key: 'review',
-      title: '请求验收',
-      description: hasReviewSummary.value
+      title: '小呦汇总',
+      description: reviewSummaryReady.value
         ? '汇总结果已经返回，检查后即可归档。'
         : canFinalize.value
-          ? '所有子任务已完成，现在应先请求汇总。'
+          ? '所有子任务已完成，系统会自动进入最终汇总。'
           : '等待全部子任务完成后，再进入验收。',
     },
     {
@@ -2287,10 +2423,10 @@ const taskFlowCallout = computed<TaskFlowCallout>(() => {
 
   if (taskFlowCurrentKey.value === 'review') {
     return {
-      title: hasReviewSummary.value ? '现在可以验收归档' : '现在应该请求验收',
-      detail: hasReviewSummary.value
+      title: reviewSummaryReady.value ? '现在可以验收归档' : '等待小呦自动汇总',
+      detail: reviewSummaryReady.value
         ? '右侧汇总验收区已有小呦结论，确认后点击“验收归档”。'
-        : '所有子任务已完成，请先到右侧汇总验收区点击“请求汇总”，不要直接归档。',
+        : '所有子任务完成后，系统会自动让小呦生成最终汇总；汇总生成前不要直接归档。',
       actionLabel: '前往验收区',
       target: 'review',
     }
@@ -2315,9 +2451,9 @@ const taskFlowCallout = computed<TaskFlowCallout>(() => {
 
 const reviewHint = computed(() => {
   if (selectedTask.value?.status === 'completed') return '任务已经归档完成，可在成果资产和事件流中回看最终结果。'
-  if (selectedTask.value?.status === 'reviewing' && !hasReviewSummary.value) return '汇总请求已发出，等待小呦生成最终报告；结果会在成果资产中高亮显示。'
-  if (hasReviewSummary.value) return '汇总报告已生成，请在成果资产里查看高亮的汇总报告，再点击“验收归档”。'
-  if (canFinalize.value) return '当前顺序：先点击“请求汇总”，等待小呦收口后，再点击“验收归档”。'
+  if ((summaryRequested.value || hasActiveSummaryRun.value) && !reviewSummaryReady.value) return '小呦最终汇总已自动进入 Claude Runtime，生成后会在成果资产中高亮显示。'
+  if (reviewSummaryReady.value) return '汇总报告已生成，请在成果资产里查看高亮的汇总报告，再点击“验收归档”。'
+  if (canFinalize.value) return '所有子任务已完成，系统会自动触发小呦最终汇总；汇总生成后即可验收归档。'
   return '进入验收前，需要先等待所有子任务执行完成。'
 })
 
@@ -2434,18 +2570,27 @@ const latestOutputHint = computed(() => {
 })
 
 function agentWorkbench(subtask: Subtask): AgentWorkbenchSummary {
-  const events = selectedTaskEvents.value.filter(event => event.subtask_id === subtask.id)
-  const outputs = selectedTaskOutputs.value.filter(output => output.subtask_id === subtask.id)
+  const isReviewNode = subtask.id === REVIEW_NODE_ID
+  const events = isReviewNode
+    ? summaryNodeEvents.value
+    : selectedTaskEvents.value.filter(event => event.subtask_id === subtask.id)
+  const outputs = isReviewNode
+    ? selectedTaskOutputs.value.filter(isSummaryOutput)
+    : selectedTaskOutputs.value.filter(output => output.subtask_id === subtask.id)
   const recentEvents = events.filter(event => event.type !== 'agent.assistant')
   const latestEvent = recentEvents.at(-1) || null
   const latestOutput = outputs[0] || null
-  const focusSource = subtask.error || subtask.result_summary || latestEvent?.message || subtask.description
+  const focusSource = isReviewNode
+    ? selectedTask.value?.summary || latestOutput?.name || reviewStatusText.value
+    : subtask.error || subtask.result_summary || latestEvent?.message || subtask.description
   const lastToolEvent = [...events].reverse().find(event => event.type === 'agent.tool')
   const statusNote = lastToolEvent
-    ? cleanText(lastToolEvent.message.replace('Claude Code 使用只读工具：', '最近工具：'), 48)
+    ? cleanText(lastToolEvent.message.replace(/Claude Code 使用(?:只读工具|读取工具|写入工具|命令工具|工具)：/, '最近工具：'), 48)
     : latestOutput
       ? `最新文件 ${latestOutput.name}`
-      : `最近更新 ${formatTime(latestEvent?.created_at || subtask.updated_at)}`
+      : isReviewNode
+        ? reviewStatusText.value
+        : `最近更新 ${formatTime(latestEvent?.created_at || subtask.updated_at)}`
 
   return {
     focus: cleanText(focusSource, 140),
@@ -2454,6 +2599,19 @@ function agentWorkbench(subtask: Subtask): AgentWorkbenchSummary {
     outputCount: outputs.length,
     statusNote,
   }
+}
+
+function openCollaborationNode(subtask: Subtask) {
+  if (subtask.id !== REVIEW_NODE_ID) {
+    openMemberConversation(subtask)
+    return
+  }
+  const summaryOutput = selectedTaskOutputs.value.find(isSummaryOutput)
+  if (summaryOutput && reviewSummaryReady.value) {
+    previewOutput(summaryOutput)
+    return
+  }
+  scrollToWorkflowTarget('review')
 }
 
 async function handleRefresh() {
@@ -2588,6 +2746,7 @@ async function submitClarifications() {
 async function submitPlanFeedback() {
   if (!selectedTask.value || submittingPlanFeedback.value || !planFeedback.value.trim()) return
   submittingPlanFeedback.value = true
+  pendingPlanFeedbackTaskId.value = selectedTask.value.id
   try {
     const response = await tasksStore.submitPlanFeedback(selectedTask.value.id, planFeedback.value.trim())
     planFeedback.value = ''
@@ -2617,6 +2776,8 @@ async function rerunPlan() {
 }
 
 async function retrySubtask(subtaskId: string) {
+  if (rerunningSubtaskIds.value.has(subtaskId)) return
+  setSubtaskRerunning(subtaskId, true)
   try {
     const response = await tasksStore.retrySubtask(subtaskId)
     await tasksStore.fetchTask(response.task.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
@@ -2624,10 +2785,14 @@ async function retrySubtask(subtaskId: string) {
     await refreshRuntimeStatus()
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '重试失败')
+  } finally {
+    setSubtaskRerunning(subtaskId, false)
   }
 }
 
 async function runSingleSubtask(subtaskId: string) {
+  if (rerunningSubtaskIds.value.has(subtaskId)) return
+  setSubtaskRerunning(subtaskId, true)
   try {
     const response = await tasksStore.runSubtask(subtaskId)
     await tasksStore.fetchTask(response.task.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
@@ -2635,7 +2800,20 @@ async function runSingleSubtask(subtaskId: string) {
     await refreshRuntimeStatus()
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '启动节点失败')
+  } finally {
+    setSubtaskRerunning(subtaskId, false)
   }
+}
+
+function setSubtaskRerunning(subtaskId: string, value: boolean) {
+  const next = new Set(rerunningSubtaskIds.value)
+  if (value) next.add(subtaskId)
+  else next.delete(subtaskId)
+  rerunningSubtaskIds.value = next
+}
+
+function isSubtaskRerunning(subtaskId: string) {
+  return rerunningSubtaskIds.value.has(subtaskId)
 }
 
 async function skipWorkflowNode(subtaskId: string) {
@@ -2657,13 +2835,18 @@ async function skipWorkflowNode(subtaskId: string) {
 
 async function cancelActiveMemberRun() {
   if (!activeMemberRunId.value || !activeMemberSubtask.value) return
+  memberCancellingRunId.value = activeMemberRunId.value
   try {
     await taskApi.cancelRun(activeMemberRunId.value)
+    await new Promise(resolve => setTimeout(resolve, 600))
     await tasksStore.fetchTask(activeMemberSubtask.value.task_id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
-    ElMessage.success('已请求停止当前 Claude Runtime run')
+    await fetchMemberRunLogs(activeMemberSubtask.value.id)
+    ElMessage.success('停止请求已发送，停止完成后可重新执行')
     await refreshRuntimeStatus()
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '停止运行失败')
+  } finally {
+    memberCancellingRunId.value = ''
   }
 }
 
@@ -2692,7 +2875,7 @@ async function scanOutputs() {
 }
 
 async function finalizeTask() {
-  if (!selectedTask.value || !canRequestSummary.value) return
+  if (!selectedTask.value || selectedTask.value.status === 'completed') return
   finalizingSummary.value = true
   try {
     await tasksStore.finalizeTask(selectedTask.value.id)
@@ -2707,7 +2890,7 @@ async function finalizeTask() {
 }
 
 async function completeTask() {
-  if (!selectedTask.value) return
+  if (!selectedTask.value || !canArchiveTask.value) return
   const confirmed = await ElMessageBox.confirm('确认将该任务标记为验收完成并归档？', '验收归档', {
     confirmButtonText: '归档',
     cancelButtonText: '取消',
@@ -3242,6 +3425,7 @@ function ingestRuntimeStreamEvent(taskId: string, data: Record<string, unknown>)
     runId: typeof data.runId === 'string' ? data.runId : undefined,
     kind: typeof data.kind === 'string' ? data.kind : undefined,
     toolName: typeof data.toolName === 'string' ? data.toolName : undefined,
+    toolCategory: typeof data.toolCategory === 'string' ? data.toolCategory : undefined,
     sessionId: typeof data.sessionId === 'string' ? data.sessionId : undefined,
     outputPath: typeof data.outputPath === 'string' ? data.outputPath : undefined,
     error: typeof data.error === 'string' ? data.error : undefined,
@@ -3353,6 +3537,25 @@ watch(
 
 watch(
   () => [
+    selectedTask.value?.id,
+    selectedTask.value?.status,
+    selectedTask.value?.subtasks.length,
+    acceptedPlan.value?.planFeedbackResolvedAt,
+  ],
+  ([taskId, status, subtaskCount]) => {
+    if (
+      pendingPlanFeedbackTaskId.value &&
+      pendingPlanFeedbackTaskId.value === taskId &&
+      (status !== 'planning' || Number(subtaskCount || 0) > 0 || acceptedPlan.value?.planFeedbackResolvedAt)
+    ) {
+      pendingPlanFeedbackTaskId.value = ''
+    }
+  },
+  { flush: 'post' }
+)
+
+watch(
+  () => [
     memberDialog.value,
     memberLogsDrawer.value,
     activeMemberSubtaskId.value,
@@ -3410,6 +3613,34 @@ watch(
 .mission-stage {
   padding-right: 4px;
   padding-bottom: 20px;
+}
+
+.mission-hero {
+  order: 1;
+}
+
+.mission-flow {
+  order: 2;
+}
+
+.team-live {
+  order: 3;
+}
+
+.subtask-board {
+  order: 4;
+}
+
+.plan-console {
+  order: 5;
+}
+
+.review-panel {
+  order: 6;
+}
+
+.empty-mission {
+  order: 7;
 }
 
 .surface {
@@ -4671,6 +4902,46 @@ watch(
   color: var(--text-secondary);
   background: rgba(var(--color-primary-rgb), 0.08);
   line-height: 1.6;
+}
+
+.review-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.review-steps span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.review-steps span.active {
+  border-color: rgba(var(--color-primary-rgb), 0.45);
+  color: var(--color-primary);
+}
+
+.review-steps span.done {
+  border-color: color-mix(in srgb, var(--color-success) 42%, transparent);
+  color: var(--color-success);
+}
+
+.plan-dialog :deep(.el-dialog__body) {
+  max-height: min(72vh, 720px);
+  overflow: auto;
+}
+
+.plan-console--modal {
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  background: transparent;
 }
 
 .team-live {

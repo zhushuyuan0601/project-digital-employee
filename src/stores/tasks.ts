@@ -23,6 +23,7 @@ type RuntimeEventPayload = {
   runId?: string
   kind?: string
   toolName?: string
+  toolCategory?: string
   sessionId?: string
   outputPath?: string
   error?: string
@@ -43,6 +44,7 @@ function runtimeEventPayload(event: RuntimeEventPayload) {
   if (event.runId) payload.runId = event.runId
   if (event.kind) payload.kind = event.kind
   if (event.toolName) payload.toolName = event.toolName
+  if (event.toolCategory) payload.toolCategory = event.toolCategory
   if (event.sessionId) payload.sessionId = event.sessionId
   if (event.outputPath) payload.path = event.outputPath
   if (event.error) payload.error = event.error
@@ -367,8 +369,8 @@ export const useTasksStore = defineStore('tasks', () => {
     return response
   }
 
-  async function retrySubtask(subtaskId: string) {
-    const response = await taskApi.retrySubtask(subtaskId)
+  async function retrySubtask(subtaskId: string, options: { resumeSession?: boolean } = {}) {
+    const response = await taskApi.retrySubtask(subtaskId, options)
     selectedTask.value = applyTaskResponse(response.task)
     return response
   }

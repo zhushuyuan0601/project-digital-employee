@@ -67,11 +67,12 @@ defineEmits<{
 
 <style scoped>
 .header {
-  height: 64px;
-  display: flex;
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: minmax(220px, auto) minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 32px;
+  gap: clamp(12px, 2vw, 28px);
+  padding: 0 clamp(16px, 2.2vw, 32px);
   background: linear-gradient(90deg, rgba(18, 23, 33, 0.9) 0%, rgba(18, 23, 33, 0.6) 100%);
   border-bottom: 1px solid rgba(var(--color-primary-rgb), 0.2);
   position: relative;
@@ -93,6 +94,7 @@ defineEmits<{
   display: flex;
   align-items: center;
   gap: 16px;
+  min-width: 0;
 }
 
 .header__logo {
@@ -110,19 +112,23 @@ defineEmits<{
 
 .header__title {
   font-family: var(--font-display);
-  font-size: 24px;
+  font-size: clamp(18px, 1.7vw, 24px);
   font-weight: 700;
-  letter-spacing: 2px;
+  letter-spacing: 0;
   background: linear-gradient(90deg, var(--text-primary), var(--color-secondary));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .header__info {
   display: flex;
   align-items: center;
   gap: 24px;
+  min-width: 0;
   font-size: 14px;
   color: var(--text-secondary);
 }
@@ -131,6 +137,14 @@ defineEmits<{
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+}
+
+.header__info-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .header__info-item i {
@@ -141,6 +155,7 @@ defineEmits<{
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 
 .ai-status {
@@ -154,6 +169,15 @@ defineEmits<{
   font-size: 12px;
   font-weight: 500;
   color: var(--color-success);
+  min-width: 0;
+  max-width: 240px;
+}
+
+.ai-status .status-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ai-status .status-dot {
@@ -223,35 +247,59 @@ defineEmits<{
   color: var(--text-tertiary);
 }
 
-@media (max-width: 1280px) {
+@media (max-width: 1440px) {
+  .header__info-item:first-child {
+    display: none;
+  }
+}
+
+@media (max-width: 1180px) {
   .header {
-    padding: 0 20px;
-    gap: 16px;
+    grid-template-columns: minmax(210px, 1fr) auto;
   }
 
   .header__info {
-    gap: 16px;
+    display: none;
+  }
+
+  .header__btn span {
+    display: none;
+  }
+
+  .header__btn {
+    width: 34px;
+    padding: 0;
   }
 }
 
 @media (max-width: 960px) {
   .header {
     height: auto;
+    grid-template-columns: 1fr;
     padding: 12px 16px;
-    flex-wrap: wrap;
     gap: 12px;
-  }
-
-  .header__info {
-    order: 3;
-    width: 100%;
-    gap: 12px;
-    font-size: 12px;
   }
 
   .header__actions {
-    flex-wrap: wrap;
+    width: 100%;
+    overflow-x: auto;
     gap: 6px;
+  }
+
+  .ai-status {
+    max-width: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .ai-status .status-label {
+    max-width: 140px;
+  }
+
+  .header__logo {
+    width: 28px;
+    height: 28px;
+    font-size: 18px;
   }
 }
 </style>
