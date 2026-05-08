@@ -16,6 +16,8 @@ import {
   listTaskEvents,
   listTaskOutputs,
   listAgentRunLogs,
+  listTraceEvents,
+  listVerificationResults,
   listTasks,
   markPlanInvalid,
   savePlan,
@@ -730,6 +732,35 @@ router.get('/runs/:id/logs', (req, res) => {
   }
 })
 
+router.get('/runs/:id/trace', (req, res) => {
+  try {
+    const run = getRun(req.params.id)
+    if (!run) return res.status(404).json({ success: false, error: 'Run not found' })
+    const limit = parsePositiveInt(req.query.limit, 2000)
+    const beforeId = req.query.beforeId != null ? parsePositiveInt(req.query.beforeId, null) : null
+    res.json({
+      success: true,
+      trace: listTraceEvents({ runId: req.params.id, limit, beforeId }),
+    })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.get('/runs/:id/verifications', (req, res) => {
+  try {
+    const run = getRun(req.params.id)
+    if (!run) return res.status(404).json({ success: false, error: 'Run not found' })
+    const limit = parsePositiveInt(req.query.limit, 200)
+    res.json({
+      success: true,
+      verifications: listVerificationResults({ runId: req.params.id, limit }),
+    })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
 router.post('/runs/:id/cancel', (req, res) => {
   try {
     const result = cancelRun(req.params.id)
@@ -762,6 +793,21 @@ router.get('/tasks/:id/events', (req, res) => {
     res.json({
       success: true,
       events: listTaskEvents(req.params.id, { limit, beforeId }),
+    })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.get('/tasks/:id/trace', (req, res) => {
+  try {
+    const task = getTaskDetail(req.params.id)
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+    const limit = parsePositiveInt(req.query.limit, 2000)
+    const beforeId = req.query.beforeId != null ? parsePositiveInt(req.query.beforeId, null) : null
+    res.json({
+      success: true,
+      trace: listTraceEvents({ taskId: req.params.id, limit, beforeId }),
     })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })

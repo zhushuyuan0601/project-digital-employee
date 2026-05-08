@@ -18,7 +18,8 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0',
-    port: 3000,
+    port: 10001,
+    strictPort: true,
     proxy: {
       '/api/files': {
         target: 'http://127.0.0.1:18888',

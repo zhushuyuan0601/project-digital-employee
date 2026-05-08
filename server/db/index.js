@@ -9,13 +9,17 @@ import { DEFAULT_SERVER_CONFIG, ensureDir, resolveProjectPath } from '../config/
 
 // 数据库文件路径
 // 当前 Claude Runtime 分支使用独立库，避免切回 OpenClaw 分支时污染旧库。
-const DB_PATH = resolveProjectPath(process.env.DB_PATH) || DEFAULT_SERVER_CONFIG.dbPath
+function resolveDatabasePath(path = process.env.DB_PATH) {
+  return resolveProjectPath(path) || DEFAULT_SERVER_CONFIG.dbPath
+}
+
+let databasePath = resolveDatabasePath()
 
 // 数据库实例
 let db = null
 
 export function getDatabasePath() {
-  return DB_PATH
+  return databasePath
 }
 
 /**
@@ -24,10 +28,10 @@ export function getDatabasePath() {
 export function getDatabase() {
   if (!db) {
     // 确保目录存在
-    ensureDir(dirname(DB_PATH))
+    ensureDir(dirname(databasePath))
 
     // 创建数据库连接
-    db = new Database(DB_PATH)
+    db = new Database(databasePath)
 
     // 启用 WAL 模式以支持并发访问
     db.pragma('journal_mode = WAL')
@@ -37,10 +41,17 @@ export function getDatabase() {
     // 设置 busy_timeout 为 5 秒，避免并发冲突
     db.pragma('busy_timeout = 5000')
 
-    console.log('[DB] Database connected:', DB_PATH)
+    console.log('[DB] Database connected:', databasePath)
   }
 
   return db
+}
+
+export function resetDatabaseForTests(path) {
+  if (!path) throw new Error('resetDatabaseForTests requires a database path')
+  closeDatabase()
+  databasePath = resolveDatabasePath(path)
+  return databasePath
 }
 
 /**

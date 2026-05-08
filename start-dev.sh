@@ -88,7 +88,7 @@ echo "╚═══════════════════════�
 echo ""
 echo "下一步："
 echo "  1. 启动前端：npm run dev"
-echo "  2. 访问前端：http://localhost:3000"
+echo "  2. 访问前端：http://localhost:10001"
 echo ""
 echo "停止服务："
 echo "  pkill -f 'node server/index.js'"

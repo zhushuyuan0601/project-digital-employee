@@ -42,7 +42,7 @@ npm install
 npm run dev
 ```
 
-前端将在 `http://localhost:3000` 启动。
+前端将在 `http://localhost:10001` 启动。
 
 ## 功能特性
 

@@ -80,6 +80,22 @@ function normalizeRunLog(row) {
   }
 }
 
+function normalizeTraceEvent(row) {
+  if (!row) return null
+  return {
+    ...row,
+    payload_json: parseJson(row.payload_json),
+  }
+}
+
+function normalizeVerificationResult(row) {
+  if (!row) return null
+  return {
+    ...row,
+    details_json: parseJson(row.details_json),
+  }
+}
+
 export function initializeTaskSchema() {
   const db = getDatabase()
 
@@ -203,6 +219,75 @@ export function initializeTaskSchema() {
     )
   `)
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS runtime_jobs (
+      run_id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      subtask_id TEXT,
+      agent_id TEXT NOT NULL,
+      kind TEXT DEFAULT '',
+      session_key TEXT NOT NULL,
+      priority INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'queued',
+      attempt_count INTEGER NOT NULL DEFAULT 0,
+      max_attempts INTEGER NOT NULL DEFAULT 3,
+      available_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      owner_id TEXT,
+      locked_at INTEGER,
+      completed_at INTEGER,
+      error TEXT,
+      created_at INTEGER DEFAULT (unixepoch()),
+      updated_at INTEGER DEFAULT (unixepoch()),
+      FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+      FOREIGN KEY(run_id) REFERENCES agent_runs(id) ON DELETE CASCADE
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS runtime_session_locks (
+      session_key TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL,
+      owner_id TEXT NOT NULL,
+      locked_until INTEGER NOT NULL,
+      created_at INTEGER DEFAULT (unixepoch()),
+      updated_at INTEGER DEFAULT (unixepoch())
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS runtime_trace_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id TEXT NOT NULL,
+      task_id TEXT NOT NULL,
+      subtask_id TEXT,
+      agent_id TEXT,
+      type TEXT NOT NULL,
+      message TEXT NOT NULL,
+      payload_json TEXT,
+      created_at INTEGER DEFAULT (unixepoch()),
+      created_at_ms INTEGER,
+      FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+      FOREIGN KEY(run_id) REFERENCES agent_runs(id) ON DELETE CASCADE
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS runtime_verifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id TEXT NOT NULL,
+      task_id TEXT NOT NULL,
+      subtask_id TEXT,
+      agent_id TEXT,
+      mode TEXT NOT NULL DEFAULT 'report',
+      status TEXT NOT NULL,
+      message TEXT NOT NULL,
+      details_json TEXT,
+      created_at INTEGER DEFAULT (unixepoch()),
+      FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+      FOREIGN KEY(run_id) REFERENCES agent_runs(id) ON DELETE CASCADE
+    )
+  `)
+
   db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_updated ON tasks(updated_at)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_subtasks_task ON subtasks(task_id)')
@@ -214,6 +299,14 @@ export function initializeTaskSchema() {
   db.exec('CREATE INDEX IF NOT EXISTS idx_agent_run_logs_run ON agent_run_logs(run_id, id)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_agent_run_logs_subtask ON agent_run_logs(subtask_id, id)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_agent_run_logs_task ON agent_run_logs(task_id, id)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_runtime_jobs_status ON runtime_jobs(status, available_at, priority)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_runtime_jobs_agent ON runtime_jobs(agent_id, status)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_runtime_jobs_task ON runtime_jobs(task_id, status)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_runtime_session_locks_until ON runtime_session_locks(locked_until)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_runtime_trace_run ON runtime_trace_events(run_id, id)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_runtime_trace_task ON runtime_trace_events(task_id, id)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_runtime_verifications_run ON runtime_verifications(run_id, id)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_runtime_verifications_task ON runtime_verifications(task_id, id)')
 
   console.log('[DB] Task orchestration tables initialized')
 }
@@ -833,6 +926,121 @@ export function addAgentRunLog({
     Number(createdAtMs || Date.now())
   )
   return normalizeRunLog(db.prepare('SELECT * FROM agent_run_logs WHERE id = ?').get(result.lastInsertRowid))
+}
+
+export function addTraceEvent({
+  runId,
+  taskId,
+  subtaskId = null,
+  agentId = null,
+  type,
+  message,
+  payload = null,
+  createdAtMs = Date.now(),
+}) {
+  const db = getDatabase()
+  const result = db.prepare(`
+    INSERT INTO runtime_trace_events (
+      run_id, task_id, subtask_id, agent_id, type, message, payload_json, created_at, created_at_ms
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch(), ?)
+  `).run(
+    runId,
+    taskId,
+    subtaskId,
+    agentId,
+    type,
+    String(message || ''),
+    payload ? JSON.stringify(payload) : null,
+    Number(createdAtMs || Date.now())
+  )
+  return normalizeTraceEvent(db.prepare('SELECT * FROM runtime_trace_events WHERE id = ?').get(result.lastInsertRowid))
+}
+
+export function listTraceEvents({ runId, taskId, subtaskId, limit = 2000, beforeId = null } = {}) {
+  const db = getDatabase()
+  const clauses = []
+  const params = []
+  if (runId) {
+    clauses.push('run_id = ?')
+    params.push(runId)
+  }
+  if (taskId) {
+    clauses.push('task_id = ?')
+    params.push(taskId)
+  }
+  if (subtaskId) {
+    clauses.push('subtask_id = ?')
+    params.push(subtaskId)
+  }
+  if (beforeId != null) {
+    clauses.push('id < ?')
+    params.push(Number(beforeId))
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
+  params.push(Math.max(1, Number(limit) || 2000))
+  const rows = db.prepare(`
+    SELECT *
+    FROM runtime_trace_events
+    ${where}
+    ORDER BY id DESC
+    LIMIT ?
+  `).all(...params)
+  return rows.reverse().map(normalizeTraceEvent)
+}
+
+export function addVerificationResult({
+  runId,
+  taskId,
+  subtaskId = null,
+  agentId = null,
+  mode = 'report',
+  status,
+  message,
+  details = null,
+}) {
+  const db = getDatabase()
+  const result = db.prepare(`
+    INSERT INTO runtime_verifications (
+      run_id, task_id, subtask_id, agent_id, mode, status, message, details_json, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+  `).run(
+    runId,
+    taskId,
+    subtaskId,
+    agentId,
+    mode || 'report',
+    status,
+    String(message || ''),
+    details ? JSON.stringify(details) : null
+  )
+  return normalizeVerificationResult(db.prepare('SELECT * FROM runtime_verifications WHERE id = ?').get(result.lastInsertRowid))
+}
+
+export function listVerificationResults({ runId, taskId, subtaskId, limit = 200 } = {}) {
+  const db = getDatabase()
+  const clauses = []
+  const params = []
+  if (runId) {
+    clauses.push('run_id = ?')
+    params.push(runId)
+  }
+  if (taskId) {
+    clauses.push('task_id = ?')
+    params.push(taskId)
+  }
+  if (subtaskId) {
+    clauses.push('subtask_id = ?')
+    params.push(subtaskId)
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
+  params.push(Math.max(1, Number(limit) || 200))
+  return db.prepare(`
+    SELECT *
+    FROM runtime_verifications
+    ${where}
+    ORDER BY id DESC
+    LIMIT ?
+  `).all(...params).reverse().map(normalizeVerificationResult)
 }
 
 export function listAgentRunLogs({ runId, taskId, subtaskId, limit = 2000, beforeId = null } = {}) {
