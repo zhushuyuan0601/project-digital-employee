@@ -170,90 +170,19 @@
       </div>
     </section>
 
-    <section class="agent-panel">
+    <section class="agent-market-link">
       <div class="runtime-panel__head">
         <div>
-          <p class="eyebrow">Agent Registry</p>
-          <h2>内置 Agent 能力目录</h2>
+          <p class="eyebrow">Agent Market</p>
+          <h2>能力市场已独立管理</h2>
         </div>
         <div class="runtime-panel__chips">
-          <span>启用 {{ enabledAgentCount }}</span>
-          <span>总数 {{ agentDefinitions.length }}</span>
+          <span>Router 调度</span>
+          <span>能力卡</span>
         </div>
       </div>
-
-      <div class="agent-grid">
-        <article v-for="agent in agentDefinitions" :key="agent.id" class="agent-config">
-          <div class="agent-config__head">
-            <div>
-              <strong>{{ agent.name }}</strong>
-              <span>{{ agent.roleName }} · {{ agent.id }}</span>
-            </div>
-            <label class="agent-switch">
-              <input
-                type="checkbox"
-                :checked="agent.enabled"
-                :disabled="agent.coordinator || savingAgentId === agent.id"
-                @change="updateAgent(agent, { enabled: ($event.target as HTMLInputElement).checked })"
-              />
-              <span>{{ agent.enabled ? '启用' : '停用' }}</span>
-            </label>
-          </div>
-          <p>{{ agent.description }}</p>
-          <div class="agent-tags">
-            <span v-for="capability in agent.capabilities" :key="capability">{{ capability }}</span>
-          </div>
-          <div class="agent-form">
-            <label>
-              <span>Agent 并发</span>
-              <input
-                class="field"
-                type="number"
-                min="1"
-                :value="agent.maxConcurrency"
-                :disabled="savingAgentId === agent.id"
-                @change="updateAgent(agent, { maxConcurrency: Number(($event.target as HTMLInputElement).value) || 1 })"
-              />
-            </label>
-            <label>
-              <span>风险等级</span>
-              <select
-                class="field"
-                :value="agent.riskLevel"
-                :disabled="savingAgentId === agent.id"
-                @change="updateAgent(agent, { riskLevel: ($event.target as HTMLSelectElement).value })"
-              >
-                <option value="low">low</option>
-                <option value="medium">medium</option>
-                <option value="high">high</option>
-              </select>
-            </label>
-            <label class="agent-form__tools">
-              <span>允许工具</span>
-              <input
-                class="field"
-                :value="agent.allowedTools.join(',')"
-                :disabled="savingAgentId === agent.id"
-                @change="updateAgent(agent, { allowedTools: parseTools(($event.target as HTMLInputElement).value) })"
-              />
-            </label>
-            <label class="agent-form__model">
-              <span>默认模型</span>
-              <input
-                class="field"
-                :value="agent.defaultModel || ''"
-                placeholder="继承全局模型"
-                :disabled="savingAgentId === agent.id"
-                @change="updateAgent(agent, { defaultModel: ($event.target as HTMLInputElement).value.trim() })"
-              />
-            </label>
-          </div>
-          <div class="agent-contracts">
-            <span>输入 {{ agent.inputContract.join(' / ') || '未配置' }}</span>
-            <span>输出 {{ agent.outputContract.join(' / ') || '未配置' }}</span>
-          </div>
-        </article>
-      </div>
+      <p class="agent-market-link__copy">Agent 的启用、能力标签、输入输出契约、工具权限、成本风险和路由预览，统一在独立市场页面维护。</p>
+      <router-link to="/agent-market" class="btn btn-primary">打开 Agent 市场</router-link>
     </section>
 
     <div class="config-tree">
@@ -279,7 +208,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { taskApi, type AgentDefinition, type RuntimeConfig } from '@/api/tasks'
+import { taskApi, type RuntimeConfig } from '@/api/tasks'
 
 type ConfigItem = {
   id: string
@@ -293,8 +222,6 @@ type ConfigItem = {
 const loading = ref(false)
 const saving = ref(false)
 const runtimeConfig = ref<RuntimeConfig | null>(null)
-const agentDefinitions = ref<AgentDefinition[]>([])
-const savingAgentId = ref('')
 const runtimeStatus = ref<{
   healthy: boolean
   running: number
@@ -350,7 +277,6 @@ const allowedToolsText = computed({
   },
 })
 
-const enabledAgentCount = computed(() => agentDefinitions.value.filter(agent => agent.enabled).length)
 const recentModelRuns = computed(() => (runtimeStatus.value?.recentRuns || []).slice(0, 8))
 
 const configs = ref<ConfigItem[]>([
@@ -397,41 +323,15 @@ const toggleConfig = (config: ConfigItem) => {
 async function refreshConfig() {
   loading.value = true
   try {
-    const [configResponse, statusResponse, agentsResponse] = await Promise.all([
+    const [configResponse, statusResponse] = await Promise.all([
       taskApi.runtimeConfig(),
       taskApi.runtimeStatus(),
-      taskApi.listAgents(),
     ])
     applyRuntimeConfig(configResponse.config, statusResponse.status)
-    agentDefinitions.value = agentsResponse.agents
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '读取 Runtime 配置失败')
   } finally {
     loading.value = false
-  }
-}
-
-function parseTools(value: string) {
-  return value
-    .split(',')
-    .map(item => item.trim())
-    .filter(Boolean)
-}
-
-async function updateAgent(agent: AgentDefinition, payload: Partial<Pick<AgentDefinition, 'enabled' | 'maxConcurrency' | 'allowedTools' | 'riskLevel' | 'sortOrder' | 'defaultModel'>>) {
-  savingAgentId.value = agent.id
-  try {
-    const response = await taskApi.updateAgent(agent.id, payload)
-    if (response.agents) {
-      agentDefinitions.value = response.agents
-    } else {
-      agentDefinitions.value = agentDefinitions.value.map(item => item.id === agent.id ? response.agent : item)
-    }
-    ElMessage.success(`${agent.name} 配置已更新`)
-  } catch (err) {
-    ElMessage.error(err instanceof Error ? err.message : '保存 Agent 配置失败')
-  } finally {
-    savingAgentId.value = ''
   }
 }
 
@@ -501,12 +401,19 @@ onMounted(() => {
   background: var(--bg-panel);
 }
 
-.agent-panel {
+.agent-panel,
+.agent-market-link {
   margin: 16px 32px 0;
   padding: 16px;
   border: 1px solid var(--border-default);
   border-radius: 8px;
   background: var(--bg-panel);
+}
+
+.agent-market-link__copy {
+  max-width: 720px;
+  color: var(--text-secondary);
+  line-height: 1.6;
 }
 
 .runtime-panel__head,

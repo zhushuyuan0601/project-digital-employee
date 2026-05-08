@@ -342,7 +342,6 @@ const props = withDefaults(defineProps<{
   embedded: false,
 })
 
-type AgentId = 'xiaomu' | 'xiaokai' | 'xiaochan' | 'xiaoyan' | 'xiaoce'
 type OutputType = 'code' | 'doc' | 'report' | 'markdown' | 'text' | 'html' | 'pdf' | 'unsupported' | 'json'
 
 interface DashboardStats {
@@ -480,17 +479,8 @@ const isWeekFilter = computed(() => {
 const teamMembers = computed<TeamMemberCard[]>(() => {
   const today = new Date().toISOString().split('T')[0]
   const todayOutputs = allOutputs.value.filter(o => o.date === today)
-  // 保持原有的人名匹配逻辑（小 U、小开等）
-  const nameMap: Record<AgentId, string> = {
-    xiaomu: '小 U',
-    xiaokai: '小开',
-    xiaochan: '小产',
-    xiaoyan: '小研',
-    xiaoce: '小测'
-  }
-  const getOutputsByPerson = (agentId: AgentId) => {
-    const personName = nameMap[agentId] || ''
-    return todayOutputs.filter(o => o.person && o.person.includes(personName))
+  const getOutputsByPerson = (agentName: string) => {
+    return todayOutputs.filter(o => o.person && (o.person.includes(agentName) || agentName.includes(o.person)))
   }
 
   const workByPerson: Record<string, number> = {}
@@ -507,47 +497,37 @@ const teamMembers = computed<TeamMemberCard[]>(() => {
     icon: agent.icon,
     status: agent.status,
     completedTasks: agent.completedTasks,
-    gradient: getGradientForAgent(agent.id as AgentId),
-    stats: getAgentStats(agent.id as AgentId, workByPerson),
-    task: getAgentTask(agent.id as AgentId),
-    todayOutputs: getOutputsByPerson(agent.id as AgentId)
+    gradient: getGradientForAgent(agent.id),
+    stats: getAgentStats(agent, workByPerson),
+    task: getAgentTask(agent.description),
+    todayOutputs: getOutputsByPerson(agent.name)
   }))
 })
 
 // 获取 Agent 对应的渐变色
-function getGradientForAgent(agentId: AgentId) {
-  const gradients: Record<AgentId, string> = {
-    xiaomu: 'from-indigo-400 to-purple-500',    // 项目管理
-    xiaokai: 'from-green-400 to-cyan-500',      // 研发工程师
-    xiaochan: 'from-pink-400 to-rose-500',      // 产品经理
-    xiaoyan: 'from-yellow-400 to-orange-500',   // 研究员
-    xiaoce: 'from-red-400 to-pink-500'          // 测试员
-  }
-  return gradients[agentId] || 'from-gray-400 to-gray-500'
+function getGradientForAgent(agentId: string) {
+  const gradients = [
+    'from-indigo-400 to-sky-500',
+    'from-emerald-400 to-cyan-500',
+    'from-rose-400 to-orange-500',
+    'from-amber-400 to-lime-500',
+    'from-violet-400 to-fuchsia-500',
+  ]
+  const index = Math.abs([...agentId].reduce((sum, char) => sum + char.charCodeAt(0), 0)) % gradients.length
+  return gradients[index]
 }
 
 // 获取 Agent 统计信息
-function getAgentStats(agentId: AgentId, workByPerson: Record<string, number>) {
-  const statsMap: Record<AgentId, Record<string, number | string>> = {
-    xiaomu: { '任务': workByPerson['小 U'] || 0, '同步': '✅' },
-    xiaokai: { '提交': stats.value.todayCommits || 0, '代码': '2.5k' },
-    xiaochan: { 'PRD': 0, '评审': 0 },
-    xiaoyan: { '报告': 0, '洞察': 15 },
-    xiaoce: { '测试': 0, '通过': '100%' }
+function getAgentStats(agent: { name: string }, workByPerson: Record<string, number>) {
+  return {
+    '任务': workByPerson[agent.name] || 0,
+    '成果': allOutputs.value.filter(output => output.person?.includes(agent.name)).length,
   }
-  return statsMap[agentId] || {}
 }
 
 // 获取 Agent 当前任务
-function getAgentTask(agentId: AgentId) {
-  const tasks: Record<AgentId, string> = {
-    xiaomu: '团队协调',
-    xiaokai: '智能情报系统开发',
-    xiaochan: '产品需求规划',
-    xiaoyan: '行业情报收集',
-    xiaoce: '功能测试验证'
-  }
-  return tasks[agentId] || '-'
+function getAgentTask(description: string) {
+  return description || '-'
 }
 
 const getTypeIcon = (type: string): string => {

@@ -10,13 +10,14 @@ import { promises as fs, existsSync, readdirSync, statSync, readFileSync } from 
 import { fileURLToPath } from 'url'
 import { dirname, join, resolve } from 'path'
 import skillsRouter from './routes/skills.js'
+import agentsRouter from './routes/agents.js'
 import taskRouter from './routes/tasks.js'
 import analysisRouter from './routes/analysis.js'
 import groupChatRouter from './routes/group-chat.js'
 import mailRouter from './routes/mail.js'
 import { createAutomationRouter } from './routes/automation.js'
 import { initializeSchema } from './db/index.js'
-import { initializeAgentSchema } from './db/agents.js'
+import { getAgentDefinition, initializeAgentSchema, listAgentDefinitions } from './db/agents.js'
 import { initializeTaskSchema } from './db/tasks.js'
 import { getTaskDetail, getTaskOutput, listTaskEvents, listTaskOutputs, listTasks } from './db/tasks.js'
 import { initializeAnalysisSchema } from './db/analysis.js'
@@ -995,13 +996,7 @@ app.get('/api/dashboard', async (req, res) => {
     const todayStart = new Date()
     todayStart.setHours(0, 0, 0, 0)
     const todaySeconds = Math.floor(todayStart.getTime() / 1000)
-    const agentNames = {
-      xiaomu: '小呦',
-      xiaokai: '研发工程师',
-      xiaochan: '产品经理',
-      xiaoyan: '研究员',
-      xiaoce: '测试员'
-    }
+    const agentNames = Object.fromEntries(listAgentDefinitions({ includeHidden: true, includeCoordinator: true }).map((agent) => [agent.id, agent.name]))
 
     const projects = tasks.map((task) => ({
       id: task.id,
@@ -1117,13 +1112,13 @@ app.get('/api/activities', async (req, res) => {
  * 生成模拟活动记录
  */
 function generateMockActivities(count = 20, sinceTimestamp = null) {
-  const actors = ['xiaomu', 'xiaokai', 'xiaochan', 'xiaoyan', 'xiaoce']
+  const actors = ['xiaomu', 'implementation_engineer', 'document_drafter', 'general_researcher', 'verification_runner']
   const actorNames = {
     'xiaomu': '小 U',
-    'xiaokai': '小开',
-    'xiaochan': '小产',
-    'xiaoyan': '小研',
-    'xiaoce': '小测'
+    'implementation_engineer': '实现执行 Agent',
+    'document_drafter': '文档起草 Agent',
+    'general_researcher': '资料研究 Agent',
+    'verification_runner': '验证执行 Agent'
   }
   const taskTypes = [
     { type: 'task_created', status: '已创建', tasks: ['创建新功能需求', '新增用户故事', '建立任务卡片', '规划迭代任务'] },
@@ -1164,15 +1159,13 @@ function generateMockActivities(count = 20, sinceTimestamp = null) {
  * 格式化角色名称
  */
 function formatActorName(actor) {
+  const agent = getAgentDefinition(actor)
+  if (agent) return agent.name
   const nameMap = {
     'heartbeat': '系统',
     'Admin': '小 U',
     'coordinator': '小 U',
-    'xiaomu': '小 U',
-    'xiaokai': '小开',
-    'xiaochan': '小产',
-    'xiaoyan': '小研',
-    'xiaoce': '小测'
+    'xiaomu': '小 U'
   }
   return nameMap[actor] || actor
 }
@@ -1203,6 +1196,7 @@ if (runtimeRecovery.cleaned > 0) {
 }
 startMailScanner()
 app.use('/api', createAutomationRouter())
+app.use('/api', agentsRouter)
 app.use('/api', taskRouter)
 app.use('/api', groupChatRouter)
 app.use('/api', mailRouter)

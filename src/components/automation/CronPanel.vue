@@ -206,10 +206,9 @@
             <label>执行 Agent</label>
             <select v-model="formData.agent" class="form-input">
               <option value="">选择执行任务的 Agent</option>
-              <option value="xiaomu">小呦</option>
-              <option value="xiaokai">研发工程师</option>
-              <option value="xiaochan">产品经理</option>
-              <option value="xiaoyan">研究员</option>
+              <option v-for="agent in agentRegistry.routableAgents" :key="agent.id" :value="agent.id">
+                {{ agent.name }}
+              </option>
             </select>
           </div>
 
@@ -244,6 +243,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useCronStore } from '@/stores/cron'
+import { useAgentRegistryStore } from '@/stores/agentRegistry'
 import type { CronTask } from '@/api'
 import { useNotification } from '@/composables/useNotification'
 
@@ -266,6 +266,7 @@ type CronExecutionViewModel = {
 }
 
 const cronStore = useCronStore()
+const agentRegistry = useAgentRegistryStore()
 const notification = useNotification()
 
 const filterStatus = ref('')
@@ -395,6 +396,7 @@ const refreshData = async () => {
 }
 
 onMounted(() => {
+  agentRegistry.loadAgents({ includeHidden: false, includeCoordinator: true })
   refreshData()
 })
 </script>

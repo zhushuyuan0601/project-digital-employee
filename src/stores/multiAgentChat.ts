@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { getMultiAgentStoreConfigs } from '@/config/agents'
 
 export interface AgentConfig {
   id: string
@@ -33,15 +32,38 @@ export interface AgentConnection {
 type EventListener = (agentId: string, event: string, payload: any) => void
 
 export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
-  const agentConfigs: AgentConfig[] = getMultiAgentStoreConfigs().map((agent) => ({
-    ...agent,
-    runtimeAgentId: agent.runtimeAgentId,
-  }))
-  const selectedAgentId = ref<string>('xiaomu')
+  const agentConfigs = ref<AgentConfig[]>([])
+  const selectedAgentId = ref<string>('')
   const agents = ref<Record<string, AgentConnection>>({})
   const eventListeners = ref<EventListener[]>([])
 
-  agentConfigs.forEach((config) => {
+  function setAgentConfigs(configs: AgentConfig[]) {
+    agentConfigs.value = configs
+    const nextAgents: Record<string, AgentConnection> = {}
+    configs.forEach((config) => {
+      nextAgents[config.id] = agents.value[config.id] || {
+        config,
+        ws: null,
+        isConnected: true,
+        isConnecting: false,
+        isTyping: false,
+        typingStartTime: null,
+        messages: [],
+        currentAssistantMsgId: null,
+      }
+      nextAgents[config.id].config = config
+    })
+    agents.value = nextAgents
+    if (!selectedAgentId.value || !agents.value[selectedAgentId.value]) {
+      selectedAgentId.value = configs[0]?.id || ''
+    }
+  }
+
+  function addAgentConfig(config: AgentConfig) {
+    setAgentConfigs([...agentConfigs.value.filter((item) => item.id !== config.id), config])
+  }
+
+  agentConfigs.value.forEach((config) => {
     agents.value[config.id] = {
       config,
       ws: null,
@@ -60,7 +82,7 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
   const anyConnected = computed(() => true)
 
   function loadMessages() {
-    agentConfigs.forEach((config) => {
+    agentConfigs.value.forEach((config) => {
       const saved = localStorage.getItem(`chat_messages_${config.id}`)
       if (!saved || !agents.value[config.id]) return
       try {
@@ -97,11 +119,11 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
   }
 
   function connectAll() {
-    agentConfigs.forEach((config) => connect(config.id))
+    agentConfigs.value.forEach((config) => connect(config.id))
   }
 
   function disconnectAll() {
-    agentConfigs.forEach((config) => disconnect(config.id))
+    agentConfigs.value.forEach((config) => disconnect(config.id))
   }
 
   function sendMessage(agentId: string, text: string) {
@@ -148,6 +170,8 @@ export const useMultiAgentChatStore = defineStore('multiAgentChat', () => {
     selectedAgentId,
     settings: ref({ autoConnect: false, wsUrl: '', token: '' }),
     agentConfigs,
+    setAgentConfigs,
+    addAgentConfig,
     selectedAgent,
     selectedMessages,
     allConnected,

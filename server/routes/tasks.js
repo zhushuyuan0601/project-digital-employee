@@ -406,7 +406,10 @@ function validatePlan(plan) {
 }
 
 function coordinatorPrompt(task) {
-  return `你是小呦/ceo，负责多 Agent 任务拆解和最终汇总。
+  const agents = listAgentDefinitions({ enabledOnly: true, includeCoordinator: false, includeHidden: false })
+    .map((agent) => `- ${agent.id}: ${agent.name}，意图 ${agent.capabilityProfile?.intents?.join('、') || 'general'}，输出 ${agent.outputContract.join('、') || 'report'}`)
+    .join('\n')
+  return `你是小呦/ceo，负责按 Agent Market 能力卡进行任务路由、拆解和最终汇总。
 
 请把下面任务拆解成可由执行 Agent 完成的结构化 JSON。只返回 JSON，不要输出解释文字。
 
@@ -416,10 +419,7 @@ function coordinatorPrompt(task) {
 ${task.description}
 
 可选执行 Agent:
-- xiaoyan: 研究员，负责调研分析和报告
-- xiaochan: 产品经理，负责需求分析和产品方案
-- xiaokai: 研发工程师，负责技术方案和代码实现
-- xiaoce: 测试员，负责质量检查和测试报告
+${agents || '- 暂无可执行 Agent'}
 
 JSON 格式:
 {
@@ -429,7 +429,7 @@ JSON 格式:
     {
       "title": "string",
       "description": "string",
-      "assignedAgentId": "xiaoyan | xiaochan | xiaokai | xiaoce",
+      "assignedAgentId": "从可选执行 Agent 中选择一个 id",
       "expectedOutput": "string"
     }
   ],
@@ -521,9 +521,10 @@ router.get('/tasks/agents', (req, res) => {
   try {
     const enabledOnly = parseBooleanFlag(req.query.enabledOnly, false)
     const includeCoordinator = parseBooleanFlag(req.query.includeCoordinator, true)
+    const includeHidden = parseBooleanFlag(req.query.includeHidden, false)
     res.json({
       success: true,
-      agents: listAgentDefinitions({ enabledOnly, includeCoordinator }),
+      agents: listAgentDefinitions({ enabledOnly, includeCoordinator, includeHidden }),
     })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
@@ -536,14 +537,28 @@ router.patch('/tasks/agents/:id', (req, res) => {
     if (!current) return res.status(404).json({ success: false, error: 'Agent not found' })
     const body = req.body || {}
     const agent = updateAgentDefinition(req.params.id, {
+      name: body.name,
+      roleName: body.roleName,
+      reportName: body.reportName,
+      description: body.description,
+      boundary: body.boundary,
       enabled: body.enabled,
       maxConcurrency: body.maxConcurrency,
       allowedTools: body.allowedTools,
       riskLevel: body.riskLevel,
       sortOrder: body.sortOrder,
       defaultModel: body.defaultModel,
+      category: body.category,
+      icon: body.icon,
+      instructions: body.instructions,
+      marketVisible: body.marketVisible,
+      aliases: body.aliases,
+      marketProfile: body.marketProfile,
+      capabilityProfile: body.capabilityProfile,
+      routingProfile: body.routingProfile,
+      governanceProfile: body.governanceProfile,
     })
-    res.json({ success: true, agent, agents: listAgentDefinitions() })
+    res.json({ success: true, agent, agents: listAgentDefinitions({ includeHidden: false }) })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }

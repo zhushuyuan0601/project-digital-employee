@@ -1,9 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Agent, AgentRole, AgentStatus } from '@/types/agent'
-import { AGENT_DEFINITIONS, AGENT_TO_RUNTIME_MAP } from '@/config/agents'
+import type { AgentDefinition } from '@/api/agents'
 
-export { AGENT_TO_RUNTIME_MAP }
+export const AGENT_TO_RUNTIME_MAP: Record<string, string> = {}
 
 // localStorage key
 const AGENT_STATS_KEY = 'agent_completed_tasks'
@@ -117,10 +117,24 @@ export const useAgentsStore = defineStore('agents', () => {
   // 初始化默认 agents（从 localStorage 恢复统计）
   function initializeDefaultAgents() {
     const savedStats = loadCompletedTasksFromStorage()
-    agents.value = AGENT_DEFINITIONS.map((agent) => ({
+    agents.value = agents.value.map((agent) => ({
       id: agent.id,
       name: agent.name,
-      role: agent.roleType,
+      role: agent.role,
+      icon: agent.icon,
+      status: 'idle',
+      completedTasks: savedStats[agent.id] || 0,
+      description: agent.description,
+      runtimeAgentId: agent.runtimeAgentId,
+    }))
+  }
+
+  function initializeFromRegistry(definitions: AgentDefinition[]) {
+    const savedStats = loadCompletedTasksFromStorage()
+    agents.value = definitions.map((agent) => ({
+      id: agent.id,
+      name: agent.name,
+      role: agent.coordinator ? 'coordinator' : agent.category === 'quality' ? 'reviewer' : 'executor',
       icon: agent.icon,
       status: 'idle',
       completedTasks: savedStats[agent.id] || 0,
@@ -146,6 +160,7 @@ export const useAgentsStore = defineStore('agents', () => {
     incrementCompletedTasks,
     resetAgentStatus,
     clearCompletedTasks,
-    initializeDefaultAgents
+    initializeDefaultAgents,
+    initializeFromRegistry
   }
 })

@@ -12,7 +12,7 @@ import {
 } from '../db/runtime-jobs.js'
 import { withRuntimeTestDb } from './helpers/runtime-test-db.js'
 
-function createRun(task, id, { agentId = 'xiaoyan', kind = 'subtask', status = 'queued' } = {}) {
+function createRun(task, id, { agentId = 'general_researcher', kind = 'subtask', status = 'queued' } = {}) {
   return createAgentRun({
     id,
     taskId: task.id,
@@ -36,7 +36,7 @@ test('runtime jobs claim by priority and prevent concurrent session claims', () 
 
     const first = claimNextRuntimeJob({
       ownerId: 'worker-a',
-      agentCapacity: { xiaoyan: 2 },
+      agentCapacity: { general_researcher: 2 },
       lockedSeconds: 60,
     })
     assert.equal(first.run_id, high.id)
@@ -44,7 +44,7 @@ test('runtime jobs claim by priority and prevent concurrent session claims', () 
 
     const blocked = claimNextRuntimeJob({
       ownerId: 'worker-b',
-      agentCapacity: { xiaoyan: 2 },
+      agentCapacity: { general_researcher: 2 },
       lockedSeconds: 60,
     })
     assert.equal(blocked, null)
@@ -52,7 +52,7 @@ test('runtime jobs claim by priority and prevent concurrent session claims', () 
     completeRuntimeJob(high.id)
     const second = claimNextRuntimeJob({
       ownerId: 'worker-b',
-      agentCapacity: { xiaoyan: 2 },
+      agentCapacity: { general_researcher: 2 },
       lockedSeconds: 60,
     })
     assert.equal(second.run_id, low.id)

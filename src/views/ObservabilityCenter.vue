@@ -282,6 +282,9 @@ import {
 } from '@element-plus/icons-vue'
 import { getActivities, getDashboard, type ActivityItem } from '@/api/dashboard'
 import { taskApi, type AgentRun, type RuntimeAgentStat } from '@/api/tasks'
+import { useAgentRegistryStore } from '@/stores/agentRegistry'
+
+const agentRegistry = useAgentRegistryStore()
 
 // ─── Clock ──────────────────────────────────────────────
 const currentTime = ref('')
@@ -302,6 +305,7 @@ let timerId = 0
 onMounted(() => {
   updateClock()
   timerId = window.setInterval(updateClock, 1000)
+  agentRegistry.loadAgents({ includeHidden: true, includeCoordinator: true })
   loadDashboardData()
 })
 onUnmounted(() => {
@@ -558,16 +562,18 @@ const roleList = ref([
 
 const runtimeRoleList = computed(() => {
   if (!runtimeAgentStats.value.length) return roleList.value
-  const iconByAgent: Record<string, any> = {
-    xiaomu: markRaw(Connection),
-    xiaoyan: markRaw(Search),
-    xiaochan: markRaw(Document),
-    xiaokai: markRaw(Monitor),
-    xiaoce: markRaw(Select),
+  const iconByCategory: Record<string, any> = {
+    coordination: markRaw(Connection),
+    information: markRaw(Search),
+    product: markRaw(Document),
+    engineering: markRaw(Monitor),
+    quality: markRaw(Select),
+    daily: markRaw(Edit),
+    legacy: markRaw(Aim),
   }
   return runtimeAgentStats.value.map((agent) => ({
-    name: agent.roleName || agent.agentId,
-    icon: iconByAgent[agent.agentId] || markRaw(Aim),
+    name: agentRegistry.agentName(agent.agentId) || agent.roleName || agent.agentId,
+    icon: iconByCategory[agentRegistry.fallbackAgent(agent.agentId).category] || markRaw(Aim),
     active: agent.running > 0 || agent.queued > 0,
     count: agent.total,
   }))

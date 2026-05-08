@@ -1,5 +1,5 @@
 // 模拟数据类型定义
-import { AGENT_DEFINITIONS, type AgentRole } from '@/config/agents'
+import type { AgentRole } from '@/config/agents'
 import type { TaskStatus } from '@/types/task'
 
 // 执行日志
@@ -34,7 +34,7 @@ export interface MockResponseTemplate {
 export const MOCK_TEMPLATES: MockResponseTemplate[] = [
   {
     keywords: ['市场', '竞品', '调研', '分析', '研究'],
-    agentId: 'xiaoyan',
+    agentId: 'general_researcher',
     steps: [
       '正在收集市场数据和行业报告...',
       '分析主要竞争对手的产品特点...',
@@ -46,7 +46,7 @@ export const MOCK_TEMPLATES: MockResponseTemplate[] = [
   },
   {
     keywords: ['产品', '需求', '设计', 'PRD', '原型', '功能'],
-    agentId: 'xiaochan',
+    agentId: 'requirements_analyst',
     steps: [
       '理解用户需求和业务目标...',
       '梳理功能列表和优先级...',
@@ -58,7 +58,7 @@ export const MOCK_TEMPLATES: MockResponseTemplate[] = [
   },
   {
     keywords: ['开发', '代码', '实现', '编程', '技术', '系统', '搭建'],
-    agentId: 'xiaokai',
+    agentId: 'implementation_engineer',
     steps: [
       '设计技术架构和方案...',
       '搭建项目基础结构...',
@@ -70,7 +70,7 @@ export const MOCK_TEMPLATES: MockResponseTemplate[] = [
   },
   {
     keywords: ['测试', '验证', '质量', 'QA', '检查', '验收'],
-    agentId: 'xiaoce',
+    agentId: 'verification_runner',
     steps: [
       '制定测试计划和测试用例...',
       '执行功能测试和边界测试...',
@@ -82,7 +82,7 @@ export const MOCK_TEMPLATES: MockResponseTemplate[] = [
   },
   {
     keywords: ['文档', '写作', '文案', '报告', '总结', '计划'],
-    agentId: 'xiaomu',
+    agentId: 'general_task_agent',
     steps: [
       '收集相关资料和素材...',
       '梳理文档结构和大纲...',
@@ -97,7 +97,7 @@ export const MOCK_TEMPLATES: MockResponseTemplate[] = [
 // 默认模板（不匹配任何关键词时使用）
 export const DEFAULT_TEMPLATE: MockResponseTemplate = {
   keywords: [],
-  agentId: 'xiaomu',
+  agentId: 'general_task_agent',
   steps: [
     '分析任务内容和目标...',
     '拆解任务为可执行的子任务...',
@@ -110,13 +110,11 @@ export const DEFAULT_TEMPLATE: MockResponseTemplate = {
 
 // Agent 配置
 export const AGENT_CONFIG: Record<string, { name: string; role: AgentRole; icon: string; description: string }> = Object.fromEntries(
-  AGENT_DEFINITIONS.map((agent) => [
-    agent.id,
-    {
-      name: agent.roleLabel,
-      role: agent.roleType,
-      icon: agent.icon,
-      description: agent.description,
-    },
-  ])
+  [
+    ['general_researcher', { name: '资料研究', role: 'executor' as AgentRole, icon: 'Search', description: '资料收集与整理' }],
+    ['requirements_analyst', { name: '需求澄清', role: 'executor' as AgentRole, icon: 'DocumentChecked', description: '需求澄清与范围定义' }],
+    ['implementation_engineer', { name: '实现执行', role: 'executor' as AgentRole, icon: 'Monitor', description: '代码实现与修复' }],
+    ['verification_runner', { name: '验证执行', role: 'reviewer' as AgentRole, icon: 'Select', description: '测试与验证执行' }],
+    ['general_task_agent', { name: '通用事务', role: 'executor' as AgentRole, icon: 'MagicStick', description: '通用事务处理' }],
+  ]
 ) as Record<string, { name: string; role: AgentRole; icon: string; description: string }>

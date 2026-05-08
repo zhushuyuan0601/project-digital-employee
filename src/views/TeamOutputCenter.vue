@@ -134,10 +134,9 @@
           </select>
           <select v-model="outputFilters.agentId" class="filter-control" @change="loadTaskOutputs">
             <option value="">全部 Agent</option>
-            <option value="xiaoyan">研究员</option>
-            <option value="xiaochan">产品经理</option>
-            <option value="xiaokai">研发工程师</option>
-            <option value="xiaoce">测试员</option>
+            <option v-for="agent in agentRegistry.agents" :key="agent.id" :value="agent.id">
+              {{ agent.name }}
+            </option>
           </select>
           <select v-model="outputFilters.status" class="filter-control" @change="loadTaskOutputs">
             <option value="">全部状态</option>
@@ -203,7 +202,7 @@ import { computed, onMounted, reactive, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { taskApi } from '@/api/tasks'
-import { AGENT_DEFINITIONS } from '@/config/agents'
+import { useAgentRegistryStore } from '@/stores/agentRegistry'
 import { useTasksStore } from '@/stores/tasks'
 import type { Task, TaskOutput, TaskOutputStatus, TaskStatus } from '@/types/task'
 
@@ -212,38 +211,24 @@ type TeamTab = 'team' | 'projects' | 'outputs'
 const route = useRoute()
 const router = useRouter()
 const tasksStore = useTasksStore()
+const agentRegistry = useAgentRegistryStore()
 const outputFilters = reactive({
   taskId: '',
   agentId: '',
   status: '',
 })
 
-const agentMeta = AGENT_DEFINITIONS.reduce<Record<string, { name: string; role: string; initial: string; avatar: string }>>(
-  (meta, agent) => {
-    const roleMap: Record<string, string> = {
-      xiaomu: '任务统筹与最终汇总',
-      xiaoyan: '调研分析与资料研究',
-      xiaochan: '需求分析与产品方案',
-      xiaokai: '技术方案与实现建议',
-      xiaoce: '测试验收与风险清单',
-    }
-    const initialMap: Record<string, string> = {
-      xiaomu: '呦',
-      xiaoyan: '研',
-      xiaochan: '产',
-      xiaokai: '研',
-      xiaoce: '测',
-    }
-    meta[agent.id] = {
+const agentMeta = computed<Record<string, { name: string; role: string; initial: string; avatar: string }>>(() => {
+  return Object.fromEntries(agentRegistry.agents.map((agent) => [
+    agent.id,
+    {
       name: agent.name,
-      role: roleMap[agent.id] || agent.roleLabel,
-      initial: initialMap[agent.id] || agent.name.slice(0, 1),
-      avatar: agent.icon,
-    }
-    return meta
-  },
-  {}
-)
+      role: agent.roleName || agent.category,
+      initial: agentRegistry.agentInitial(agent.id),
+      avatar: '',
+    },
+  ]))
+})
 
 const tabs = [
   { key: 'team', label: '团队态势', meta: '成员在线状态与当前职责' },
@@ -278,7 +263,7 @@ function setTab(tab: TeamTab) {
 
 const projectTasks = computed(() => [...tasksStore.tasks].sort((a, b) => Number(b.updated_at || 0) - Number(a.updated_at || 0)))
 
-const memberSummaries = computed(() => Object.entries(agentMeta).map(([agentId, meta]) => {
+const memberSummaries = computed(() => Object.entries(agentMeta.value).map(([agentId, meta]) => {
   const subtasks = tasksStore.tasks.flatMap(task =>
     (task.subtasks || []).filter(subtask => subtask.assigned_agent_id === agentId).map(subtask => ({ task, subtask }))
   )
@@ -317,8 +302,8 @@ const outputsByMember = computed(() => {
     .map(([agentId, outputs]) => ({
       agentId,
       name: agentName(agentId),
-      initial: agentMeta[agentId]?.initial || agentName(agentId).slice(0, 1),
-      avatar: agentMeta[agentId]?.avatar || '',
+      initial: agentMeta.value[agentId]?.initial || agentName(agentId).slice(0, 1),
+      avatar: agentMeta.value[agentId]?.avatar || '',
       outputs,
     }))
 })
@@ -348,7 +333,7 @@ function outputStatusText(status: TaskOutputStatus) {
 }
 
 function agentName(agentId: string) {
-  return agentMeta[agentId]?.name || agentId || '未归属'
+  return agentRegistry.agentName(agentId) || agentMeta.value[agentId]?.name || agentId || '未归属'
 }
 
 function taskStatusText(status: TaskStatus) {
@@ -378,7 +363,7 @@ function taskOwners(task: Task) {
       owners.set(agentId, {
         id: agentId,
         name: agentName(agentId),
-        avatar: agentMeta[agentId]?.avatar || '',
+        avatar: agentMeta.value[agentId]?.avatar || '',
       })
     }
   }
@@ -418,6 +403,9 @@ watch(activeTab, (tab) => {
 })
 
 onMounted(async () => {
+  if (!agentRegistry.loaded) {
+    await agentRegistry.loadAgents({ includeHidden: true, includeCoordinator: true })
+  }
   await refreshAll()
 })
 </script>

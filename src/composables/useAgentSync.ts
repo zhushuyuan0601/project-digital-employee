@@ -1,5 +1,7 @@
 import { watch, type WatchStopHandle } from 'vue'
 import { useAgentsStore } from '@/stores/agents'
+import { useAgentRegistryStore } from '@/stores/agentRegistry'
+import { useGroupChatStore } from '@/stores/groupChat'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
 
 let syncStarted = false
@@ -7,7 +9,20 @@ let stopHandle: WatchStopHandle | null = null
 
 export function useAgentSync() {
   const agentsStore = useAgentsStore()
+  const agentRegistry = useAgentRegistryStore()
+  const groupStore = useGroupChatStore()
   const multiAgentStore = useMultiAgentChatStore()
+
+  function toChatConfig(agent: { id: string; name: string; roleName: string; runtimeAgentId: string }) {
+    return {
+      id: agent.id,
+      sessionKey: `claude:${agent.id}:main`,
+      displayName: agent.name,
+      role: agent.roleName,
+      avatar: (agent.name || agent.id).slice(0, 1),
+      runtimeAgentId: agent.runtimeAgentId,
+    }
+  }
 
   function syncAgentStates() {
     Object.values(multiAgentStore.agents).forEach((agentState) => {
@@ -21,10 +36,19 @@ export function useAgentSync() {
     })
   }
 
-  function initializeAgentSync() {
-    if (!agentsStore.agents.length) {
-      agentsStore.initializeDefaultAgents()
+  async function initializeAgentSync() {
+    if (!agentRegistry.loaded) {
+      await agentRegistry.loadAgents({ includeHidden: true, includeCoordinator: true })
     }
+
+    const visibleAgents = agentRegistry.marketAgents
+    const chatAgents = [
+      ...agentRegistry.coordinatorAgents.slice(0, 1),
+      ...agentRegistry.routableAgents.slice(0, 8),
+    ]
+    agentsStore.initializeFromRegistry(visibleAgents)
+    multiAgentStore.setAgentConfigs(chatAgents.map(toChatConfig))
+    groupStore.setGroupAgents(chatAgents.map((agent) => agent.id))
 
     if (syncStarted) {
       syncAgentStates()

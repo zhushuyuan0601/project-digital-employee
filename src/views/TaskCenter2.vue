@@ -1192,6 +1192,7 @@ import TaskControlBar from '@/components/task-center/TaskControlBar.vue'
 import { taskApi } from '@/api/tasks'
 import type { AgentRunLog } from '@/api/tasks'
 import { useAuthStore } from '@/stores/auth'
+import { useAgentRegistryStore } from '@/stores/agentRegistry'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
 import { useTasksStore } from '@/stores/tasks'
 import { useThemeStore } from '@/stores/theme'
@@ -1239,6 +1240,7 @@ const EVENT_SYNC_TYPES = new Set([
 ])
 
 const tasksStore = useTasksStore()
+const agentRegistry = useAgentRegistryStore()
 const multiAgentStore = useMultiAgentChatStore()
 const themeStore = useThemeStore()
 const authStore = useAuthStore()
@@ -1470,13 +1472,7 @@ const activeMemberSessionId = computed(() => {
 })
 const taskRowRefs: Record<string, HTMLButtonElement | null> = {}
 
-const agentLabels: Record<string, string> = {
-  xiaomu: '小呦',
-  xiaoyan: '研究员',
-  xiaochan: '产品经理',
-  xiaokai: '研发工程师',
-  xiaoce: '测试员',
-}
+const agentLabels: Record<string, string> = {}
 
 const workflowPhaseLabels: Record<WorkflowPhase, string> = {
   research: '调研',
@@ -2201,15 +2197,24 @@ const planWorkflowNodes = computed<WorkflowNodePlan[]>(() => {
     id: subtask.id || `node-${String(index + 1).padStart(2, '0')}`,
     title: subtask.title,
     phase: subtask.phase || 'review',
+    intent: subtask.intent || subtask.phase || 'general',
+    requiredCapabilities: subtask.requiredCapabilities || subtask.agentCapabilityHints || [],
     assignedAgentId: subtask.assignedAgentId,
+    routingReason: subtask.routingReason || '',
     objective: subtask.description,
     description: subtask.description,
     dependsOn: subtask.dependsOn || [],
+    parallelGroup: subtask.parallelGroup || '',
+    inputArtifacts: subtask.inputArtifacts || [],
+    expectedOutputArtifacts: subtask.expectedOutputArtifacts || [],
     requiredInputs: subtask.requiredInputs || [],
     expectedOutputs: subtask.expectedOutputs || (subtask.expectedOutput ? [subtask.expectedOutput] : []),
     executionMode: subtask.executionMode || 'report',
     successCriteria: subtask.successCriteria || [],
+    acceptanceCriteria: subtask.acceptanceCriteria || [],
     skipCondition: subtask.skipCondition,
+    costEstimate: subtask.costEstimate,
+    requiresApproval: subtask.requiresApproval,
   }))
 })
 const orderedPlanWorkflowNodes = computed(() => sortPlanNodesByExecutionOrder(planWorkflowNodes.value))
@@ -2219,7 +2224,8 @@ const workflowNodesByPhase = computed(() => {
   const groups = new Map<WorkflowPhase, WorkflowNodePlan[]>()
   for (const phase of workflowPhaseOrder) groups.set(phase, [])
   for (const node of orderedPlanWorkflowNodes.value) {
-    const phase = workflowPhaseOrder.includes(node.phase) ? node.phase : 'review'
+    const phase = normalizedWorkflowPhase(node.phase)
+    if (!groups.has(phase)) groups.set(phase, [])
     groups.get(phase)?.push(node)
   }
   return [...groups.entries()].filter(([, nodes]) => nodes.length)
@@ -2232,7 +2238,8 @@ const workflowWorkPackages = computed<WorkflowWorkPackage[]>(() => {
   const executionIndex = new Map(orderedTaskSubtasks.value.map((subtask, index) => [subtask.id, index]))
   for (const subtask of orderedTaskSubtasks.value) {
     const phase = normalizedWorkflowPhase(workflowContext(subtask).phase)
-    const key = `${workflowPhaseOrder.indexOf(phase)}:${phase}:${subtask.assigned_agent_id}`
+    const phaseRank = workflowPhaseOrder.includes(phase) ? workflowPhaseOrder.indexOf(phase) : workflowPhaseOrder.length
+    const key = `${phaseRank}:${phase}:${subtask.assigned_agent_id}`
     groups.set(key, [...(groups.get(key) || []), subtask])
   }
 
@@ -2625,12 +2632,13 @@ async function handleRefresh() {
 
 async function refreshAgentLabels() {
   try {
-    const response = await taskApi.listAgents()
+    const response = await taskApi.listAgents({ includeHidden: true, includeCoordinator: true })
     for (const agent of response.agents) {
       agentLabels[agent.id] = agent.name
     }
+    agentRegistry.setAgents(response.agents)
   } catch {
-    // Keep built-in labels as fallback.
+    // Keep already loaded labels as fallback.
   }
 }
 
@@ -2874,21 +2882,6 @@ async function scanOutputs() {
   }
 }
 
-async function finalizeTask() {
-  if (!selectedTask.value || selectedTask.value.status === 'completed') return
-  finalizingSummary.value = true
-  try {
-    await tasksStore.finalizeTask(selectedTask.value.id)
-    await tasksStore.fetchTask(selectedTask.value.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
-    ElMessage.success('最终汇总已进入 Claude Runtime 队列')
-    await refreshRuntimeStatus()
-  } catch (err) {
-    ElMessage.error(err instanceof Error ? err.message : '汇总请求失败')
-  } finally {
-    finalizingSummary.value = false
-  }
-}
-
 async function completeTask() {
   if (!selectedTask.value || !canArchiveTask.value) return
   const confirmed = await ElMessageBox.confirm('确认将该任务标记为验收完成并归档？', '验收归档', {
@@ -2992,7 +2985,7 @@ function subtaskStatusText(status: SubtaskStatus) {
 }
 
 function agentName(agentId: string) {
-  return agentLabels[agentId] || agentId || '未归属'
+  return agentRegistry.agentName(agentId) || agentLabels[agentId] || agentId || '未归属'
 }
 
 function phaseLabel(phase?: string) {
@@ -3107,8 +3100,7 @@ function sortSubtasksByExecutionOrder(subtasks: Subtask[], plan: TaskPlan | null
 }
 
 function normalizedWorkflowPhase(value: unknown): WorkflowPhase {
-  const phase = String(value || 'review') as WorkflowPhase
-  return workflowPhaseOrder.includes(phase) ? phase : 'review'
+  return String(value || 'route') as WorkflowPhase
 }
 
 function workflowContext(subtask: Subtask) {

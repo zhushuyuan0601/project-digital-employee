@@ -1,7 +1,11 @@
 import {
+  createAgentDefinition as createDbAgentDefinition,
   defaultAgentDefinitions,
+  deleteAgentDefinition as deleteDbAgentDefinition,
   getAgentDefinition as getDbAgentDefinition,
   listAgentDefinitions as listDbAgentDefinitions,
+  listMarketAgents as listDbMarketAgents,
+  listRoutableAgentDefinitions as listDbRoutableAgentDefinitions,
   updateAgentDefinition as updateDbAgentDefinition,
 } from '../db/agents.js'
 
@@ -30,6 +34,14 @@ export function listAgentDefinitions(options = {}) {
   return safeListAgents(options)
 }
 
+export function listMarketAgents(options = {}) {
+  try {
+    return listDbMarketAgents(options)
+  } catch {
+    return fallbackAgents().filter((agent) => agent.marketVisible !== false && agent.marketProfile?.marketVisible !== false)
+  }
+}
+
 export function listEnabledAgents(options = {}) {
   return safeListAgents({ ...options, enabledOnly: true })
 }
@@ -43,7 +55,26 @@ export function getAgentDefinition(agentId) {
 }
 
 export function getExecutableAgents() {
-  return listEnabledAgents({ includeCoordinator: false })
+  return listRoutableAgents()
+}
+
+export function listRoutableAgents() {
+  try {
+    const agents = listDbRoutableAgentDefinitions()
+    return agents.length ? agents : fallbackAgents().filter((agent) => (
+      agent.enabled &&
+      !agent.coordinator &&
+      agent.marketVisible !== false &&
+      agent.marketProfile?.marketVisible !== false
+    ))
+  } catch {
+    return fallbackAgents().filter((agent) => (
+      agent.enabled &&
+      !agent.coordinator &&
+      agent.marketVisible !== false &&
+      agent.marketProfile?.marketVisible !== false
+    ))
+  }
 }
 
 export function getCoordinatorAgent() {
@@ -52,6 +83,14 @@ export function getCoordinatorAgent() {
 
 export function updateAgentDefinition(agentId, updates) {
   return updateDbAgentDefinition(agentId, updates)
+}
+
+export function createAgentDefinition(payload) {
+  return createDbAgentDefinition(payload)
+}
+
+export function deleteAgentDefinition(agentId) {
+  return deleteDbAgentDefinition(agentId)
 }
 
 export function runtimeAgentMap() {
@@ -78,6 +117,10 @@ export function roleDefinitions() {
         reportName: agent.reportName || `${agent.name}-报告`,
         description: agent.description,
         boundary: agent.boundary,
+        instructions: agent.instructions || '',
+        capabilityProfile: agent.capabilityProfile,
+        routingProfile: agent.routingProfile,
+        governanceProfile: agent.governanceProfile,
       },
     ])
   )
@@ -89,15 +132,18 @@ export function agentDefinitionsVersion() {
 }
 
 export function agentPromptList() {
-  return getExecutableAgents()
+  return listRoutableAgents()
     .map((agent) => [
       `- ${agent.id}: ${agent.name}，${agent.description}`,
-      `  能力: ${agent.capabilities.join('、') || '未配置'}`,
-      `  角色边界: ${agent.boundary}`,
-      `  输入契约: ${agent.inputContract.join('、') || '按任务上下文判断'}`,
-      `  输出契约: ${agent.outputContract.join('、') || 'Markdown 报告'}`,
+      `  分类: ${agent.category || 'general'}；可处理意图: ${agent.capabilityProfile?.intents?.join('、') || agent.capabilities.join('、') || '未配置'}`,
+      `  能力标签: ${agent.capabilityProfile?.skills?.join('、') || agent.capabilities.join('、') || '未配置'}`,
+      `  适用领域: ${agent.capabilityProfile?.domains?.join('、') || '通用'}`,
+      `  不适合: ${agent.capabilityProfile?.antiCapabilities?.join('、') || '未配置'}`,
+      `  输入契约: ${agent.inputContract.join('、') || agent.capabilityProfile?.inputArtifacts?.join('、') || '按任务上下文判断'}`,
+      `  输出契约: ${agent.outputContract.join('、') || agent.capabilityProfile?.outputArtifacts?.join('、') || 'Markdown 报告'}`,
+      `  路由关键词: ${agent.routingProfile?.routeKeywords?.join('、') || '未配置'}`,
       `  工具范围: ${agent.allowedTools.join('、') || '无工具'}`,
-      `  风险等级: ${agent.riskLevel}`,
+      `  成本等级: ${agent.routingProfile?.costTier || 'medium'}；风险等级: ${agent.riskLevel}`,
     ].join('\n'))
     .join('\n')
 }

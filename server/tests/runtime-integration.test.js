@@ -12,8 +12,8 @@ test('runtime status and tracked state read queued jobs from the database', () =
     const run = createAgentRun({
       id: 'run-db-backed-status',
       taskId: task.id,
-      agentId: 'xiaoyan',
-      roleName: 'xiaoyan',
+      agentId: 'general_researcher',
+      roleName: 'general_researcher',
       status: 'queued',
       kind: 'subtask',
       prompt: 'queued in db only',
@@ -21,7 +21,7 @@ test('runtime status and tracked state read queued jobs from the database', () =
     enqueueRuntimeJob({ run, sessionKey: 'session:db-backed-status' })
 
     const status = getRuntimeStatus()
-    const agent = status.agentConcurrency.find((item) => item.agentId === 'xiaoyan')
+    const agent = status.agentConcurrency.find((item) => item.agentId === 'general_researcher')
     assert.equal(status.queued, 1)
     assert.equal(agent.queued, 1)
     assert.equal(claudeRuntimeQueue.trackedState(run.id), 'queued')

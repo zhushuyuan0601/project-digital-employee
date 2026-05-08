@@ -1,6 +1,5 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { DEFAULT_AGENT_IDS } from '@/config/agents'
 
 // 群聊消息
 export interface GroupChatMessage {
@@ -25,12 +24,12 @@ export interface GroupChatConfig {
 
 export const useGroupChatStore = defineStore('groupChat', () => {
   // 群聊配置
-  const groupConfig: GroupChatConfig = {
+  const groupConfig = ref<GroupChatConfig>({
     id: 'group-main',
     name: 'AI 团队群聊',
-    description: '和内置成员持续对话，支持 @ 成员与上下文记忆',
-    agentIds: [...DEFAULT_AGENT_IDS]
-  }
+    description: '和市场中的可调度 Agent 持续对话，支持 @ 成员与上下文记忆',
+    agentIds: []
+  })
 
   // 群聊消息
   const messages = ref<GroupChatMessage[]>([])
@@ -40,7 +39,7 @@ export const useGroupChatStore = defineStore('groupChat', () => {
 
   // 计算属性：获取所有参与的 Agent
   const participatingAgents = computed(() => {
-    return groupConfig.agentIds.map(id => {
+    return groupConfig.value.agentIds.map(id => {
       const conn = agentConnections.value[id]
       return {
         id,
@@ -197,11 +196,11 @@ export const useGroupChatStore = defineStore('groupChat', () => {
 
   // 本地存储
   function saveMessages() {
-    localStorage.setItem(`groupchat_messages_${groupConfig.id}`, JSON.stringify(messages.value))
+    localStorage.setItem(`groupchat_messages_${groupConfig.value.id}`, JSON.stringify(messages.value))
   }
 
   function loadMessages() {
-    const saved = localStorage.getItem(`groupchat_messages_${groupConfig.id}`)
+    const saved = localStorage.getItem(`groupchat_messages_${groupConfig.value.id}`)
     if (saved) {
       try {
         messages.value = JSON.parse(saved)
@@ -216,6 +215,10 @@ export const useGroupChatStore = defineStore('groupChat', () => {
     saveMessages()
   }
 
+  function setGroupAgents(agentIds: string[]) {
+    groupConfig.value.agentIds = [...agentIds]
+  }
+
   return {
     // State
     groupConfig,
@@ -224,6 +227,7 @@ export const useGroupChatStore = defineStore('groupChat', () => {
     participatingAgents,
     // Actions
     updateAgentStatus,
+    setGroupAgents,
     handleUserMessage,
     updateAgentReply,
     setMessages,

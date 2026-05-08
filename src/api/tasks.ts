@@ -1,5 +1,8 @@
 import { request } from './base'
 import type { CreateTaskRequest, Task, TaskDispatch, TaskEvent, TaskOutput } from '@/types/task'
+import type { AgentDefinition, AgentUpdatePayload } from './agents'
+
+export type { AgentDefinition } from './agents'
 
 export interface TaskResponse {
   success: boolean
@@ -43,29 +46,6 @@ export interface RuntimeAgentStat {
   cancelled: number
   total: number
   avgDurationMs: number
-}
-
-export interface AgentDefinition {
-  id: string
-  name: string
-  roleName: string
-  reportName?: string
-  description: string
-  boundary: string
-  runtimeAgentId: string
-  roleId: string
-  capabilities: string[]
-  allowedTools: string[]
-  inputContract: string[]
-  outputContract: string[]
-  riskLevel: string
-  defaultModel?: string
-  maxConcurrency: number
-  enabled: boolean
-  sortOrder: number
-  coordinator: boolean
-  createdAt?: number
-  updatedAt?: number
 }
 
 export interface RuntimeConfig {
@@ -360,15 +340,16 @@ export const taskApi = {
     return request<RuntimeStatusResponse>('/api/runtime/status')
   },
 
-  listAgents(params: { enabledOnly?: boolean; includeCoordinator?: boolean } = {}) {
+  listAgents(params: { enabledOnly?: boolean; includeCoordinator?: boolean; includeHidden?: boolean } = {}) {
     const search = new URLSearchParams()
     if (params.enabledOnly) search.set('enabledOnly', '1')
     if (params.includeCoordinator === false) search.set('includeCoordinator', '0')
+    if (params.includeHidden) search.set('includeHidden', '1')
     const query = search.toString()
     return request<AgentsResponse>(`/api/tasks/agents${query ? `?${query}` : ''}`)
   },
 
-  updateAgent(agentId: string, payload: Partial<Pick<AgentDefinition, 'enabled' | 'maxConcurrency' | 'allowedTools' | 'riskLevel' | 'sortOrder' | 'defaultModel'>>) {
+  updateAgent(agentId: string, payload: AgentUpdatePayload) {
     return request<AgentResponse>(`/api/tasks/agents/${encodeURIComponent(agentId)}`, {
       method: 'PATCH',
       body: JSON.stringify(payload),
