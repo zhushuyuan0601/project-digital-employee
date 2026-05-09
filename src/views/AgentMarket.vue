@@ -234,21 +234,123 @@
       </aside>
     </section>
 
-    <el-drawer v-model="detailOpen" size="520px" :title="selectedAgent?.name || 'Agent 详情'">
-      <div v-if="selectedAgent" class="agent-detail">
-        <p>{{ selectedAgent.description }}</p>
-        <dl>
-          <div><dt>能力意图</dt><dd>{{ selectedAgent.capabilityProfile.intents.join(' / ') || '--' }}</dd></div>
-          <div><dt>领域</dt><dd>{{ selectedAgent.capabilityProfile.domains.join(' / ') || '--' }}</dd></div>
-          <div><dt>工具权限</dt><dd>{{ selectedAgent.allowedTools.join(' / ') || '--' }}</dd></div>
-          <div><dt>前置依赖</dt><dd>{{ selectedAgent.routingProfile.requiresAgents.join(' / ') || '--' }}</dd></div>
-          <div><dt>适用场景</dt><dd>{{ selectedAgent.routingProfile.preferredWhen.join('；') || '--' }}</dd></div>
-          <div><dt>避免场景</dt><dd>{{ selectedAgent.routingProfile.avoidWhen.join('；') || '--' }}</dd></div>
-          <div><dt>来源版本</dt><dd>{{ selectedAgent.marketProfile.source }} · {{ selectedAgent.version }}</dd></div>
-          <div><dt>治理策略</dt><dd>{{ selectedAgent.governanceProfile.permissionScope }} · approval={{ selectedAgent.governanceProfile.requiresApproval }}</dd></div>
-        </dl>
-      </div>
-    </el-drawer>
+    <Teleport to="body">
+      <Transition name="agent-modal">
+        <div v-if="detailOpen && selectedAgent" class="agent-modal-backdrop" @click.self="detailOpen = false">
+          <section class="agent-modal" role="dialog" aria-modal="true" :aria-label="`${selectedAgent.name} 详情`">
+            <header class="agent-modal__header">
+              <div class="agent-modal__identity">
+                <span class="agent-modal__mark" :style="{ color: agentRegistry.agentColor(selectedAgent.id) }">
+                  <component :is="iconComponent(selectedAgent.icon || agentRegistry.agentIcon(selectedAgent.id))" />
+                </span>
+                <div>
+                  <p class="eyebrow">{{ categoryLabel(selectedAgent.category) }}</p>
+                  <h2>{{ selectedAgent.name }}</h2>
+                  <span>{{ selectedAgent.roleName }} · {{ selectedAgent.id }}</span>
+                </div>
+              </div>
+              <button class="agent-modal__close" type="button" aria-label="关闭" @click="detailOpen = false">
+                <el-icon><Close /></el-icon>
+              </button>
+            </header>
+
+            <div class="agent-modal__summary">
+              <p>{{ selectedAgent.description }}</p>
+              <div class="agent-modal__status">
+                <span :class="{ active: isRoutable(selectedAgent) }">{{ isRoutable(selectedAgent) ? '可自动调度' : selectedAgent.coordinator ? '系统统筹' : '不可调度' }}</span>
+                <span>{{ selectedAgent.marketProfile.source === 'builtin' ? '内置' : selectedAgent.marketProfile.source }}</span>
+                <span>v{{ selectedAgent.version }}</span>
+              </div>
+            </div>
+
+            <div class="agent-modal__metrics">
+              <article>
+                <span>风险</span>
+                <strong :class="`risk-${selectedAgent.riskLevel}`">{{ selectedAgent.riskLevel }}</strong>
+              </article>
+              <article>
+                <span>成本</span>
+                <strong>{{ selectedAgent.routingProfile.costTier }}</strong>
+              </article>
+              <article>
+                <span>延迟</span>
+                <strong>{{ selectedAgent.routingProfile.latencyTier }}</strong>
+              </article>
+              <article>
+                <span>并发</span>
+                <strong>{{ selectedAgent.routingProfile.canRunInParallel ? '允许' : '串行' }}</strong>
+              </article>
+            </div>
+
+            <main class="agent-modal__body">
+              <section class="detail-panel detail-panel--wide">
+                <div class="detail-panel__head">
+                  <span>Capability</span>
+                  <strong>能力画像</strong>
+                </div>
+                <div class="detail-chip-grid">
+                  <div>
+                    <span>意图</span>
+                    <p>{{ formatList(selectedAgent.capabilityProfile.intents) }}</p>
+                  </div>
+                  <div>
+                    <span>领域</span>
+                    <p>{{ formatList(selectedAgent.capabilityProfile.domains) }}</p>
+                  </div>
+                  <div>
+                    <span>技能</span>
+                    <p>{{ formatList(selectedAgent.capabilityProfile.skills) }}</p>
+                  </div>
+                  <div>
+                    <span>不适合</span>
+                    <p>{{ formatList(selectedAgent.capabilityProfile.antiCapabilities) }}</p>
+                  </div>
+                </div>
+              </section>
+
+              <section class="detail-panel">
+                <div class="detail-panel__head">
+                  <span>Contract</span>
+                  <strong>输入输出</strong>
+                </div>
+                <dl class="detail-list">
+                  <div><dt>输入制品</dt><dd>{{ formatList(selectedAgent.capabilityProfile.inputArtifacts) }}</dd></div>
+                  <div><dt>输出制品</dt><dd>{{ formatList(selectedAgent.capabilityProfile.outputArtifacts) }}</dd></div>
+                  <div><dt>输入契约</dt><dd>{{ formatList(selectedAgent.inputContract) }}</dd></div>
+                  <div><dt>输出契约</dt><dd>{{ formatList(selectedAgent.outputContract) }}</dd></div>
+                </dl>
+              </section>
+
+              <section class="detail-panel">
+                <div class="detail-panel__head">
+                  <span>Routing</span>
+                  <strong>路由策略</strong>
+                </div>
+                <dl class="detail-list">
+                  <div><dt>关键词</dt><dd>{{ formatList(selectedAgent.routingProfile.routeKeywords) }}</dd></div>
+                  <div><dt>适用场景</dt><dd>{{ formatList(selectedAgent.routingProfile.preferredWhen, '；') }}</dd></div>
+                  <div><dt>避免场景</dt><dd>{{ formatList(selectedAgent.routingProfile.avoidWhen, '；') }}</dd></div>
+                  <div><dt>前置 Agent</dt><dd>{{ formatList(selectedAgent.routingProfile.requiresAgents) }}</dd></div>
+                </dl>
+              </section>
+
+              <section class="detail-panel detail-panel--wide">
+                <div class="detail-panel__head">
+                  <span>Governance</span>
+                  <strong>权限与治理</strong>
+                </div>
+                <div class="governance-grid">
+                  <div><span>工具权限</span><strong>{{ formatList(selectedAgent.allowedTools) }}</strong></div>
+                  <div><span>权限范围</span><strong>{{ selectedAgent.governanceProfile.permissionScope || '--' }}</strong></div>
+                  <div><span>数据访问</span><strong>{{ selectedAgent.governanceProfile.dataAccessLevel || '--' }}</strong></div>
+                  <div><span>审批</span><strong>{{ selectedAgent.governanceProfile.requiresApproval ? '需要审批' : '无需审批' }}</strong></div>
+                </div>
+              </section>
+            </main>
+          </section>
+        </div>
+      </Transition>
+    </Teleport>
 
     <el-dialog v-model="createDialogOpen" title="新建本地 Agent" width="560px">
       <div class="create-form">
@@ -276,6 +378,7 @@ import {
   Calendar,
   CircleCheck,
   Clock,
+  Close,
   Connection,
   Cpu,
   DataAnalysis,
@@ -424,6 +527,10 @@ function shortList(items: string[] = []) {
   return items.slice(0, 3).join(' / ')
 }
 
+function formatList(items: string[] = [], separator = ' / ') {
+  return items.filter(Boolean).join(separator) || '--'
+}
+
 function isRoutable(agent: AgentDefinition) {
   return agent.enabled && !agent.coordinator && agent.marketVisible && agent.marketProfile.marketVisible
 }
@@ -562,7 +669,8 @@ onMounted(async () => {
 .agent-card small,
 .agent-card p,
 .preview-section span,
-.agent-detail dt {
+.detail-list dt,
+.agent-modal__summary p {
   color: var(--text-secondary);
 }
 
@@ -870,29 +978,268 @@ onMounted(async () => {
   background: var(--bg-panel);
 }
 
-.agent-detail {
+.agent-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
   display: grid;
+  place-items: center;
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(2, 6, 23, 0.82), rgba(15, 23, 42, 0.72));
+  backdrop-filter: blur(12px);
+}
+
+.agent-modal {
+  width: min(1040px, calc(100vw - 48px));
+  max-height: min(860px, calc(100vh - 48px));
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 18px;
+  color: #e5edf5;
+  background:
+    linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(10, 18, 34, 0.96)),
+    #0f172a;
+  box-shadow:
+    0 30px 90px rgba(0, 0, 0, 0.44),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.agent-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px 26px 18px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.agent-modal__identity {
+  display: flex;
+  align-items: center;
+  min-width: 0;
   gap: 16px;
 }
 
-.agent-detail dl,
+.agent-modal__identity h2 {
+  margin: 4px 0 5px;
+  color: #f8fafc;
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.agent-modal__identity span {
+  color: #94a3b8;
+}
+
+.agent-modal__mark {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.78);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+.agent-modal__mark svg {
+  width: 28px;
+  height: 28px;
+}
+
+.agent-modal__close {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 12px;
+  color: #cbd5e1;
+  background: rgba(15, 23, 42, 0.58);
+  cursor: pointer;
+  transition: transform 0.16s ease, background 0.16s ease, color 0.16s ease;
+}
+
+.agent-modal__close:hover {
+  color: #fff;
+  background: rgba(30, 41, 59, 0.92);
+  transform: translateY(-1px);
+}
+
+.agent-modal__summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: start;
+  padding: 18px 26px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.agent-modal__summary p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.agent-modal__status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.agent-modal__status span,
+.agent-modal__metrics article,
+.detail-panel,
+.governance-grid div {
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.58);
+}
+
+.agent-modal__status span {
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.agent-modal__status span.active {
+  color: #99f6e4;
+  border-color: rgba(45, 212, 191, 0.38);
+  background: rgba(13, 148, 136, 0.15);
+}
+
+.agent-modal__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0 26px 18px;
+}
+
+.agent-modal__metrics article {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 12px;
+}
+
+.agent-modal__metrics span,
+.detail-panel__head span,
+.detail-chip-grid span,
+.governance-grid span,
+.detail-list dt {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.agent-modal__metrics strong {
+  color: #f8fafc;
+  font-size: 16px;
+}
+
+.agent-modal__body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  max-height: min(620px, calc(100vh - 280px));
+  overflow: auto;
+  padding: 0 26px 26px;
+}
+
+.detail-panel {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border-radius: 14px;
+}
+
+.detail-panel--wide {
+  grid-column: 1 / -1;
+}
+
+.detail-panel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.detail-panel__head strong {
+  color: #f8fafc;
+  font-size: 15px;
+}
+
+.detail-chip-grid,
+.governance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.detail-chip-grid div,
+.governance-grid div {
+  min-width: 0;
+  border-radius: 11px;
+  padding: 11px;
+  background: rgba(2, 6, 23, 0.22);
+}
+
+.detail-chip-grid p,
+.governance-grid strong,
+.detail-list dd {
+  margin: 4px 0 0;
+  color: #e2e8f0;
+  font-size: 13px;
+  line-height: 1.55;
+  word-break: break-word;
+}
+
+.detail-list,
 .create-form {
   display: grid;
   gap: 12px;
 }
 
-.agent-detail dl div {
+.detail-list div {
   padding-bottom: 10px;
-  border-bottom: 1px solid var(--border-default);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
 }
 
-.agent-detail dt {
+.detail-list div:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.detail-list dt {
   margin-bottom: 4px;
-  font-size: 12px;
 }
 
-.agent-detail dd {
+.detail-list dd {
   margin: 0;
+}
+
+.agent-modal-enter-active,
+.agent-modal-leave-active {
+  transition: opacity 0.18s ease;
+}
+
+.agent-modal-enter-active .agent-modal,
+.agent-modal-leave-active .agent-modal {
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+
+.agent-modal-enter-from,
+.agent-modal-leave-to {
+  opacity: 0;
+}
+
+.agent-modal-enter-from .agent-modal,
+.agent-modal-leave-to .agent-modal {
+  opacity: 0;
+  transform: translateY(12px) scale(0.98);
 }
 
 @media (max-width: 1280px) {
@@ -920,6 +1267,43 @@ onMounted(async () => {
 
   .market-filters {
     position: static;
+  }
+
+  .agent-modal-backdrop {
+    padding: 10px;
+  }
+
+  .agent-modal {
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+    border-radius: 14px;
+  }
+
+  .agent-modal__header,
+  .agent-modal__summary,
+  .agent-modal__metrics,
+  .agent-modal__body {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .agent-modal__summary,
+  .agent-modal__body {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-modal__status {
+    justify-content: flex-start;
+  }
+
+  .agent-modal__metrics,
+  .detail-chip-grid,
+  .governance-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-modal__body {
+    max-height: calc(100vh - 300px);
   }
 }
 </style>
