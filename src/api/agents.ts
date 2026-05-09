@@ -110,34 +110,81 @@ export interface AgentRoutePreviewRequest {
   constraints?: Record<string, unknown>
 }
 
-export interface AgentRoutePreviewResponse {
-  intent: {
-    text: string
-    intents: string[]
-    domains: string[]
-    inputArtifacts: string[]
-    outputArtifacts: string[]
-    requiredTools: string[]
-    riskLevel: string
-  }
-  candidates: Array<{
-    agentId: string
-    name: string
-    category: string
-    score: number
-    reasons: string[]
-    costTier: string
-    riskLevel: string
-    canRunInParallel: boolean
-    requiresApproval: boolean
-  }>
+export interface AgentRouteIntent {
+  text: string
+  intents: string[]
+  domains: string[]
+  inputArtifacts: string[]
+  outputArtifacts: string[]
+  requiredTools: string[]
+  riskLevel: string
+}
+
+export interface AgentRouteCandidate {
+  agentId: string
+  name: string
+  category: string
+  score: number
+  reasons: string[]
+  costTier: string
+  riskLevel: string
+  canRunInParallel: boolean
+  requiresApproval: boolean
+  deterministicScore?: number
+  semanticScore?: number
+}
+
+export interface AgentRouteGovernance {
+  requiresApproval: boolean
+  riskLevel: string
+  costLimit: string
+}
+
+export interface AgentRoutePreviewLayer {
+  source: string
+  available: boolean
+  confidence: number
+  intent: AgentRouteIntent
+  candidates: AgentRouteCandidate[]
   workflow: WorkflowRouteNode[]
   gaps: string[]
-  governance: {
-    requiresApproval: boolean
-    riskLevel: string
-    costLimit: string
+  governance: AgentRouteGovernance
+  notes: string[]
+}
+
+export interface AgentRouteValidationIssue {
+  severity: 'error' | 'warning' | string
+  layer: string
+  nodeId?: string
+  agentId?: string
+  code: string
+  message: string
+}
+
+export interface AgentValidatedRoute {
+  source: 'validated' | string
+  strategy: 'semantic' | 'hybrid' | 'deterministic_fallback' | string
+  intent: AgentRouteIntent
+  candidates: AgentRouteCandidate[]
+  workflow: WorkflowRouteNode[]
+  gaps: string[]
+  governance: AgentRouteGovernance
+  validation: {
+    passed: boolean
+    selectedLayer: 'semanticPreview' | 'deterministicPreview' | string
+    issues: AgentRouteValidationIssue[]
   }
+}
+
+export interface AgentRoutePreviewResponse {
+  deterministicPreview: AgentRoutePreviewLayer
+  semanticPreview: AgentRoutePreviewLayer
+  validatedRoute: AgentValidatedRoute
+  intent: AgentRouteIntent
+  candidates: AgentRouteCandidate[]
+  workflow: WorkflowRouteNode[]
+  gaps: string[]
+  governance: AgentRouteGovernance
 }
 
 interface AgentsResponse {

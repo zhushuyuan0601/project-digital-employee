@@ -201,16 +201,33 @@
         </button>
 
         <div v-if="routePreview" class="preview-result">
+          <div class="preview-layers">
+            <article>
+              <span>规则基线</span>
+              <strong>{{ routePreview.deterministicPreview.candidates.length }} 候选</strong>
+              <small>{{ routePreview.deterministicPreview.workflow.length }} 节点 · {{ sourceLabel(routePreview.deterministicPreview.source) }}</small>
+            </article>
+            <article>
+              <span>语义建议</span>
+              <strong>{{ routePreview.semanticPreview.available ? '已启用' : '本地回退' }}</strong>
+              <small>{{ Math.round((routePreview.semanticPreview.confidence || 0) * 100) }}% · {{ sourceLabel(routePreview.semanticPreview.source) }}</small>
+            </article>
+            <article :class="{ 'preview-layer--warn': routePreview.validatedRoute.validation.issues.length }">
+              <span>校验结果</span>
+              <strong>{{ strategyLabel(routePreview.validatedRoute.strategy) }}</strong>
+              <small>{{ routePreview.validatedRoute.validation.issues.length }} 个校验提示</small>
+            </article>
+          </div>
           <div class="preview-section">
             <span>识别意图</span>
             <div class="tag-list">
-              <span v-for="intent in routePreview.intent.intents" :key="intent">{{ intent }}</span>
+              <span v-for="intent in routePreview.validatedRoute.intent.intents" :key="intent">{{ intent }}</span>
             </div>
           </div>
           <div class="preview-section">
-            <span>候选排名</span>
+            <span>融合候选排名</span>
             <ol class="candidate-list">
-              <li v-for="candidate in routePreview.candidates.slice(0, 5)" :key="candidate.agentId">
+              <li v-for="candidate in routePreview.validatedRoute.candidates.slice(0, 5)" :key="candidate.agentId">
                 <strong>{{ candidate.name }}</strong>
                 <em>{{ candidate.score }}</em>
               </li>
@@ -219,16 +236,29 @@
           <div class="preview-section">
             <span>推荐 DAG</span>
             <div class="route-nodes">
-              <article v-for="node in routePreview.workflow" :key="node.id">
+              <article v-for="node in routePreview.validatedRoute.workflow" :key="node.id">
                 <small>{{ node.id }} · {{ node.intent }}</small>
                 <strong>{{ agentRegistry.agentName(node.assignedAgentId) }}</strong>
                 <p>{{ node.routingReason }}</p>
               </article>
             </div>
           </div>
-          <div v-if="routePreview.gaps.length" class="preview-section preview-section--warn">
+          <div v-if="routePreview.semanticPreview.notes.length" class="preview-section">
+            <span>语义层说明</span>
+            <p>{{ routePreview.semanticPreview.notes.join('；') }}</p>
+          </div>
+          <div v-if="routePreview.validatedRoute.validation.issues.length" class="preview-section preview-section--warn">
+            <span>校验提示</span>
+            <ul class="validation-list">
+              <li v-for="issue in routePreview.validatedRoute.validation.issues" :key="`${issue.layer}-${issue.nodeId}-${issue.code}-${issue.message}`">
+                <strong>{{ issue.severity }}</strong>
+                <span>{{ issue.message }}</span>
+              </li>
+            </ul>
+          </div>
+          <div v-if="routePreview.validatedRoute.gaps.length" class="preview-section preview-section--warn">
             <span>能力缺口</span>
-            <p>{{ routePreview.gaps.join('；') }}</p>
+            <p>{{ routePreview.validatedRoute.gaps.join('；') }}</p>
           </div>
         </div>
       </aside>
@@ -533,6 +563,25 @@ function formatList(items: string[] = [], separator = ' / ') {
 
 function isRoutable(agent: AgentDefinition) {
   return agent.enabled && !agent.coordinator && agent.marketVisible && agent.marketProfile.marketVisible
+}
+
+function sourceLabel(source = '') {
+  const labels: Record<string, string> = {
+    rules: '规则',
+    local_semantic_fallback: '本地语义',
+    provided_semantic_preview: '外部语义',
+    validated: '校验',
+  }
+  return labels[source] || source || 'unknown'
+}
+
+function strategyLabel(strategy = '') {
+  const labels: Record<string, string> = {
+    semantic: '采用语义路线',
+    hybrid: '规则安全线',
+    deterministic_fallback: '回退规则路线',
+  }
+  return labels[strategy] || strategy || '--'
 }
 
 function selectAgent(agent: AgentDefinition) {
@@ -918,9 +967,41 @@ onMounted(async () => {
 
 .preview-result,
 .preview-section,
-.route-nodes {
+.route-nodes,
+.preview-layers,
+.validation-list {
   display: grid;
   gap: 10px;
+}
+
+.preview-layers {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.preview-layers article {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-base);
+}
+
+.preview-layers span,
+.preview-layers small {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.preview-layers strong {
+  display: block;
+  margin: 5px 0 3px;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.preview-layer--warn {
+  border-color: color-mix(in srgb, #ca8a04 42%, var(--border-default)) !important;
 }
 
 .preview-section {
@@ -945,6 +1026,32 @@ onMounted(async () => {
 .candidate-list em {
   color: var(--color-primary);
   font-style: normal;
+}
+
+.validation-list {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.validation-list li {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, #ca8a04 34%, var(--border-default));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--bg-base) 88%, #ca8a04 12%);
+}
+
+.validation-list strong {
+  color: #ca8a04;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.validation-list span {
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 .route-nodes article {
@@ -1289,6 +1396,10 @@ onMounted(async () => {
 
   .agent-modal__summary,
   .agent-modal__body {
+    grid-template-columns: 1fr;
+  }
+
+  .preview-layers {
     grid-template-columns: 1fr;
   }
 

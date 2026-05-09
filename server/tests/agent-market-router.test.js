@@ -81,6 +81,95 @@ test('route preview composes code understanding, implementation, and verificatio
   assert.ok(preview.workflow.every((node) => Array.isArray(node.acceptanceCriteria) && node.acceptanceCriteria.length > 0))
 }))
 
+test('route preview exposes deterministic semantic and validated layers', () => withAgentDb(() => {
+  const preview = previewAgentRoute({
+    taskDescription: '做竞品对比并给出决策建议。',
+  })
+
+  assert.equal(preview.deterministicPreview.source, 'rules')
+  assert.ok(preview.deterministicPreview.intent.intents.includes('compare'))
+  assert.ok(preview.semanticPreview.source)
+  assert.equal(Array.isArray(preview.semanticPreview.workflow), true)
+  assert.equal(preview.validatedRoute.source, 'validated')
+  assert.ok(preview.validatedRoute.workflow.length > 0)
+  assert.deepEqual(preview.intent, preview.validatedRoute.intent)
+  assert.deepEqual(preview.candidates, preview.validatedRoute.candidates)
+  assert.deepEqual(preview.workflow, preview.validatedRoute.workflow)
+  assert.deepEqual(preview.gaps, preview.validatedRoute.gaps)
+}))
+
+test('validated route rejects unsafe semantic suggestions and falls back to deterministic plan', () => withAgentDb(() => {
+  const preview = previewAgentRoute({
+    taskDescription: '帮我写一封项目延期说明邮件。',
+    semanticPreview: {
+      source: 'test-semantic-router',
+      available: true,
+      intent: {
+        text: '帮我写一封项目延期说明邮件。',
+        intents: ['draft'],
+        domains: ['daily_ops'],
+        inputArtifacts: ['plain_text'],
+        outputArtifacts: ['email'],
+        requiredTools: [],
+        riskLevel: 'low',
+      },
+      candidates: [
+        {
+          agentId: 'xiaoyan',
+          name: '旧调研 Agent',
+          category: 'legacy',
+          score: 99,
+          reasons: ['语义层错误建议'],
+          costTier: 'low',
+          riskLevel: 'low',
+          canRunInParallel: true,
+          requiresApproval: false,
+        },
+      ],
+      workflow: [
+        {
+          id: 'node-01',
+          title: '错误语义建议',
+          phase: 'draft',
+          intent: 'draft',
+          requiredCapabilities: ['document_drafting'],
+          assignedAgentId: 'xiaoyan',
+          routingReason: '语义层误选隐藏兼容 Agent。',
+          objective: '起草邮件。',
+          dependsOn: [],
+          parallelGroup: '',
+          inputArtifacts: ['plain_text'],
+          expectedOutputArtifacts: ['email'],
+          requiredInputs: ['任务描述'],
+          expectedOutputs: ['邮件草稿'],
+          executionMode: 'report',
+          requiredTools: [],
+          successCriteria: ['输出邮件'],
+          acceptanceCriteria: ['邮件非空'],
+          riskLevel: 'low',
+          costEstimate: 'low',
+          requiresApproval: false,
+          agentCapabilityHints: ['document_drafting'],
+        },
+      ],
+      gaps: [],
+      governance: {
+        requiresApproval: false,
+        riskLevel: 'low',
+        costLimit: '',
+      },
+      notes: ['测试注入的不安全语义路线'],
+      confidence: 0.9,
+    },
+  })
+
+  assert.equal(preview.validatedRoute.workflow.some((node) => node.assignedAgentId === 'xiaoyan'), false)
+  assert.equal(preview.validatedRoute.candidates.some((candidate) => candidate.agentId === 'xiaoyan'), false)
+  assert.ok(preview.validatedRoute.workflow.some((node) => node.assignedAgentId === 'document_drafter'))
+  assert.equal(preview.validatedRoute.strategy, 'deterministic_fallback')
+  assert.ok(preview.validatedRoute.validation.issues.some((issue) => issue.agentId === 'xiaoyan' && issue.severity === 'error'))
+}))
+
 test('coordinator prompt uses router language and omits legacy role ids', () => withAgentDb(() => {
   const prompt = buildCoordinatorPlanPrompt({
     id: 'task-router-prompt',

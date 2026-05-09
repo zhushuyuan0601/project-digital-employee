@@ -74,7 +74,7 @@ router.post('/agents/route-preview', (req, res) => {
   try {
     const taskDescription = req.body?.taskDescription || req.body?.description || req.body?.task || ''
     const constraints = req.body?.constraints || {}
-    const preview = previewAgentRoute({ taskDescription, constraints })
+    const preview = previewAgentRoute({ taskDescription, constraints, semanticPreview: req.body?.semanticPreview })
     res.json({ success: true, preview })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
