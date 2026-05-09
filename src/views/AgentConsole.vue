@@ -42,7 +42,8 @@
           <div class="task-snapshot__meta">
             <span>{{ selectedTask.status }}</span>
             <span>{{ selectedTask.progress || 0 }}%</span>
-            <span>{{ selectedAgentRuns.length }} runs</span>
+            <span>{{ taskScopedAgents.length }} agents</span>
+            <span>{{ taskRuns.length }} runs</span>
           </div>
         </div>
         <div v-else class="quiet-state">请选择一个任务作为控制台上下文。</div>
@@ -50,11 +51,17 @@
 
       <section class="agent-picker">
         <div class="section-title">
-          <span>点击切换 Agent 输出页</span>
-          <small>单选</small>
+          <span>当前任务已调度 Agent</span>
+          <small>{{ taskScopedAgents.length }} 个</small>
+        </div>
+        <div v-if="!selectedTask" class="agent-empty">
+          先选择任务，控制台会按该任务的调度记录显示 Agent。
+        </div>
+        <div v-else-if="taskScopedAgents.length === 0" class="agent-empty">
+          该任务还没有调度 Agent。确认流程、启动运行或发送旁路追问后会出现在这里。
         </div>
         <button
-          v-for="agent in executableAgents"
+          v-for="agent in taskScopedAgents"
           :key="agent.id"
           type="button"
           class="agent-choice"
@@ -97,8 +104,8 @@
 
       <section ref="chatRef" class="chat-thread">
         <div v-if="!selectedAgent" class="empty-chat">
-          <strong>选择一个 Agent 开始查看</strong>
-          <p>每个 Agent 都有自己的实时输出页，点击左侧成员即可切换。</p>
+          <strong>{{ selectedTask ? '当前任务暂无 Agent 输出页' : '选择一个任务开始查看' }}</strong>
+          <p>{{ selectedTask ? '任务调度 Agent 后，这里会按任务上下文显示对应输出。' : '控制台会按所选任务展示被调度过的 Agent。' }}</p>
         </div>
         <template v-else>
           <div v-if="chatMessages.length === 0" class="empty-chat">
@@ -186,6 +193,7 @@ import { ElMessage } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import { taskApi, type AgentDefinition, type AgentRun, type AgentRunLog } from '@/api/tasks'
 import type { Task } from '@/types/task'
+import { useAgentRegistryStore } from '@/stores/agentRegistry'
 import { sanitizeHtml } from '@/utils/sanitize'
 
 type ConsoleEntry = {
@@ -214,6 +222,7 @@ type ChatMessage = {
 
 const tasks = ref<Task[]>([])
 const agents = ref<AgentDefinition[]>([])
+const agentRegistry = useAgentRegistryStore()
 const selectedTaskId = ref('')
 const selectedTask = ref<Task | null>(null)
 const runs = ref<AgentRun[]>([])
@@ -234,9 +243,10 @@ const md = new MarkdownIt({
 })
 
 const activeTasks = computed(() => tasks.value.filter(task => !['completed', 'cancelled'].includes(task.status)))
-const executableAgents = computed(() => agents.value.filter(agent => agent.enabled))
-const selectedAgent = computed(() => executableAgents.value.find(agent => agent.id === selectedAgentId.value) || null)
 const taskRuns = computed(() => runs.value.filter(run => run.task_id === selectedTaskId.value))
+const taskScopedAgentIds = computed(() => collectTaskAgentIds(selectedTask.value, taskRuns.value))
+const taskScopedAgents = computed(() => taskScopedAgentIds.value.map(agentForTask).filter(Boolean))
+const selectedAgent = computed(() => taskScopedAgents.value.find(agent => agent.id === selectedAgentId.value) || null)
 const selectedAgentRuns = computed(() => taskRuns.value.filter(run => run.agent_id === selectedAgentId.value))
 const selectedAgentActiveRun = computed(() => selectedAgentRuns.value.find(run => ['queued', 'running'].includes(run.status)) || null)
 const sendDisabled = computed(() => sending.value || !selectedTask.value || !selectedAgent.value || !draft.value.trim())
@@ -301,7 +311,44 @@ const chatMessages = computed<ChatMessage[]>(() => {
 })
 
 function agentName(agentId = '') {
-  return agents.value.find(agent => agent.id === agentId)?.name || agentId || 'system'
+  return agentForTask(agentId).name || agentId || 'system'
+}
+
+function collectTaskAgentIds(task: Task | null, taskAgentRuns: AgentRun[]) {
+  if (!task) return []
+  const ids: string[] = []
+  const add = (agentId?: string | null) => {
+    const normalized = String(agentId || '').trim()
+    if (normalized && !ids.includes(normalized)) ids.push(normalized)
+  }
+
+  for (const subtask of task.subtasks || []) add(subtask.assigned_agent_id)
+  for (const node of task.plan_json?.workflow || []) add(node.assignedAgentId)
+  for (const subtask of task.plan_json?.subtasks || []) add(subtask.assignedAgentId)
+  for (const participant of task.plan_json?.participants || []) {
+    if (participant.needed !== false) add(participant.agentId)
+  }
+  for (const run of taskAgentRuns) {
+    if (!['plan', 'summary'].includes(String(run.kind || ''))) add(run.agent_id)
+  }
+
+  return ids
+}
+
+function agentForTask(agentId = ''): AgentDefinition {
+  const known = agents.value.find(agent => agent.id === agentId)
+  if (known) return known
+
+  const fallback = agentRegistry.fallbackAgent(agentId)
+  const run = taskRuns.value.find(item => item.agent_id === agentId)
+  if (run?.role_name && fallback.name === agentId) {
+    return {
+      ...fallback,
+      name: run.role_name,
+      roleName: '任务运行记录',
+    }
+  }
+  return fallback
 }
 
 function shortRunId(runId = '') {
@@ -450,24 +497,36 @@ function agentBusy(agentId: string) {
 function agentStatusText(agentId: string) {
   const active = taskRuns.value.find(run => run.agent_id === agentId && ['queued', 'running'].includes(run.status))
   if (active) return active.status === 'queued' ? '排队中' : '运行中'
+  const relatedSubtasks = selectedTask.value?.subtasks?.filter(subtask => subtask.assigned_agent_id === agentId) || []
+  const activeSubtask = relatedSubtasks.find(subtask => ['pending', 'ready', 'queued', 'assigned', 'running', 'blocked'].includes(subtask.status))
+  if (activeSubtask) return `${activeSubtask.status} · ${relatedSubtasks.length} 节点`
   const latest = taskRuns.value.find(run => run.agent_id === agentId)
-  return latest?.status || '待命'
+  if (latest) return latest.status
+  return relatedSubtasks.length ? `${relatedSubtasks.length} 节点` : '已规划'
+}
+
+function syncSelectedAgentWithTask() {
+  if (!selectedTask.value || taskScopedAgents.value.length === 0) {
+    selectedAgentId.value = ''
+    return
+  }
+  if (!taskScopedAgents.value.some(agent => agent.id === selectedAgentId.value)) {
+    selectedAgentId.value = taskScopedAgents.value[0].id
+  }
 }
 
 async function refreshAll() {
-  const [taskResponse, agentResponse] = await Promise.all([
+  const [taskResponse, loadedAgents] = await Promise.all([
     taskApi.listTasks({ limit: 80 }),
-    taskApi.listAgents({ includeCoordinator: true }),
+    agentRegistry.loadAgents({ includeHidden: true, includeCoordinator: true }),
   ])
   tasks.value = taskResponse.tasks
-  agents.value = agentResponse.agents
+  agents.value = loadedAgents
   if (!selectedTaskId.value && activeTasks.value[0]) {
     selectedTaskId.value = activeTasks.value[0].id
   }
-  if (!selectedAgentId.value && executableAgents.value[0]) {
-    selectedAgentId.value = executableAgents.value[0].id
-  }
   if (selectedTaskId.value) await loadSelectedTaskContext()
+  else syncSelectedAgentWithTask()
 }
 
 async function loadSelectedTaskContext() {
@@ -476,6 +535,7 @@ async function loadSelectedTaskContext() {
   if (!selectedTaskId.value) {
     selectedTask.value = null
     runs.value = []
+    syncSelectedAgentWithTask()
     return
   }
   const [taskResponse, runResponse] = await Promise.all([
@@ -485,6 +545,7 @@ async function loadSelectedTaskContext() {
   selectedTask.value = taskResponse.task
   runs.value = runResponse.runs
   await Promise.all(runs.value.map(run => fetchRunLogs(run.id)))
+  syncSelectedAgentWithTask()
   openTaskStream(selectedTaskId.value)
   scrollPanelsToBottom()
 }
@@ -562,6 +623,7 @@ function openTaskStream(taskId: string) {
       if (runId && ['agent.run.queued', 'agent.start', 'agent.error', 'agent.cancelled', 'agent.console.completed', 'workflow.node.completed', 'agent.done'].includes(String(data.type))) {
         const runResponse = await taskApi.listRuns({ taskId, limit: 120 })
         runs.value = runResponse.runs
+        syncSelectedAgentWithTask()
       }
     } catch (err) {
       console.warn('[AgentConsole] stream parse failed', err)
@@ -581,6 +643,7 @@ async function scrollPanelsToBottom() {
 }
 
 watch([selectedAgentEntries, chatMessages], () => scrollPanelsToBottom(), { flush: 'post' })
+watch(taskScopedAgentIds, () => syncSelectedAgentWithTask())
 
 onMounted(() => {
   refreshAll().catch(err => ElMessage.error(err instanceof Error ? err.message : '加载控制台失败'))
@@ -810,6 +873,16 @@ h2 {
   color: var(--text-primary);
   text-align: left;
   cursor: pointer;
+}
+
+.agent-empty {
+  padding: 12px;
+  border: 1px dashed var(--border-default);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .agent-choice.selected {
