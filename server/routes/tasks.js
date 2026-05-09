@@ -1,7 +1,10 @@
 import express from 'express'
 import { promises as fs } from 'fs'
+import { accessSync, constants, existsSync, statSync } from 'fs'
 import { homedir } from 'os'
-import { join, resolve } from 'path'
+import { dirname, join, resolve, delimiter } from 'path'
+import { execFile } from 'child_process'
+import { createRequire } from 'module'
 import {
   addTaskEvent,
   completeTask,
@@ -9,26 +12,72 @@ import {
   createTask,
   getSubtask,
   getTaskDetail,
+  getTaskOutput,
   listTaskEvents,
   listTaskOutputs,
+  listAgentRunLogs,
+  listTraceEvents,
+  listVerificationResults,
   listTasks,
   markPlanInvalid,
   savePlan,
+  skipSubtask,
   updateSubtask,
   updateTask,
+  updateTaskOutput,
   upsertTaskOutput,
 } from '../db/tasks.js'
+import { getDatabasePath } from '../db/index.js'
+import {
+  cancelRun,
+  enqueueConsoleRun,
+  enqueuePlanRun,
+  enqueueSubtaskRun,
+  enqueueSummaryRun,
+  getRun,
+  getRuntimeStatus,
+  listRuns,
+  retrySubtaskRun,
+  runReadyWorkflow,
+} from '../claude-runtime/index.js'
+import { getClaudeRuntimeConfig } from '../claude-runtime/config.js'
+import { claudeRuntimeEvents } from '../claude-runtime/event-bus.js'
+import { RUNTIME_AGENT_MAP, extractJsonPlan as extractRuntimePlan, validatePlan as validateRuntimePlan } from '../claude-runtime/plan-utils.js'
+import {
+  getAgentDefinition,
+  listAgentDefinitions,
+  runtimeAgentMap,
+  updateAgentDefinition,
+} from '../claude-runtime/agent-registry.js'
+import { DEFAULT_SERVER_CONFIG, PROJECT_ROOT, envString } from '../config/defaults.js'
 
 const router = express.Router()
 const HOME_DIR = process.env.HOME || process.env.USERPROFILE || homedir()
+const DEFAULT_EVENT_LIMIT = 100
+const RUNTIME_ENV_KEYS = [
+  'PORT',
+  'DB_PATH',
+  'CORS_ORIGIN',
+  'AGENT_RUNTIME',
+  'CLAUDE_AGENT_MAX_CONCURRENCY',
+  'CLAUDE_AGENT_MAX_TURNS',
+  'CLAUDE_REPORT_ONLY',
+  'CLAUDE_RUNTIME_CWD',
+  'CLAUDE_WORKSPACE_ISOLATION',
+  'CLAUDE_WORKSPACE_ROOT',
+  'CLAUDE_ALLOWED_TOOLS',
+  'CLAUDE_OUTPUT_ROOT',
+  'CLAUDE_AGENT_MODEL',
+  'CLAUDE_RUNTIME_MOCK',
+]
 
-const AGENT_MAP = {
-  xiaomu: { name: '小呦', gatewayAgentId: 'ceo', sessionKey: 'agent:ceo:main', roleId: 'ceo' },
-  xiaoyan: { name: '研究员', gatewayAgentId: 'researcher', sessionKey: 'agent:researcher:main', roleId: 'researcher' },
-  xiaochan: { name: '产品经理', gatewayAgentId: 'pm', sessionKey: 'agent:pm:main', roleId: 'pm' },
-  xiaokai: { name: '研发工程师', gatewayAgentId: 'tech-lead', sessionKey: 'agent:tech-lead:main', roleId: 'tech-lead' },
-  xiaoce: { name: '测试员', gatewayAgentId: 'team-qa', sessionKey: 'agent:team-qa:main', roleId: 'team-qa' },
-}
+const require = createRequire(import.meta.url)
+
+const AGENT_MAP = new Proxy({}, {
+  get(_target, prop) {
+    return runtimeAgentMap()[prop]
+  },
+})
 
 function resolvePath(path) {
   if (path.startsWith('~/')) return join(HOME_DIR, path.slice(2))
@@ -45,6 +94,229 @@ function fileType(name) {
   if (['xls', 'xlsx', 'csv'].includes(ext)) return 'excel'
   if (['html', 'htm'].includes(ext)) return 'html'
   return 'text'
+}
+
+function parseBooleanFlag(value, fallback = false) {
+  if (value == null || value === '') return fallback
+  return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase())
+}
+
+function parsePositiveInt(value, fallback) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback
+  return Math.floor(parsed)
+}
+
+function canWritePath(path) {
+  try {
+    accessSync(path, constants.W_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function canExecutePath(path) {
+  try {
+    accessSync(path, constants.X_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function findExecutable(name) {
+  const pathEnv = process.env.PATH || ''
+  for (const entry of pathEnv.split(delimiter).filter(Boolean)) {
+    const candidate = join(entry, name)
+    if (existsSync(candidate) && canExecutePath(candidate)) return candidate
+  }
+  return null
+}
+
+function bundledClaudePackageName() {
+  const platform = process.platform
+  const arch = process.arch
+  const normalizedArch = arch === 'x64' ? 'x64' : arch === 'arm64' ? 'arm64' : arch
+  if (!['darwin', 'linux', 'win32'].includes(platform)) return null
+  if (!['x64', 'arm64'].includes(normalizedArch)) return null
+  return `@anthropic-ai/claude-agent-sdk-${platform}-${normalizedArch}`
+}
+
+async function readJsonFile(path) {
+  try {
+    return JSON.parse(await fs.readFile(path, 'utf8'))
+  } catch {
+    return null
+  }
+}
+
+function isInsidePath(targetPath, rootPath) {
+  const target = resolve(targetPath)
+  const root = resolve(rootPath)
+  return target === root || target.startsWith(`${root}/`)
+}
+
+function openableRoots() {
+  const config = getClaudeRuntimeConfig()
+  const fileRoots = envString('FILE_ROOTS', DEFAULT_SERVER_CONFIG.fileRoots)
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map(resolvePath)
+  return [...new Set([
+    PROJECT_ROOT,
+    config.cwd,
+    config.outputRoot,
+    config.workspaceRoot,
+    ...fileRoots,
+  ].filter(Boolean).map((item) => resolve(item)))]
+}
+
+function normalizeProjectCwd(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return null
+  const resolved = resolve(resolvePath(raw))
+  if (!existsSync(resolved)) {
+    const error = new Error('Project directory does not exist')
+    error.statusCode = 400
+    throw error
+  }
+  if (!statSync(resolved).isDirectory()) {
+    const error = new Error('Project path must be a directory')
+    error.statusCode = 400
+    throw error
+  }
+  return resolved
+}
+
+function isRegisteredOutputPath(targetPath, outputId, taskId = null) {
+  const id = Number(outputId)
+  if (!Number.isFinite(id) || id <= 0) return false
+  const output = getTaskOutput(id)
+  if (!output?.path) return false
+  if (taskId && output.task_id !== taskId) return false
+  const outputPath = resolve(output.path)
+  const outputDir = dirname(outputPath)
+  return resolve(targetPath) === outputPath || resolve(targetPath) === outputDir
+}
+
+function isTaskProjectPath(targetPath, taskId) {
+  if (!taskId) return false
+  const task = getTaskDetail(taskId)
+  if (!task?.project_cwd) return false
+  return isInsidePath(targetPath, task.project_cwd)
+}
+
+function isOpenPathAllowed(targetPath, context = {}) {
+  return openableRoots().some((root) => isInsidePath(targetPath, root)) ||
+    isTaskProjectPath(targetPath, context.taskId) ||
+    isRegisteredOutputPath(targetPath, context.outputId, context.taskId)
+}
+
+function getOpenDirectoryTarget(rawPath, context = {}) {
+  if (!rawPath || typeof rawPath !== 'string') {
+    const error = new Error('path is required')
+    error.statusCode = 400
+    throw error
+  }
+
+  const resolvedTarget = resolve(resolvePath(rawPath))
+  if (!isOpenPathAllowed(resolvedTarget, context)) {
+    const error = new Error('Access denied: path not in allowed roots')
+    error.statusCode = 403
+    throw error
+  }
+
+  if (!existsSync(resolvedTarget)) {
+    const parent = dirname(resolvedTarget)
+    if (!existsSync(parent)) {
+      const error = new Error('File or directory not found')
+      error.statusCode = 404
+      throw error
+    }
+    return parent
+  }
+
+  const stat = statSync(resolvedTarget)
+  return stat.isDirectory() ? resolvedTarget : dirname(resolvedTarget)
+}
+
+function openPathInFileManager(targetPath) {
+  const command = process.platform === 'darwin'
+    ? 'open'
+    : process.platform === 'win32'
+      ? 'explorer'
+      : 'xdg-open'
+
+  return new Promise((resolveOpen, rejectOpen) => {
+    execFile(command, [targetPath], (error) => {
+      if (error) rejectOpen(error)
+      else resolveOpen()
+    })
+  })
+}
+
+async function runtimeDiagnostics() {
+  const config = getClaudeRuntimeConfig()
+  let sdkAvailable = false
+  let sdkPath = null
+  let claudeSdkVersion = null
+  let claudeBundledPath = null
+  let claudeCodeVersion = null
+  try {
+    await import('@anthropic-ai/claude-agent-sdk')
+    sdkAvailable = true
+    const sdkPackagePath = require.resolve('@anthropic-ai/claude-agent-sdk/package.json')
+    sdkPath = dirname(sdkPackagePath)
+    const sdkPackage = await readJsonFile(sdkPackagePath)
+    claudeSdkVersion = sdkPackage?.version || null
+  } catch {}
+  const bundledPackage = bundledClaudePackageName()
+  if (bundledPackage) {
+    try {
+      const bundledPackagePath = require.resolve(`${bundledPackage}/package.json`)
+      const bundledRoot = dirname(bundledPackagePath)
+      const executableName = process.platform === 'win32' ? 'claude.exe' : 'claude'
+      const candidate = join(bundledRoot, executableName)
+      claudeBundledPath = existsSync(candidate) ? candidate : null
+      const bundledMeta = await readJsonFile(bundledPackagePath)
+      claudeCodeVersion = bundledMeta?.version || null
+    } catch {}
+  }
+  const claudeCliPath = findExecutable(process.platform === 'win32' ? 'claude.cmd' : 'claude')
+  const agentDefaults = Object.fromEntries(
+    listAgentDefinitions().map((agent) => [agent.id, agent.defaultModel || ''])
+  )
+
+  return {
+    dbPath: getDatabasePath(),
+    dbWritable: canWritePath(join(getDatabasePath(), '..')) || canWritePath(resolve(getDatabasePath(), '..')),
+    cwdExists: existsSync(config.cwd),
+    outputRootWritable: existsSync(config.outputRoot) && canWritePath(config.outputRoot),
+    workspaceRootWritable: existsSync(config.workspaceRoot) && canWritePath(config.workspaceRoot),
+    sdkAvailable,
+    sdkPath,
+    claudePath: claudeCliPath || claudeBundledPath || null,
+    claudeCliPath,
+    claudeBundledPath,
+    runtimeDriver: sdkAvailable ? 'claude-agent-sdk' : 'unavailable',
+    claudeSdkVersion,
+    claudeCodeVersion,
+    nodePath: process.execPath,
+    pathEnv: process.env.PATH || '',
+    modelRouting: {
+      globalModel: config.model || '',
+      defaultModel: config.model || 'Claude Code default',
+      agentDefaults,
+      precedence: ['agent.defaultModel', 'CLAUDE_AGENT_MODEL', 'Claude Code default'],
+    },
+    hasEnvFile: existsSync(join(PROJECT_ROOT, '.env')),
+    configSource: existsSync(join(PROJECT_ROOT, '.env')) ? 'defaults + .env overrides' : 'built-in defaults',
+    envOverrides: Object.fromEntries(
+      RUNTIME_ENV_KEYS.map((key) => [key, process.env[key] != null && process.env[key] !== ''])
+    ),
+  }
 }
 
 async function scanFiles(basePath, startTime = null, endTime = null, limit = 200) {
@@ -166,8 +438,7 @@ JSON 格式:
 }
 
 function subtaskPrompt(task, subtask) {
-  const taskWorkspace = `~/.openclaw/shared-workspace/daily-intel/tasks/${task.id}/${subtask.id}/`
-  return `你正在执行 OpenClaw 多 Agent 协作任务中的一个子任务。
+  return `你正在执行 Claude Runtime 多 Agent 协作任务中的一个子任务。
 
 taskId: ${task.id}
 subTaskId: ${subtask.id}
@@ -179,10 +450,7 @@ ${subtask.description}
 期望产出:
 ${subtask.expected_output || '请输出清晰的执行结果、关键依据和下一步建议。'}
 
-请将所有文件产出写入:
-${taskWorkspace}
-
-如果你还会写入角色目录，平台会按时间窗口兜底归档，但任务目录是首选。完成后请用简短小结说明产出文件和结论。`
+请只输出 Markdown 报告内容，不要直接修改项目源码。报告会由后端写入受控成果目录。`
 }
 
 function finalPrompt(task) {
@@ -249,6 +517,100 @@ router.get('/tasks/outputs', (req, res) => {
   }
 })
 
+router.get('/tasks/agents', (req, res) => {
+  try {
+    const enabledOnly = parseBooleanFlag(req.query.enabledOnly, false)
+    const includeCoordinator = parseBooleanFlag(req.query.includeCoordinator, true)
+    res.json({
+      success: true,
+      agents: listAgentDefinitions({ enabledOnly, includeCoordinator }),
+    })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.patch('/tasks/agents/:id', (req, res) => {
+  try {
+    const current = getAgentDefinition(req.params.id)
+    if (!current) return res.status(404).json({ success: false, error: 'Agent not found' })
+    const body = req.body || {}
+    const agent = updateAgentDefinition(req.params.id, {
+      enabled: body.enabled,
+      maxConcurrency: body.maxConcurrency,
+      allowedTools: body.allowedTools,
+      riskLevel: body.riskLevel,
+      sortOrder: body.sortOrder,
+      defaultModel: body.defaultModel,
+    })
+    res.json({ success: true, agent, agents: listAgentDefinitions() })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.patch('/tasks/outputs/:id', (req, res) => {
+  try {
+    const { status } = req.body || {}
+    if (!['pending_review', 'accepted', 'rejected'].includes(status)) {
+      return res.status(400).json({ success: false, error: 'Invalid output status' })
+    }
+    const output = updateTaskOutput(Number(req.params.id), { status })
+    if (!output) return res.status(404).json({ success: false, error: 'Output not found' })
+    res.json({ success: true, output })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/files/open-directory', async (req, res) => {
+  try {
+    const context = {
+      taskId: req.body?.taskId || req.query.taskId || null,
+      outputId: req.body?.outputId || req.query.outputId || null,
+    }
+    const targetPath = getOpenDirectoryTarget(req.body?.path || req.query.path, context)
+    if (!isOpenPathAllowed(targetPath, context)) {
+      return res.status(403).json({ success: false, error: 'Access denied: path not in allowed roots' })
+    }
+    await openPathInFileManager(targetPath)
+    res.json({ success: true, path: targetPath })
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/tasks/:id/open-workspace', async (req, res) => {
+  try {
+    const task = getTaskDetail(req.params.id)
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+
+    const config = getClaudeRuntimeConfig()
+    const isolatedWorkspace = resolve(join(config.workspaceRoot, task.id, 'project'))
+    const fallbackProject = resolve(task.project_cwd || config.cwd)
+    const targetPath = config.workspaceIsolation && existsSync(isolatedWorkspace)
+      ? isolatedWorkspace
+      : fallbackProject
+
+    const taskProjectRoot = task.project_cwd ? resolve(task.project_cwd) : null
+    if (!isOpenPathAllowed(targetPath) && !(taskProjectRoot && isInsidePath(targetPath, taskProjectRoot))) {
+      return res.status(403).json({ success: false, error: 'Access denied: path not in allowed roots' })
+    }
+    if (!existsSync(targetPath)) {
+      return res.status(404).json({ success: false, error: 'Project folder not found' })
+    }
+
+    await openPathInFileManager(targetPath)
+    res.json({
+      success: true,
+      path: targetPath,
+      workspaceAvailable: targetPath === isolatedWorkspace,
+    })
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ success: false, error: err.message })
+  }
+})
+
 router.post('/tasks', (req, res) => {
   try {
     const { title, description, priority } = req.body || {}
@@ -256,16 +618,154 @@ router.post('/tasks', (req, res) => {
       return res.status(400).json({ success: false, error: 'title and description are required' })
     }
 
-    const task = createTask({ title, description, priority })
+    const projectCwd = normalizeProjectCwd(req.body?.projectCwd || req.body?.project_cwd)
+    const task = createTask({ title, description, priority, projectCwd })
     addTaskEvent({
       taskId: task.id,
       agentId: 'xiaomu',
       type: 'plan.request.queued',
-      message: '已生成小呦拆解请求，等待前端 WebSocket 派发',
-      payload: { sessionKey: task.coordinator_session_key, mode: 'frontend-websocket' },
+      message: '已生成小呦任务诊断请求，进入 Claude Runtime 队列',
+      payload: { sessionKey: task.coordinator_session_key, mode: 'claude-runtime', projectCwd },
     })
 
-    res.json({ success: true, task: getTaskDetail(task.id), dispatch: coordinatorDispatch(task) })
+    const run = enqueuePlanRun(task.id)
+    res.json({ success: true, task: getTaskDetail(task.id), planRunId: run.id, run })
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ success: false, error: err.message })
+  }
+})
+
+router.get('/runtime/status', async (_req, res) => {
+  try {
+    res.json({ success: true, status: { ...getRuntimeStatus(), ...(await runtimeDiagnostics()) } })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.get('/runtime/config', (_req, res) => {
+  try {
+    res.json({ success: true, config: getClaudeRuntimeConfig() })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.patch('/runtime/config', async (req, res) => {
+  try {
+    const body = req.body || {}
+    if (body.maxConcurrency != null) process.env.CLAUDE_AGENT_MAX_CONCURRENCY = String(Math.max(1, Number(body.maxConcurrency) || 3))
+    if (body.maxTurns != null) process.env.CLAUDE_AGENT_MAX_TURNS = String(Math.max(1, Number(body.maxTurns) || 256))
+    if (body.reportOnly != null) process.env.CLAUDE_REPORT_ONLY = body.reportOnly ? 'true' : 'false'
+    if (body.workspaceIsolation != null) process.env.CLAUDE_WORKSPACE_ISOLATION = body.workspaceIsolation ? 'true' : 'false'
+    if (body.mock != null) process.env.CLAUDE_RUNTIME_MOCK = body.mock ? 'true' : 'false'
+    if (Array.isArray(body.allowedTools)) process.env.CLAUDE_ALLOWED_TOOLS = body.allowedTools.join(',')
+    if (body.model != null) process.env.CLAUDE_AGENT_MODEL = String(body.model || '').trim()
+    res.json({
+      success: true,
+      config: getClaudeRuntimeConfig(),
+      status: { ...getRuntimeStatus(), ...(await runtimeDiagnostics()) },
+    })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/agent-console/messages', (req, res) => {
+  try {
+    const task = getTaskDetail(req.body?.taskId)
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+    const content = String(req.body?.content || '').trim()
+    if (!content) return res.status(400).json({ success: false, error: 'content is required' })
+    const agentIds = [...new Set(Array.isArray(req.body?.agentIds)
+      ? req.body.agentIds.map((agentId) => String(agentId || '').trim()).filter(Boolean)
+      : [])]
+    if (!agentIds.length) return res.status(400).json({ success: false, error: 'agentIds is required' })
+
+    const runs = agentIds.map((agentId) => enqueueConsoleRun({
+      taskId: task.id,
+      agentId,
+      content,
+    }))
+    res.json({ success: true, task: getTaskDetail(task.id), runs })
+  } catch (err) {
+    res.status(err.statusCode || 500).json({ success: false, error: err.message })
+  }
+})
+
+router.get('/runs', (req, res) => {
+  try {
+    const runs = listRuns({
+      taskId: req.query.taskId,
+      subtaskId: req.query.subtaskId,
+      status: req.query.status,
+      limit: req.query.limit ? Number(req.query.limit) : 100,
+    })
+    res.json({ success: true, runs })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.get('/runs/:id', (req, res) => {
+  try {
+    const run = getRun(req.params.id)
+    if (!run) return res.status(404).json({ success: false, error: 'Run not found' })
+    res.json({ success: true, run })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.get('/runs/:id/logs', (req, res) => {
+  try {
+    const run = getRun(req.params.id)
+    if (!run) return res.status(404).json({ success: false, error: 'Run not found' })
+    const limit = parsePositiveInt(req.query.limit, 2000)
+    const beforeId = req.query.beforeId != null ? parsePositiveInt(req.query.beforeId, null) : null
+    res.json({
+      success: true,
+      logs: listAgentRunLogs({ runId: req.params.id, limit, beforeId }),
+    })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.get('/runs/:id/trace', (req, res) => {
+  try {
+    const run = getRun(req.params.id)
+    if (!run) return res.status(404).json({ success: false, error: 'Run not found' })
+    const limit = parsePositiveInt(req.query.limit, 2000)
+    const beforeId = req.query.beforeId != null ? parsePositiveInt(req.query.beforeId, null) : null
+    res.json({
+      success: true,
+      trace: listTraceEvents({ runId: req.params.id, limit, beforeId }),
+    })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.get('/runs/:id/verifications', (req, res) => {
+  try {
+    const run = getRun(req.params.id)
+    if (!run) return res.status(404).json({ success: false, error: 'Run not found' })
+    const limit = parsePositiveInt(req.query.limit, 200)
+    res.json({
+      success: true,
+      verifications: listVerificationResults({ runId: req.params.id, limit }),
+    })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/runs/:id/cancel', (req, res) => {
+  try {
+    const result = cancelRun(req.params.id)
+    if (!result.ok) return res.status(404).json({ success: false, error: result.error })
+    res.json({ success: true, result, run: getRun(req.params.id) })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }
@@ -273,7 +773,12 @@ router.post('/tasks', (req, res) => {
 
 router.get('/tasks/:id', (req, res) => {
   try {
-    const task = getTaskDetail(req.params.id)
+    const includeEvents = parseBooleanFlag(req.query.includeEvents, false)
+    const eventLimit = includeEvents ? parsePositiveInt(req.query.eventLimit, DEFAULT_EVENT_LIMIT) : null
+    const beforeEventId = includeEvents && req.query.beforeEventId != null
+      ? parsePositiveInt(req.query.beforeEventId, null)
+      : null
+    const task = getTaskDetail(req.params.id, { includeEvents, eventLimit, beforeEventId })
     if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
     res.json({ success: true, task })
   } catch (err) {
@@ -283,7 +788,64 @@ router.get('/tasks/:id', (req, res) => {
 
 router.get('/tasks/:id/events', (req, res) => {
   try {
-    res.json({ success: true, events: listTaskEvents(req.params.id) })
+    const limit = parsePositiveInt(req.query.limit, DEFAULT_EVENT_LIMIT)
+    const beforeId = req.query.beforeId != null ? parsePositiveInt(req.query.beforeId, null) : null
+    res.json({
+      success: true,
+      events: listTaskEvents(req.params.id, { limit, beforeId }),
+    })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.get('/tasks/:id/trace', (req, res) => {
+  try {
+    const task = getTaskDetail(req.params.id)
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+    const limit = parsePositiveInt(req.query.limit, 2000)
+    const beforeId = req.query.beforeId != null ? parsePositiveInt(req.query.beforeId, null) : null
+    res.json({
+      success: true,
+      trace: listTraceEvents({ taskId: req.params.id, limit, beforeId }),
+    })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.get('/tasks/:id/events/stream', (req, res) => {
+  const taskId = req.params.id
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.flushHeaders?.()
+
+  res.write(`data: ${JSON.stringify({ type: 'connected', taskId, timestamp: Date.now() })}\n\n`)
+
+  const handler = (event) => {
+    if (event.taskId !== taskId) return
+    res.write(`data: ${JSON.stringify(event)}\n\n`)
+  }
+  claudeRuntimeEvents.on('event', handler)
+
+  const keepAlive = setInterval(() => {
+    res.write(`data: ${JSON.stringify({ type: 'ping', taskId, timestamp: Date.now() })}\n\n`)
+  }, 25000)
+
+  req.on('close', () => {
+    clearInterval(keepAlive)
+    claudeRuntimeEvents.off('event', handler)
+  })
+})
+
+router.post('/tasks/:id/plan/run', (req, res) => {
+  try {
+    const task = getTaskDetail(req.params.id)
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+    updateTask(task.id, { status: 'planning' })
+    const run = enqueuePlanRun(task.id)
+    res.json({ success: true, task: getTaskDetail(task.id), planRunId: run.id, run })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }
@@ -296,7 +858,7 @@ router.post('/tasks/:id/plan', (req, res) => {
 
     let plan
     try {
-      plan = validatePlan(extractJsonPlan(req.body.plan || req.body.content || req.body))
+      plan = validateRuntimePlan(extractRuntimePlan(req.body.plan || req.body.content || req.body))
     } catch (err) {
       const failed = markPlanInvalid(req.params.id, `拆解计划校验失败：${err.message}`, {
         raw: req.body,
@@ -305,10 +867,129 @@ router.post('/tasks/:id/plan', (req, res) => {
       return res.status(400).json({ success: false, error: err.message, task: failed })
     }
 
-    savePlan(req.params.id, plan)
-    createSubtasksFromPlan(req.params.id, plan, AGENT_MAP)
+    const updated = savePlan(req.params.id, plan)
+    res.json({ success: true, task: updated, dispatches: [] })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/tasks/:id/plan/feedback', (req, res) => {
+  try {
+    const task = getTaskDetail(req.params.id)
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+    if (task.subtasks?.length) {
+      return res.status(400).json({ success: false, error: 'Workflow already started; plan feedback is only available before confirmation' })
+    }
+    const feedback = String(req.body?.feedback || '').trim()
+    if (!feedback) return res.status(400).json({ success: false, error: 'feedback is required' })
+
+    const previousPlan = task.plan_json || {}
+    const feedbackItem = {
+      feedback,
+      createdAt: new Date().toISOString(),
+    }
+    updateTask(task.id, {
+      status: 'planning',
+      plan_json: {
+        ...previousPlan,
+        planFeedback: feedback,
+        planFeedbackAt: feedbackItem.createdAt,
+        planFeedbackHistory: [
+          ...(Array.isArray(previousPlan.planFeedbackHistory) ? previousPlan.planFeedbackHistory : []),
+          feedbackItem,
+        ].slice(-10),
+      },
+    })
+    addTaskEvent({
+      taskId: task.id,
+      agentId: 'xiaomu',
+      type: 'plan.feedback.queued',
+      message: '用户已提交对方案的提问或修改意见，小呦将重新规划',
+      payload: { feedback },
+    })
+    const run = enqueuePlanRun(task.id)
+    res.json({ success: true, task: getTaskDetail(task.id), planRunId: run.id, run })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/tasks/:id/clarifications', (req, res) => {
+  try {
+    const task = getTaskDetail(req.params.id)
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+    const answers = req.body?.answers || {}
+    const previousPlan = task.plan_json || {}
+    updateTask(task.id, {
+      status: 'planning',
+      plan_json: {
+        ...previousPlan,
+        clarificationAnswers: answers,
+        clarificationAnsweredAt: new Date().toISOString(),
+      },
+    })
+    addTaskEvent({
+      taskId: task.id,
+      agentId: 'xiaomu',
+      type: 'coordinator.clarification_answered',
+      message: '用户已补充关键信息，小呦将重新诊断并规划协作流程',
+      payload: { answers },
+    })
+    const run = enqueuePlanRun(task.id)
+    res.json({ success: true, task: getTaskDetail(task.id), planRunId: run.id, run })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/tasks/:id/plan/confirm', (req, res) => {
+  try {
+    const task = getTaskDetail(req.params.id)
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+    if (!task.plan_json) return res.status(400).json({ success: false, error: 'Task has no accepted plan_json' })
+    const plan = validateRuntimePlan(task.plan_json)
+    if (plan.decision === 'need_clarification') {
+      return res.status(400).json({ success: false, error: 'Task still needs clarification before confirmation' })
+    }
+    createSubtasksFromPlan(req.params.id, plan, RUNTIME_AGENT_MAP)
     const updated = getTaskDetail(req.params.id)
-    res.json({ success: true, task: updated, dispatches: subtaskDispatches(updated) })
+    res.json({ success: true, task: getTaskDetail(updated.id), runs: [] })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/tasks/:id/workflow/run', (req, res) => {
+  try {
+    const task = getTaskDetail(req.params.id)
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+    const runs = runReadyWorkflow(task.id)
+    addTaskEvent({
+      taskId: task.id,
+      type: 'task.dispatch.queued',
+      message: `依赖调度器已启动，本轮入队 ${runs.length} 个可执行节点`,
+      payload: { runCount: runs.length, mode: 'claude-runtime' },
+    })
+    res.json({ success: true, task: getTaskDetail(task.id), runs })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.get('/tasks/:id/workflow', (req, res) => {
+  try {
+    const task = getTaskDetail(req.params.id, { includeEvents: true, eventLimit: DEFAULT_EVENT_LIMIT })
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+    const nodes = task.subtasks.map((subtask) => ({
+      ...subtask,
+      workflow: subtask.context_json || {},
+      blockedBy: (subtask.context_json?.dependsOn || []).filter((nodeId) => {
+        const upstream = task.subtasks.find((item) => (item.context_json?.workflowNodeId || item.id) === nodeId)
+        return upstream && !['completed', 'skipped'].includes(upstream.status)
+      }),
+    }))
+    res.json({ success: true, task, workflow: { plan: task.plan_json, nodes } })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }
@@ -318,16 +999,23 @@ router.post('/tasks/:id/dispatch', (req, res) => {
   try {
     const task = getTaskDetail(req.params.id)
     if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
-    if (!task.plan_json) return res.status(400).json({ success: false, error: 'Task has no accepted plan_json' })
-    createSubtasksFromPlan(req.params.id, validatePlan(task.plan_json), AGENT_MAP)
-    const updated = getTaskDetail(req.params.id)
-    addTaskEvent({
-      taskId: task.id,
-      type: 'task.dispatch.queued',
-      message: '已重新生成子任务 WebSocket 派发指令',
-      payload: { subtaskCount: updated.subtasks.length },
-    })
-    res.json({ success: true, task: updated, dispatches: subtaskDispatches(updated) })
+    if (!task.subtasks.length) {
+      if (!task.plan_json) return res.status(400).json({ success: false, error: 'Task has no accepted plan_json' })
+      createSubtasksFromPlan(req.params.id, validateRuntimePlan(task.plan_json), RUNTIME_AGENT_MAP)
+    }
+    const runs = runReadyWorkflow(task.id)
+    res.json({ success: true, task: getTaskDetail(task.id), runs })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/tasks/:id/subtasks/run', (req, res) => {
+  try {
+    const task = getTaskDetail(req.params.id)
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+    const runs = runReadyWorkflow(task.id)
+    res.json({ success: true, task: getTaskDetail(task.id), runs })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }
@@ -361,17 +1049,66 @@ router.post('/subtasks/:id/retry', (req, res) => {
   try {
     const subtask = getSubtask(req.params.id)
     if (!subtask) return res.status(404).json({ success: false, error: 'Subtask not found' })
-    const task = getTaskDetail(subtask.task_id)
-    updateSubtask(subtask.id, { status: 'assigned', progress: 5, error: null })
+    updateSubtask(subtask.id, { status: 'ready', progress: 10, error: null })
     addTaskEvent({
-      taskId: task.id,
+      taskId: subtask.task_id,
       subtaskId: subtask.id,
       agentId: subtask.assigned_agent_id,
       type: 'subtask.retry.queued',
-      message: '已生成子任务重试派发指令，等待前端 WebSocket 发送',
-      payload: { sessionKey: subtask.session_key, mode: 'frontend-websocket' },
+      message: '已生成流程节点重试请求，进入 Claude Runtime 队列',
+      payload: { sessionKey: subtask.session_key, mode: 'claude-runtime' },
     })
-    res.json({ success: true, task: getTaskDetail(task.id), dispatch: subtaskDispatch(task, getSubtask(subtask.id)) })
+    const run = retrySubtaskRun(subtask.id, { resumeSession: Boolean(req.body?.resumeSession) })
+    res.json({ success: true, task: getTaskDetail(subtask.task_id), run })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/workflow-nodes/:id/retry', (req, res) => {
+  try {
+    const subtask = getSubtask(req.params.id)
+    if (!subtask) return res.status(404).json({ success: false, error: 'Workflow node not found' })
+    updateSubtask(subtask.id, { status: 'ready', progress: 10, error: null })
+    const run = retrySubtaskRun(subtask.id, { resumeSession: Boolean(req.body?.resumeSession) })
+    res.json({ success: true, task: getTaskDetail(subtask.task_id), run })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/workflow-nodes/:id/skip', (req, res) => {
+  try {
+    const task = skipSubtask(req.params.id, req.body?.reason || '用户确认跳过该流程节点')
+    if (!task) return res.status(404).json({ success: false, error: 'Workflow node not found' })
+    const runs = runReadyWorkflow(task.id)
+    res.json({ success: true, task: getTaskDetail(task.id), runs })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.post('/subtasks/:id/run', (req, res) => {
+  try {
+    const subtask = getSubtask(req.params.id)
+    if (!subtask) return res.status(404).json({ success: false, error: 'Subtask not found' })
+    const run = enqueueSubtaskRun(subtask.id)
+    res.json({ success: true, task: getTaskDetail(subtask.task_id), run })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.get('/subtasks/:id/logs', (req, res) => {
+  try {
+    const subtask = getSubtask(req.params.id)
+    if (!subtask) return res.status(404).json({ success: false, error: 'Subtask not found' })
+    const limit = parsePositiveInt(req.query.limit, 2000)
+    const beforeId = req.query.beforeId != null ? parsePositiveInt(req.query.beforeId, null) : null
+    res.json({
+      success: true,
+      logs: listAgentRunLogs({ subtaskId: req.params.id, limit, beforeId }),
+    })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }
@@ -400,10 +1137,10 @@ router.post('/subtasks/:id/dispatch-result', (req, res) => {
       taskId: subtask.task_id,
       subtaskId: subtask.id,
       agentId: subtask.assigned_agent_id,
-      type: ok ? 'subtask.dispatched' : 'gateway.error',
+      type: ok ? 'subtask.dispatched' : 'runtime.dispatch.error',
       message: ok
-        ? `前端已通过 WebSocket 派发给 ${AGENT_MAP[subtask.assigned_agent_id]?.name || subtask.assigned_agent_id}`
-        : (error || '前端 WebSocket 派发失败'),
+        ? `子任务已派发给 ${AGENT_MAP[subtask.assigned_agent_id]?.name || subtask.assigned_agent_id}`
+        : (error || 'Runtime 派发失败'),
       payload: payload || { sessionKey: subtask.session_key, error },
     })
     res.json({ success: true, task: getTaskDetail(subtask.task_id) })
@@ -480,10 +1217,11 @@ router.post('/subtasks/:id/complete', (req, res) => {
       taskId: subtask.task_id,
       subtaskId: subtask.id,
       agentId: subtask.assigned_agent_id,
-      type: 'subtask.completed',
-      message: '子任务已标记完成',
+      type: 'workflow.node.completed',
+      message: '流程节点已标记完成',
       payload: { resultSummary: req.body?.resultSummary || '' },
     })
+    runReadyWorkflow(subtask.task_id)
     res.json({ success: true, task: getTaskDetail(subtask.task_id) })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
@@ -494,7 +1232,7 @@ router.post('/tasks/:id/finalize', (req, res) => {
   try {
     const task = getTaskDetail(req.params.id)
     if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
-    if (!task.subtasks.length || !task.subtasks.every((subtask) => subtask.status === 'completed')) {
+    if (!task.subtasks.length || !task.subtasks.every((subtask) => ['completed', 'skipped'].includes(subtask.status))) {
       return res.status(400).json({ success: false, error: 'All subtasks must be completed before finalize' })
     }
     updateTask(task.id, { status: 'reviewing' })
@@ -502,10 +1240,11 @@ router.post('/tasks/:id/finalize', (req, res) => {
       taskId: task.id,
       agentId: 'xiaomu',
       type: 'summary.request.queued',
-      message: '已生成最终汇总请求，等待前端 WebSocket 派发',
-      payload: { sessionKey: task.coordinator_session_key, mode: 'frontend-websocket' },
+      message: '已生成最终汇总请求，进入 Claude Runtime 队列',
+      payload: { sessionKey: task.coordinator_session_key, mode: 'claude-runtime' },
     })
-    res.json({ success: true, task: getTaskDetail(task.id), dispatch: coordinatorDispatch(getTaskDetail(task.id), 'summary') })
+    const run = enqueueSummaryRun(task.id)
+    res.json({ success: true, task: getTaskDetail(task.id), summaryRunId: run.id, run })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }
@@ -525,21 +1264,16 @@ router.post('/tasks/:id/outputs/scan', async (req, res) => {
     const task = getTaskDetail(req.params.id)
     if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
 
+    const config = getClaudeRuntimeConfig()
     const discovered = []
-    for (const subtask of task.subtasks) {
-      const taskPath = `~/.openclaw/shared-workspace/daily-intel/tasks/${task.id}/${subtask.id}`
-      const taskFiles = await scanFiles(taskPath)
-      for (const file of taskFiles) {
-        discovered.push({ ...file, subtaskId: subtask.id, agentId: subtask.assigned_agent_id })
-      }
-
-      const agent = AGENT_MAP[subtask.assigned_agent_id]
-      const date = new Date((subtask.started_at || task.started_at || task.created_at) * 1000).toISOString().split('T')[0]
-      const rolePath = `~/.openclaw/shared-workspace/daily-intel/roles/${agent.roleId}/${date}`
-      const roleFiles = await scanFiles(rolePath, (subtask.started_at || task.created_at) * 1000)
-      for (const file of roleFiles) {
-        discovered.push({ ...file, subtaskId: subtask.id, agentId: subtask.assigned_agent_id })
-      }
+    const outputFiles = await scanFiles(join(config.outputRoot, task.id))
+    for (const file of outputFiles) {
+      const subtask = task.subtasks.find(item => file.path.includes(`/${item.id}/`))
+      discovered.push({
+        ...file,
+        subtaskId: subtask?.id || null,
+        agentId: subtask?.assigned_agent_id || task.coordinator_agent_id,
+      })
     }
 
     for (const file of discovered) {

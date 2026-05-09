@@ -9,7 +9,7 @@ export interface DashboardStats {
 
 export interface DashboardResponse {
   success: boolean
-  dataSource?: 'workspace' | 'mock' | 'mixed'
+  dataSource?: 'database' | 'workspace' | 'mock' | 'mixed'
   stats: DashboardStats
   projects: unknown[]
   todayWork: unknown[]

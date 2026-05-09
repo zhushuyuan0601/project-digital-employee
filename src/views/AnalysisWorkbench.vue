@@ -507,7 +507,7 @@
         <div class="cfg-modal">
           <header class="cfg-modal__header">
             <div>
-              <p class="cfg-modal__eyebrow">Model Gateway</p>
+              <p class="cfg-modal__eyebrow">Model Runtime</p>
               <h2>模型配置管理</h2>
               <span>为数据分析引擎选择 OpenAI 兼容的模型连接。</span>
             </div>
@@ -1162,6 +1162,7 @@ const dataProfile = computed(() => {
   const fields = columns.map((column, index) => ({
     name: column || `字段 ${index + 1}`,
     type: inferColumnType(rows.map((row: unknown[]) => row?.[index])),
+    missingRate: `${Math.round((rows.filter((row: unknown[]) => isEmptyCell(row?.[index])).length / Math.max(rows.length, 1)) * 100)}%`,
   }))
   return {
     rowCount: formatCount(Number(preview.value.row_count ?? rows.length)),

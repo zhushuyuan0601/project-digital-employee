@@ -33,33 +33,13 @@ function extractDescription(content) {
 function getSkillRoots() {
   const home = homedir()
   const cwd = process.cwd()
-  const openclawState = process.env.OPENCLAW_STATE_DIR || process.env.OPENCLAW_HOME || join(home, '.openclaw')
 
-  const roots = [
+  return [
     { source: 'user-agents', path: process.env.MC_SKILLS_USER_AGENTS_DIR || join(home, '.agents', 'skills') },
     { source: 'user-codex', path: process.env.MC_SKILLS_USER_CODEX_DIR || join(home, '.codex', 'skills') },
     { source: 'project-agents', path: process.env.MC_SKILLS_PROJECT_AGENTS_DIR || join(cwd, '.agents', 'skills') },
-    { source: 'project-codex', path: process.env.MC_SKILLS_PROJECT_CODEX_DIR || join(cwd, '.codex', 'skills') },
-    { source: 'openclaw', path: process.env.MC_SKILLS_OPENCLAW_DIR || join(openclawState, 'skills') },
-    { source: 'workspace', path: process.env.MC_SKILLS_WORKSPACE_DIR || join(process.env.OPENCLAW_WORKSPACE_DIR || process.env.MISSION_CONTROL_WORKSPACE_DIR || join(openclawState, 'workspace'), 'skills') }
+    { source: 'project-codex', path: process.env.MC_SKILLS_PROJECT_CODEX_DIR || join(cwd, '.codex', 'skills') }
   ]
-
-  // 动态扫描 workspace-<agent> 目录
-  try {
-    const entries = readdirSync(openclawState)
-    for (const entry of entries) {
-      if (!entry.startsWith('workspace-')) continue
-      const skillsDir = join(openclawState, entry, 'skills')
-      if (existsSync(skillsDir)) {
-        const agentName = entry.replace('workspace-', '')
-        roots.push({ source: `workspace-${agentName}`, path: skillsDir })
-      }
-    }
-  } catch (e) {
-    // openclawState 可能不存在
-  }
-
-  return roots
 }
 
 /**
@@ -124,7 +104,7 @@ export async function syncSkillsFromDisk() {
     }
 
     // 从 DB 加载现有技能（仅本地来源，不包括 registry 安装的）
-    const localSources = ['user-agents', 'user-codex', 'project-agents', 'project-codex', 'openclaw', 'workspace']
+    const localSources = ['user-agents', 'user-codex', 'project-agents', 'project-codex']
     // 添加动态 workspace-* 来源
     for (const s of diskSkills) {
       if (s.source.startsWith('workspace-') && !localSources.includes(s.source)) {

@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { DEFAULT_GROUP_CHAT_AGENT_IDS } from '@/config/agents'
-import { getDefaultGatewayConnectionSettings } from '@/config/gateway'
+import { DEFAULT_AGENT_IDS } from '@/config/agents'
 
 // 群聊消息
 export interface GroupChatMessage {
@@ -13,6 +12,7 @@ export interface GroupChatMessage {
   senderAvatar?: string
   timestamp: number
   mentions?: string[] // 被 @ 的 agent ids
+  runId?: string
 }
 
 // 群聊配置
@@ -24,12 +24,12 @@ export interface GroupChatConfig {
 }
 
 export const useGroupChatStore = defineStore('groupChat', () => {
-  // 群聊配置 - 与任务指挥页面保持一致，包含所有 Agent
+  // 群聊配置
   const groupConfig: GroupChatConfig = {
     id: 'group-main',
-    name: '作战指挥群',
-    description: '多 Agent 协同作战群聊',
-    agentIds: [...DEFAULT_GROUP_CHAT_AGENT_IDS]
+    name: 'AI 团队群聊',
+    description: '和内置成员持续对话，支持 @ 成员与上下文记忆',
+    agentIds: [...DEFAULT_AGENT_IDS]
   }
 
   // 群聊消息
@@ -37,9 +37,6 @@ export const useGroupChatStore = defineStore('groupChat', () => {
 
   // Agent 连接状态（从外部注入）
   const agentConnections = ref<Record<string, { isConnected: boolean; avatar: string; displayName: string }>>({})
-
-  // 设置
-  const settings = ref(getDefaultGatewayConnectionSettings())
 
   // 计算属性：获取所有参与的 Agent
   const participatingAgents = computed(() => {
@@ -167,14 +164,13 @@ export const useGroupChatStore = defineStore('groupChat', () => {
   }
 
   // 更新或添加 Agent 回复（支持流式更新）
-  function updateAgentReply(agentId: string, content: string) {
+  function updateAgentReply(agentId: string, content: string, runId?: string) {
     const agent = participatingAgents.value.find(a => a.id === agentId)
     if (!agent) return
 
-    // 查找最后一条同 Agent 的消息
-    const lastMessage = messages.value.slice().reverse().find(m =>
-      m.sender === 'agent' && m.senderId === agentId
-    )
+    const lastMessage = runId
+      ? messages.value.find(m => m.sender === 'agent' && m.senderId === agentId && m.runId === runId)
+      : messages.value.slice().reverse().find(m => m.sender === 'agent' && m.senderId === agentId)
 
     if (lastMessage) {
       // 更新现有消息（流式追加）
@@ -187,9 +183,15 @@ export const useGroupChatStore = defineStore('groupChat', () => {
         sender: 'agent',
         senderId: agentId,
         senderName: agent.name,
-        senderAvatar: agent.avatar
+        senderAvatar: agent.avatar,
+        runId
       })
     }
+    saveMessages()
+  }
+
+  function setMessages(nextMessages: GroupChatMessage[]) {
+    messages.value = nextMessages
     saveMessages()
   }
 
@@ -218,13 +220,13 @@ export const useGroupChatStore = defineStore('groupChat', () => {
     // State
     groupConfig,
     messages,
-    settings,
     // Getters
     participatingAgents,
     // Actions
     updateAgentStatus,
     handleUserMessage,
     updateAgentReply,
+    setMessages,
     addSystemMessage,
     loadMessages,
     clearMessages

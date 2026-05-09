@@ -18,7 +18,7 @@ cd unicom-ui-new.bak
 ./start-dev.sh
 ```
 
-访问 http://localhost:3000
+访问 http://localhost:10001
 
 ### 手动安装
 
@@ -132,7 +132,7 @@ npm run analysis:stop
 # 3. 启动前端：npm run dev
 ```
 
-访问 http://localhost:3000
+访问 http://localhost:10001
 
 ### 数据分析工作台启动说明
 
@@ -150,7 +150,7 @@ npm run dev
 
 访问地址：
 
-- 工作台页面：`http://localhost:3000/analysis`
+- 工作台页面：`http://localhost:10001/analysis`
 - 分析服务健康检查：`http://127.0.0.1:18900/health`
 - Node 代理模型接口：`http://127.0.0.1:18888/api/analysis/models`
 

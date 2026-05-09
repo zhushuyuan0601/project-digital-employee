@@ -19,6 +19,7 @@ Thumbs.db
 npm-debug.log*
 
 # Local env files
+.env
 .env.local
 .env.*.local
 
@@ -38,3 +39,5 @@ __pycache__/
 
 # Runtime session data
 analysis_service/workspace/
+server/data/task-outputs/
+server/data/runtime-workspaces/

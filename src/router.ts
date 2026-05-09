@@ -25,17 +25,15 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true }
   },
   {
-    path: '/agents',
-    redirect: { path: '/team-output', query: { tab: 'team' } }
-  },
-  {
-    path: '/digital-employee',
-    redirect: { path: '/team-output', query: { tab: 'projects' } }
-  },
-  {
     path: '/task-center-2',
     name: 'task-center-2',
     component: () => import('@/views/TaskCenter2.vue'),
+    meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
+  },
+  {
+    path: '/agent-console',
+    name: 'agent-console',
+    component: () => import('@/views/AgentConsole.vue'),
     meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
   },
   {
@@ -45,22 +43,10 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, roles: ['admin'] as UserRole[] }
   },
   {
-    path: '/logs',
-    redirect: { path: '/dashboard', query: { tab: 'events' } }
-  },
-  {
-    path: '/status',
-    redirect: { path: '/dashboard', query: { tab: 'health' } }
-  },
-  {
-    path: '/capability',
-    name: 'capability',
-    component: () => import('@/views/CapabilityCenter.vue'),
+    path: '/mail-center',
+    name: 'mail-center',
+    component: () => import('@/views/MailCenter.vue'),
     meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
-  },
-  {
-    path: '/chat',
-    redirect: '/dashboard'
   },
   {
     path: '/automation',
@@ -69,33 +55,9 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
   },
   {
-    path: '/tools',
-    redirect: { path: '/capability', query: { tab: 'tools' } }
-  },
-  {
     path: '/group-chat',
     name: 'group-chat',
     component: () => import('@/views/GroupChat.vue'),
-    meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
-  },
-  {
-    path: '/skills',
-    redirect: { path: '/capability', query: { tab: 'skills' } }
-  },
-  {
-    path: '/skills-old',
-    redirect: { path: '/capability', query: { tab: 'skills' } }
-  },
-  {
-    path: '/tokens',
-    name: 'tokens',
-    component: () => import('@/views/Tokens.vue'),
-    meta: { requiresAuth: true }
-  },
-  {
-    path: '/memory',
-    name: 'memory',
-    component: () => import('@/views/Memory.vue'),
     meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
   },
   {
@@ -103,20 +65,6 @@ const routes: RouteRecordRaw[] = [
     name: 'analysis',
     component: () => import('@/views/AnalysisWorkbench.vue'),
     meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
-  },
-  {
-    path: '/security',
-    name: 'security',
-    component: () => import('@/views/Security.vue'),
-    meta: { requiresAuth: true, roles: ['admin'] as UserRole[] }
-  },
-  {
-    path: '/cron',
-    redirect: { path: '/automation', query: { tab: 'cron' } }
-  },
-  {
-    path: '/webhooks',
-    redirect: { path: '/automation', query: { tab: 'webhooks' } }
   }
 ]
 

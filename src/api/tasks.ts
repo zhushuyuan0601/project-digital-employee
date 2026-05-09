@@ -6,6 +6,161 @@ export interface TaskResponse {
   task: Task
   dispatch?: TaskDispatch
   dispatches?: TaskDispatch[]
+  run?: AgentRun
+  runs?: AgentRun[]
+  planRunId?: string
+  summaryRunId?: string
+}
+
+export interface AgentRun {
+  id: string
+  task_id?: string | null
+  subtask_id?: string | null
+  agent_id: string
+  role_name?: string | null
+  claude_session_id?: string | null
+  kind?: string | null
+  model?: string | null
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  cwd?: string | null
+  prompt?: string | null
+  result_summary?: string | null
+  output_path?: string | null
+  error?: string | null
+  started_at?: number | null
+  completed_at?: number | null
+  created_at?: number
+  updated_at?: number
+}
+
+export interface RuntimeAgentStat {
+  agentId: string
+  roleName: string
+  queued: number
+  running: number
+  completed: number
+  failed: number
+  cancelled: number
+  total: number
+  avgDurationMs: number
+}
+
+export interface AgentDefinition {
+  id: string
+  name: string
+  roleName: string
+  reportName?: string
+  description: string
+  boundary: string
+  runtimeAgentId: string
+  roleId: string
+  capabilities: string[]
+  allowedTools: string[]
+  inputContract: string[]
+  outputContract: string[]
+  riskLevel: string
+  defaultModel?: string
+  maxConcurrency: number
+  enabled: boolean
+  sortOrder: number
+  coordinator: boolean
+  createdAt?: number
+  updatedAt?: number
+}
+
+export interface RuntimeConfig {
+  runtime: string
+  maxConcurrency: number
+  maxTurns: number
+  reportOnly: boolean
+  cwd: string
+  workspaceIsolation: boolean
+  workspaceRoot: string
+  allowedTools: string[]
+  outputRoot: string
+  model?: string
+  mock: boolean
+}
+
+export interface AgentRunLog {
+  id: number
+  run_id: string
+  task_id: string
+  subtask_id?: string | null
+  agent_id?: string | null
+  type: string
+  message: string
+  payload_json?: Record<string, unknown> | null
+  created_at: number
+  created_at_ms?: number | null
+}
+
+interface RuntimeStatusResponse {
+  success: boolean
+  status: {
+    runtime: string
+    reportOnly: boolean
+    maxConcurrency: number
+    maxTurns: number
+    workspaceIsolation: boolean
+    workspaceRoot: string
+    queued: number
+    running: number
+    completedToday: number
+    failedToday: number
+    avgDurationMs?: number
+    avgQueueWaitMs?: number
+    successRate?: number
+    runCounts?: Record<string, number>
+    agentStats?: RuntimeAgentStat[]
+    failureReasons?: Array<{ reason: string; count: number }>
+    recentRuns?: AgentRun[]
+    agentConcurrency?: Array<{
+      agentId: string
+      roleName: string
+      enabled: boolean
+      maxConcurrency: number
+      running: number
+      queued: number
+    }>
+    agentDefinitionsVersion?: number
+    dbPath?: string
+    dbWritable?: boolean
+    cwdExists?: boolean
+    outputRootWritable?: boolean
+    workspaceRootWritable?: boolean
+    sdkAvailable?: boolean
+    sdkPath?: string | null
+    claudePath?: string | null
+    claudeCliPath?: string | null
+    claudeBundledPath?: string | null
+    runtimeDriver?: string
+    claudeSdkVersion?: string | null
+    claudeCodeVersion?: string | null
+    nodePath?: string
+    pathEnv?: string
+    modelRouting?: {
+      globalModel?: string
+      defaultModel?: string
+      agentDefaults?: Record<string, string>
+      precedence?: string[]
+    }
+    hasEnvFile?: boolean
+    configSource?: string
+    envOverrides?: Record<string, boolean>
+    healthy: boolean
+  }
+}
+
+interface RuntimeConfigResponse {
+  success: boolean
+  config: RuntimeConfig
+  status?: RuntimeStatusResponse['status']
+}
+
+interface RunsResponse {
+  success: boolean
+  runs: AgentRun[]
 }
 
 interface TasksResponse {
@@ -21,6 +176,33 @@ interface TaskEventsResponse {
 interface TaskOutputsResponse {
   success: boolean
   outputs: TaskOutput[]
+}
+
+interface TaskOutputResponse {
+  success: boolean
+  output: TaskOutput
+}
+
+interface OpenDirectoryResponse {
+  success: boolean
+  path: string
+  workspaceAvailable?: boolean
+}
+
+interface AgentRunLogsResponse {
+  success: boolean
+  logs: AgentRunLog[]
+}
+
+interface AgentsResponse {
+  success: boolean
+  agents: AgentDefinition[]
+}
+
+interface AgentResponse {
+  success: boolean
+  agent: AgentDefinition
+  agents?: AgentDefinition[]
 }
 
 export const taskApi = {
@@ -39,8 +221,13 @@ export const taskApi = {
     })
   },
 
-  getTask(taskId: string) {
-    return request<TaskResponse>(`/api/tasks/${encodeURIComponent(taskId)}`)
+  getTask(taskId: string, params: { includeEvents?: boolean; eventLimit?: number; beforeEventId?: number } = {}) {
+    const search = new URLSearchParams()
+    if (params.includeEvents) search.set('includeEvents', '1')
+    if (params.eventLimit) search.set('eventLimit', String(params.eventLimit))
+    if (params.beforeEventId) search.set('beforeEventId', String(params.beforeEventId))
+    const query = search.toString()
+    return request<TaskResponse>(`/api/tasks/${encodeURIComponent(taskId)}${query ? `?${query}` : ''}`)
   },
 
   applyPlan(taskId: string, content: string | Record<string, unknown>) {
@@ -56,9 +243,61 @@ export const taskApi = {
     })
   },
 
-  retrySubtask(subtaskId: string) {
+  confirmPlan(taskId: string) {
+    return request<TaskResponse>(`/api/tasks/${encodeURIComponent(taskId)}/plan/confirm`, {
+      method: 'POST',
+    })
+  },
+
+  submitPlanFeedback(taskId: string, feedback: string) {
+    return request<TaskResponse>(`/api/tasks/${encodeURIComponent(taskId)}/plan/feedback`, {
+      method: 'POST',
+      body: JSON.stringify({ feedback }),
+    })
+  },
+
+  submitClarifications(taskId: string, answers: Record<string, string>) {
+    return request<TaskResponse>(`/api/tasks/${encodeURIComponent(taskId)}/clarifications`, {
+      method: 'POST',
+      body: JSON.stringify({ answers }),
+    })
+  },
+
+  runWorkflow(taskId: string) {
+    return request<TaskResponse>(`/api/tasks/${encodeURIComponent(taskId)}/workflow/run`, {
+      method: 'POST',
+    })
+  },
+
+  runPlan(taskId: string) {
+    return request<TaskResponse>(`/api/tasks/${encodeURIComponent(taskId)}/plan/run`, {
+      method: 'POST',
+    })
+  },
+
+  runSubtasks(taskId: string) {
+    return request<TaskResponse>(`/api/tasks/${encodeURIComponent(taskId)}/subtasks/run`, {
+      method: 'POST',
+    })
+  },
+
+  runSubtask(subtaskId: string) {
+    return request<TaskResponse>(`/api/subtasks/${encodeURIComponent(subtaskId)}/run`, {
+      method: 'POST',
+    })
+  },
+
+  retrySubtask(subtaskId: string, options: { resumeSession?: boolean } = {}) {
     return request<TaskResponse>(`/api/subtasks/${encodeURIComponent(subtaskId)}/retry`, {
       method: 'POST',
+      body: JSON.stringify(options),
+    })
+  },
+
+  skipWorkflowNode(subtaskId: string, reason = '') {
+    return request<TaskResponse>(`/api/workflow-nodes/${encodeURIComponent(subtaskId)}/skip`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
     })
   },
 
@@ -109,8 +348,81 @@ export const taskApi = {
     })
   },
 
-  listEvents(taskId: string) {
-    return request<TaskEventsResponse>(`/api/tasks/${encodeURIComponent(taskId)}/events`)
+  listEvents(taskId: string, params: { limit?: number; beforeId?: number } = {}) {
+    const search = new URLSearchParams()
+    if (params.limit) search.set('limit', String(params.limit))
+    if (params.beforeId) search.set('beforeId', String(params.beforeId))
+    const query = search.toString()
+    return request<TaskEventsResponse>(`/api/tasks/${encodeURIComponent(taskId)}/events${query ? `?${query}` : ''}`)
+  },
+
+  runtimeStatus() {
+    return request<RuntimeStatusResponse>('/api/runtime/status')
+  },
+
+  listAgents(params: { enabledOnly?: boolean; includeCoordinator?: boolean } = {}) {
+    const search = new URLSearchParams()
+    if (params.enabledOnly) search.set('enabledOnly', '1')
+    if (params.includeCoordinator === false) search.set('includeCoordinator', '0')
+    const query = search.toString()
+    return request<AgentsResponse>(`/api/tasks/agents${query ? `?${query}` : ''}`)
+  },
+
+  updateAgent(agentId: string, payload: Partial<Pick<AgentDefinition, 'enabled' | 'maxConcurrency' | 'allowedTools' | 'riskLevel' | 'sortOrder' | 'defaultModel'>>) {
+    return request<AgentResponse>(`/api/tasks/agents/${encodeURIComponent(agentId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  runtimeConfig() {
+    return request<RuntimeConfigResponse>('/api/runtime/config')
+  },
+
+  updateRuntimeConfig(payload: Partial<RuntimeConfig>) {
+    return request<RuntimeConfigResponse>('/api/runtime/config', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  listRuns(params: { taskId?: string; subtaskId?: string; status?: string; limit?: number } = {}) {
+    const search = new URLSearchParams()
+    if (params.taskId) search.set('taskId', params.taskId)
+    if (params.subtaskId) search.set('subtaskId', params.subtaskId)
+    if (params.status) search.set('status', params.status)
+    if (params.limit) search.set('limit', String(params.limit))
+    const query = search.toString()
+    return request<RunsResponse>(`/api/runs${query ? `?${query}` : ''}`)
+  },
+
+  sendAgentConsoleMessage(payload: { taskId: string; agentIds: string[]; content: string }) {
+    return request<{ success: boolean; task: Task; runs: AgentRun[] }>('/api/agent-console/messages', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  cancelRun(runId: string) {
+    return request<{ success: boolean; result: unknown; run: AgentRun }>(`/api/runs/${encodeURIComponent(runId)}/cancel`, {
+      method: 'POST',
+    })
+  },
+
+  listRunLogs(runId: string, params: { limit?: number; beforeId?: number } = {}) {
+    const search = new URLSearchParams()
+    if (params.limit) search.set('limit', String(params.limit))
+    if (params.beforeId) search.set('beforeId', String(params.beforeId))
+    const query = search.toString()
+    return request<AgentRunLogsResponse>(`/api/runs/${encodeURIComponent(runId)}/logs${query ? `?${query}` : ''}`)
+  },
+
+  listSubtaskLogs(subtaskId: string, params: { limit?: number; beforeId?: number } = {}) {
+    const search = new URLSearchParams()
+    if (params.limit) search.set('limit', String(params.limit))
+    if (params.beforeId) search.set('beforeId', String(params.beforeId))
+    const query = search.toString()
+    return request<AgentRunLogsResponse>(`/api/subtasks/${encodeURIComponent(subtaskId)}/logs${query ? `?${query}` : ''}`)
   },
 
   listOutputs(params: { taskId?: string; agentId?: string; status?: string } = {}) {
@@ -120,5 +432,25 @@ export const taskApi = {
     if (params.status) search.set('status', params.status)
     const query = search.toString()
     return request<TaskOutputsResponse>(`/api/tasks/outputs${query ? `?${query}` : ''}`)
+  },
+
+  updateOutputStatus(outputId: number, status: TaskOutput['status']) {
+    return request<TaskOutputResponse>(`/api/tasks/outputs/${encodeURIComponent(String(outputId))}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    })
+  },
+
+  openFileDirectory(path: string, context: { taskId?: string | null; outputId?: number | string | null } = {}) {
+    return request<OpenDirectoryResponse>('/api/files/open-directory', {
+      method: 'POST',
+      body: JSON.stringify({ path, taskId: context.taskId || null, outputId: context.outputId || null }),
+    })
+  },
+
+  openTaskWorkspace(taskId: string) {
+    return request<OpenDirectoryResponse>(`/api/tasks/${encodeURIComponent(taskId)}/open-workspace`, {
+      method: 'POST',
+    })
   },
 }

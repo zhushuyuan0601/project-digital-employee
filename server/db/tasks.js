@@ -1,7 +1,8 @@
 import { getDatabase } from './index.js'
+import { getAgentDefinition, runtimeAgentMap } from '../claude-runtime/agent-registry.js'
 
-export const TASK_STATUSES = ['draft', 'planning', 'dispatching', 'running', 'reviewing', 'completed', 'failed', 'cancelled']
-export const SUBTASK_STATUSES = ['pending', 'assigned', 'running', 'blocked', 'completed', 'failed']
+export const TASK_STATUSES = ['draft', 'planning', 'clarifying', 'dispatching', 'running', 'reviewing', 'completed', 'failed', 'cancelled']
+export const SUBTASK_STATUSES = ['pending', 'ready', 'queued', 'assigned', 'running', 'waiting_user', 'blocked', 'completed', 'failed', 'skipped']
 export const OUTPUT_STATUSES = ['pending_review', 'accepted', 'rejected']
 
 function nowSeconds() {
@@ -19,20 +20,30 @@ function parseJson(value, fallback = null) {
 
 function taskProgress(task, subtasks = []) {
   if (!subtasks.length) return 0
-  const total = subtasks.reduce((sum, subtask) => sum + Number(subtask.progress || 0), 0)
+  const total = subtasks.reduce((sum, subtask) => sum + (subtask.status === 'skipped' ? 100 : Number(subtask.progress || 0)), 0)
   return Math.round(total / subtasks.length)
 }
 
-function normalizeTask(row, subtasks = [], outputs = []) {
+function normalizeTask(row, subtasks = [], outputs = [], events) {
   if (!row) return null
   const normalizedSubtasks = subtasks.map(normalizeSubtask)
-  return {
+  const task = {
     ...row,
     plan_json: parseJson(row.plan_json),
     progress: taskProgress(row, normalizedSubtasks),
     subtasks: normalizedSubtasks,
     outputs: outputs.map(normalizeOutput),
   }
+  if (events !== undefined) {
+    task.events = events
+  }
+  return task
+}
+
+function ensureColumn(db, tableName, columnName, definition) {
+  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all()
+  if (columns.some((column) => column.name === columnName)) return
+  db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`)
 }
 
 function normalizeSubtask(row) {
@@ -56,6 +67,35 @@ function normalizeOutput(row) {
   return row
 }
 
+function normalizeRun(row) {
+  if (!row) return null
+  return row
+}
+
+function normalizeRunLog(row) {
+  if (!row) return null
+  return {
+    ...row,
+    payload_json: parseJson(row.payload_json),
+  }
+}
+
+function normalizeTraceEvent(row) {
+  if (!row) return null
+  return {
+    ...row,
+    payload_json: parseJson(row.payload_json),
+  }
+}
+
+function normalizeVerificationResult(row) {
+  if (!row) return null
+  return {
+    ...row,
+    details_json: parseJson(row.details_json),
+  }
+}
+
 export function initializeTaskSchema() {
   const db = getDatabase()
 
@@ -64,6 +104,7 @@ export function initializeTaskSchema() {
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       description TEXT NOT NULL,
+      project_cwd TEXT,
       status TEXT NOT NULL DEFAULT 'draft',
       coordinator_agent_id TEXT NOT NULL DEFAULT 'xiaomu',
       coordinator_session_key TEXT NOT NULL DEFAULT 'agent:ceo:main',
@@ -77,6 +118,8 @@ export function initializeTaskSchema() {
       completed_at INTEGER
     )
   `)
+
+  ensureColumn(db, 'tasks', 'project_cwd', 'TEXT')
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS subtasks (
@@ -133,31 +176,158 @@ export function initializeTaskSchema() {
     )
   `)
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_runs (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      subtask_id TEXT,
+      agent_id TEXT NOT NULL,
+      role_name TEXT,
+      claude_session_id TEXT,
+      status TEXT NOT NULL DEFAULT 'queued',
+      kind TEXT DEFAULT '',
+      cwd TEXT,
+      prompt TEXT,
+      model TEXT,
+      result_summary TEXT,
+      output_path TEXT,
+      error TEXT,
+      started_at INTEGER,
+      completed_at INTEGER,
+      created_at INTEGER DEFAULT (unixepoch()),
+      updated_at INTEGER DEFAULT (unixepoch()),
+      FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE
+    )
+  `)
+  ensureColumn(db, 'agent_runs', 'model', 'TEXT')
+  ensureColumn(db, 'agent_runs', 'kind', 'TEXT DEFAULT ""')
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS agent_run_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id TEXT NOT NULL,
+      task_id TEXT NOT NULL,
+      subtask_id TEXT,
+      agent_id TEXT,
+      type TEXT NOT NULL,
+      message TEXT NOT NULL,
+      payload_json TEXT,
+      created_at INTEGER DEFAULT (unixepoch()),
+      created_at_ms INTEGER,
+      FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+      FOREIGN KEY(run_id) REFERENCES agent_runs(id) ON DELETE CASCADE
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS runtime_jobs (
+      run_id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      subtask_id TEXT,
+      agent_id TEXT NOT NULL,
+      kind TEXT DEFAULT '',
+      session_key TEXT NOT NULL,
+      priority INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'queued',
+      attempt_count INTEGER NOT NULL DEFAULT 0,
+      max_attempts INTEGER NOT NULL DEFAULT 3,
+      available_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      owner_id TEXT,
+      locked_at INTEGER,
+      completed_at INTEGER,
+      error TEXT,
+      created_at INTEGER DEFAULT (unixepoch()),
+      updated_at INTEGER DEFAULT (unixepoch()),
+      FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+      FOREIGN KEY(run_id) REFERENCES agent_runs(id) ON DELETE CASCADE
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS runtime_session_locks (
+      session_key TEXT PRIMARY KEY,
+      run_id TEXT NOT NULL,
+      owner_id TEXT NOT NULL,
+      locked_until INTEGER NOT NULL,
+      created_at INTEGER DEFAULT (unixepoch()),
+      updated_at INTEGER DEFAULT (unixepoch())
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS runtime_trace_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id TEXT NOT NULL,
+      task_id TEXT NOT NULL,
+      subtask_id TEXT,
+      agent_id TEXT,
+      type TEXT NOT NULL,
+      message TEXT NOT NULL,
+      payload_json TEXT,
+      created_at INTEGER DEFAULT (unixepoch()),
+      created_at_ms INTEGER,
+      FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+      FOREIGN KEY(run_id) REFERENCES agent_runs(id) ON DELETE CASCADE
+    )
+  `)
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS runtime_verifications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id TEXT NOT NULL,
+      task_id TEXT NOT NULL,
+      subtask_id TEXT,
+      agent_id TEXT,
+      mode TEXT NOT NULL DEFAULT 'report',
+      status TEXT NOT NULL,
+      message TEXT NOT NULL,
+      details_json TEXT,
+      created_at INTEGER DEFAULT (unixepoch()),
+      FOREIGN KEY(task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+      FOREIGN KEY(run_id) REFERENCES agent_runs(id) ON DELETE CASCADE
+    )
+  `)
+
   db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_updated ON tasks(updated_at)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_subtasks_task ON subtasks(task_id)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_events_task ON task_events(task_id, created_at)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_outputs_task ON task_outputs(task_id)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_agent_runs_task ON agent_runs(task_id, created_at)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_agent_runs_subtask ON agent_runs(subtask_id, status)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_agent_runs_status ON agent_runs(status)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_agent_run_logs_run ON agent_run_logs(run_id, id)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_agent_run_logs_subtask ON agent_run_logs(subtask_id, id)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_agent_run_logs_task ON agent_run_logs(task_id, id)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_runtime_jobs_status ON runtime_jobs(status, available_at, priority)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_runtime_jobs_agent ON runtime_jobs(agent_id, status)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_runtime_jobs_task ON runtime_jobs(task_id, status)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_runtime_session_locks_until ON runtime_session_locks(locked_until)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_runtime_trace_run ON runtime_trace_events(run_id, id)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_runtime_trace_task ON runtime_trace_events(task_id, id)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_runtime_verifications_run ON runtime_verifications(run_id, id)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_runtime_verifications_task ON runtime_verifications(task_id, id)')
 
   console.log('[DB] Task orchestration tables initialized')
 }
 
-export function createTask({ title, description, priority = 'normal', createdBy = 'operator' }) {
+export function createTask({ title, description, priority = 'normal', createdBy = 'operator', projectCwd = null }) {
   const db = getDatabase()
   const id = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const coordinatorSessionKey = `claude:task:${id}:xiaomu`
   const stmt = db.prepare(`
     INSERT INTO tasks (
-      id, title, description, status, coordinator_agent_id, coordinator_session_key,
+      id, title, description, project_cwd, status, coordinator_agent_id, coordinator_session_key,
       created_by, priority, created_at, updated_at
-    ) VALUES (?, ?, ?, 'planning', 'xiaomu', 'agent:ceo:main', ?, ?, unixepoch(), unixepoch())
+    ) VALUES (?, ?, ?, ?, 'planning', 'xiaomu', ?, ?, ?, unixepoch(), unixepoch())
   `)
-  stmt.run(id, title, description, createdBy, priority)
+  stmt.run(id, title, description, projectCwd || null, coordinatorSessionKey, createdBy, priority)
   addTaskEvent({
     taskId: id,
     agentId: 'xiaomu',
     type: 'task.created',
     message: `任务已创建，等待小呦拆解：${title}`,
-    payload: { priority },
+    payload: { priority, projectCwd: projectCwd || null },
   })
   return getTaskDetail(id)
 }
@@ -168,7 +338,7 @@ export function listTasks({ status, limit = 50 } = {}) {
     SELECT
       t.*,
       COUNT(DISTINCT s.id) as subtask_count,
-      SUM(CASE WHEN s.status = 'completed' THEN 1 ELSE 0 END) as completed_subtask_count,
+      SUM(CASE WHEN s.status IN ('completed', 'skipped') THEN 1 ELSE 0 END) as completed_subtask_count,
       COUNT(DISTINCT o.id) as output_count
     FROM tasks t
     LEFT JOIN subtasks s ON s.task_id = t.id
@@ -190,17 +360,14 @@ export function listTasks({ status, limit = 50 } = {}) {
   }))
 }
 
-export function getTaskDetail(taskId) {
+export function getTaskDetail(taskId, { includeEvents = false, eventLimit = null, beforeEventId = null } = {}) {
   const db = getDatabase()
   const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId)
   if (!task) return null
   const subtasks = db.prepare('SELECT * FROM subtasks WHERE task_id = ? ORDER BY created_at ASC').all(taskId)
   const outputs = db.prepare('SELECT * FROM task_outputs WHERE task_id = ? ORDER BY created_at DESC').all(taskId)
-  const events = db.prepare('SELECT * FROM task_events WHERE task_id = ? ORDER BY created_at ASC, id ASC').all(taskId)
-  return {
-    ...normalizeTask(task, subtasks, outputs),
-    events: events.map(normalizeEvent),
-  }
+  const events = includeEvents ? listTaskEvents(taskId, { limit: eventLimit, beforeId: beforeEventId }) : undefined
+  return normalizeTask(task, subtasks, outputs, events)
 }
 
 export function getSubtask(subtaskId) {
@@ -228,9 +395,34 @@ export function addTaskEvent({ taskId, subtaskId = null, agentId = null, type, m
   db.prepare('UPDATE tasks SET updated_at = unixepoch() WHERE id = ?').run(taskId)
 }
 
-export function listTaskEvents(taskId) {
+export function listTaskEvents(taskId, { limit = null, beforeId = null } = {}) {
   const db = getDatabase()
-  return db.prepare('SELECT * FROM task_events WHERE task_id = ? ORDER BY created_at ASC, id ASC').all(taskId).map(normalizeEvent)
+  const clauses = ['task_id = ?']
+  const params = [taskId]
+
+  if (beforeId != null) {
+    clauses.push('id < ?')
+    params.push(Number(beforeId))
+  }
+
+  if (limit != null) {
+    const normalizedLimit = Math.max(1, Number(limit) || 100)
+    const rows = db.prepare(`
+      SELECT *
+      FROM task_events
+      WHERE ${clauses.join(' AND ')}
+      ORDER BY id DESC
+      LIMIT ?
+    `).all(...params, normalizedLimit)
+    return rows.reverse().map(normalizeEvent)
+  }
+
+  return db.prepare(`
+    SELECT *
+    FROM task_events
+    WHERE ${clauses.join(' AND ')}
+    ORDER BY created_at ASC, id ASC
+  `).all(...params).map(normalizeEvent)
 }
 
 function keyValue(value) {
@@ -238,19 +430,77 @@ function keyValue(value) {
   return value
 }
 
-export function savePlan(taskId, plan) {
+function taskPlanContext(taskId) {
+  const row = getDatabase().prepare('SELECT plan_json FROM tasks WHERE id = ?').get(taskId)
+  return parseJson(row?.plan_json, {}) || {}
+}
+
+function mergeRuntimeSessions(current = {}, next = {}) {
+  return Object.entries(next || {}).reduce((merged, [key, value]) => ({
+    ...merged,
+    [key]: {
+      ...(merged[key] || {}),
+      ...(value || {}),
+      updatedAt: new Date().toISOString(),
+    },
+  }), { ...(current || {}) })
+}
+
+function planWithPreservedSessionState(taskId, plan, options = {}) {
+  const previous = taskPlanContext(taskId)
+  const preserved = {}
+  if (previous.clarificationAnswers) preserved.clarificationAnswers = previous.clarificationAnswers
+  if (previous.clarificationAnsweredAt) preserved.clarificationAnsweredAt = previous.clarificationAnsweredAt
+  if (previous.planFeedback || previous.lastPlanFeedback) {
+    preserved.lastPlanFeedback = previous.planFeedback || previous.lastPlanFeedback
+    preserved.lastPlanFeedbackAt = previous.planFeedbackAt || previous.lastPlanFeedbackAt
+    if (previous.planFeedback) preserved.planFeedbackResolvedAt = new Date().toISOString()
+  }
+  if (previous.planFeedbackHistory) preserved.planFeedbackHistory = previous.planFeedbackHistory
+  if (previous.runtimeSessions || options.runtimeSessions) {
+    preserved.runtimeSessions = mergeRuntimeSessions(previous.runtimeSessions, options.runtimeSessions)
+  }
+  return { ...plan, ...preserved }
+}
+
+export function patchTaskRuntimeSession(taskId, sessionName, updates) {
   const db = getDatabase()
+  const previous = taskPlanContext(taskId)
+  const runtimeSessions = mergeRuntimeSessions(previous.runtimeSessions, {
+    [sessionName]: updates,
+  })
+  const nextPlan = {
+    ...previous,
+    runtimeSessions,
+  }
   db.prepare(`
     UPDATE tasks
-    SET plan_json = ?, status = 'dispatching', updated_at = unixepoch()
+    SET plan_json = ?, updated_at = unixepoch()
     WHERE id = ?
-  `).run(JSON.stringify(plan), taskId)
+  `).run(JSON.stringify(nextPlan), taskId)
+  return runtimeSessions[sessionName]
+}
+
+export function savePlan(taskId, plan, options = {}) {
+  const db = getDatabase()
+  const planToSave = planWithPreservedSessionState(taskId, plan, options)
+  const isClarifying = plan?.decision === 'need_clarification'
+  const status = isClarifying ? 'clarifying' : 'dispatching'
+  const eventType = isClarifying ? 'coordinator.clarification_required' : 'plan.generated'
+  const message = isClarifying
+    ? `小呦需要补充 ${plan.questions?.length || 0} 个关键信息后再拆解`
+    : `小呦已生成动态协作计划，共 ${plan.workflow?.length || plan.subtasks?.length || 0} 个流程节点`
+  db.prepare(`
+    UPDATE tasks
+    SET plan_json = ?, status = ?, updated_at = unixepoch()
+    WHERE id = ?
+  `).run(JSON.stringify(planToSave), status, taskId)
   addTaskEvent({
     taskId,
     agentId: 'xiaomu',
-    type: 'plan.accepted',
-    message: `小呦拆解计划已通过校验，共 ${plan.subtasks.length} 个子任务`,
-    payload: plan,
+    type: eventType,
+    message,
+    payload: planToSave,
   })
   return getTaskDetail(taskId)
 }
@@ -272,10 +522,11 @@ export function markPlanInvalid(taskId, reason, payload) {
   return getTaskDetail(taskId)
 }
 
-export function createSubtasksFromPlan(taskId, plan, agentMap) {
+export function createSubtasksFromPlan(taskId, plan, agentMap = runtimeAgentMap()) {
   const db = getDatabase()
   const task = getTaskDetail(taskId)
   if (!task) return null
+  if (plan?.decision === 'need_clarification') return task
 
   const existing = db.prepare('SELECT COUNT(*) as count FROM subtasks WHERE task_id = ?').get(taskId)
   if (existing.count > 0) {
@@ -286,24 +537,66 @@ export function createSubtasksFromPlan(taskId, plan, agentMap) {
     INSERT INTO subtasks (
       id, task_id, title, description, expected_output, assigned_agent_id,
       gateway_agent_id, session_key, status, progress, context_json, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'assigned', 5, ?, unixepoch(), unixepoch())
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch())
   `)
 
   const tx = db.transaction(() => {
-    plan.subtasks.forEach((subtask, index) => {
-      const agent = agentMap[subtask.assignedAgentId]
-      const subtaskId = `${taskId}-sub-${String(index + 1).padStart(2, '0')}`
+    const workflow = Array.isArray(plan.workflow) ? plan.workflow : plan.subtasks
+    workflow.forEach((node, index) => {
+      const agentDefinition = getAgentDefinition(node.assignedAgentId)
+      const agent = agentMap[node.assignedAgentId] || {
+        runtimeAgentId: agentDefinition?.runtimeAgentId || node.assignedAgentId,
+      }
+      const workflowNodeId = node.id || `node-${String(index + 1).padStart(2, '0')}`
+      const safeNodeId = String(workflowNodeId).replace(/[^\w-]+/g, '-')
+      const subtaskId = `${taskId}-${safeNodeId}`
+      const dependsOn = Array.isArray(node.dependsOn) ? node.dependsOn : []
+      const initialStatus = dependsOn.length ? 'blocked' : 'ready'
+      const sessionKey = `claude:task:${taskId}:node:${safeNodeId}:${node.assignedAgentId}`
       insert.run(
         subtaskId,
         taskId,
-        subtask.title,
-        subtask.description,
-        subtask.expectedOutput || '',
-        subtask.assignedAgentId,
-        agent.gatewayAgentId,
-        agent.sessionKey,
+        node.title,
+        node.objective || node.description,
+        (node.expectedOutputs || [node.expectedOutput]).filter(Boolean).join('\n'),
+        node.assignedAgentId,
+        agent.runtimeAgentId,
+        sessionKey,
+        initialStatus,
+        initialStatus === 'ready' ? 10 : 0,
         JSON.stringify({
-          expectedOutput: subtask.expectedOutput || '',
+          session: {
+            sessionKey,
+            claudeSessionId: null,
+            lastRunId: null,
+            resumeCount: 0,
+            fallbackCount: 0,
+            updatedAt: new Date().toISOString(),
+          },
+          workflowNodeId,
+          topology: plan.topology || 'hierarchical',
+          phase: node.phase || 'review',
+          dependsOn,
+          requiredInputs: node.requiredInputs || [],
+          expectedOutputs: node.expectedOutputs || (node.expectedOutput ? [node.expectedOutput] : []),
+          executionMode: node.executionMode || 'report',
+          successCriteria: node.successCriteria || [],
+          skipCondition: node.skipCondition || '',
+          requiredTools: node.requiredTools || [],
+          executionOrder: index + 1,
+          riskLevel: node.riskLevel || agentDefinition?.riskLevel || '',
+          agentCapabilityHints: node.agentCapabilityHints || [],
+          agentDefinitionSnapshot: agentDefinition ? {
+            id: agentDefinition.id,
+            name: agentDefinition.name,
+            roleName: agentDefinition.roleName,
+            runtimeAgentId: agentDefinition.runtimeAgentId,
+            capabilities: agentDefinition.capabilities,
+            allowedTools: agentDefinition.allowedTools,
+            maxConcurrency: agentDefinition.maxConcurrency,
+            riskLevel: agentDefinition.riskLevel,
+          } : null,
+          expectedOutput: (node.expectedOutputs || [node.expectedOutput]).filter(Boolean).join('\n'),
           acceptanceCriteria: plan.acceptanceCriteria || [],
         })
       )
@@ -318,21 +611,21 @@ export function createSubtasksFromPlan(taskId, plan, agentMap) {
 
   addTaskEvent({
     taskId,
-    type: 'task.dispatch.queued',
-    message: `平台已创建 ${plan.subtasks.length} 个子任务，等待前端 WebSocket 派发`,
-    payload: { subtaskCount: plan.subtasks.length },
+    type: 'plan.confirmed',
+    message: `平台已确认动态协作计划，创建 ${plan.workflow?.length || plan.subtasks?.length || 0} 个流程节点`,
+    payload: { nodeCount: plan.workflow?.length || plan.subtasks?.length || 0, mode: 'claude-runtime' },
   })
 
   return getTaskDetail(taskId)
 }
 
 export function updateSubtask(subtaskId, updates) {
-  const allowed = ['status', 'progress', 'result_summary', 'error', 'started_at', 'completed_at']
+  const allowed = ['status', 'progress', 'result_summary', 'error', 'context_json', 'started_at', 'completed_at']
   const entries = Object.entries(updates).filter(([key]) => allowed.includes(key))
   if (!entries.length) return getSubtask(subtaskId)
   const db = getDatabase()
   const setClause = entries.map(([key]) => `${key} = ?`).join(', ')
-  const values = entries.map(([, value]) => value)
+  const values = entries.map(([, value]) => keyValue(value))
   db.prepare(`UPDATE subtasks SET ${setClause}, updated_at = unixepoch() WHERE id = ?`).run(...values, subtaskId)
   const subtask = getSubtask(subtaskId)
   if (subtask) {
@@ -342,11 +635,77 @@ export function updateSubtask(subtaskId, updates) {
   return subtask
 }
 
+function workflowNodeKey(subtask) {
+  const context = parseJson(subtask.context_json, {})
+  return context?.workflowNodeId || subtask.id
+}
+
+function completedWorkflowKeys(subtasks) {
+  return new Set(
+    subtasks
+      .filter((subtask) => ['completed', 'skipped'].includes(subtask.status))
+      .map(workflowNodeKey)
+  )
+}
+
+export function refreshWorkflowReadiness(taskId) {
+  const db = getDatabase()
+  const subtasks = db.prepare('SELECT * FROM subtasks WHERE task_id = ? ORDER BY created_at ASC').all(taskId)
+  const completed = completedWorkflowKeys(subtasks)
+  const unlocked = []
+
+  for (const subtask of subtasks) {
+    if (!['blocked', 'pending'].includes(subtask.status)) continue
+    const context = parseJson(subtask.context_json, {})
+    const dependsOn = Array.isArray(context.dependsOn) ? context.dependsOn : []
+    const ready = dependsOn.every((nodeId) => completed.has(nodeId))
+    if (!ready) continue
+    db.prepare(`
+      UPDATE subtasks
+      SET status = 'ready', progress = CASE WHEN progress < 10 THEN 10 ELSE progress END, error = NULL, updated_at = unixepoch()
+      WHERE id = ?
+    `).run(subtask.id)
+    unlocked.push(subtask.id)
+    addTaskEvent({
+      taskId,
+      subtaskId: subtask.id,
+      agentId: subtask.assigned_agent_id,
+      type: 'workflow.dependency.unlocked',
+      message: `${subtask.title} 的前置依赖已满足，进入可执行状态`,
+      payload: { dependsOn },
+    })
+  }
+
+  if (unlocked.length) db.prepare('UPDATE tasks SET updated_at = unixepoch() WHERE id = ?').run(taskId)
+  refreshTaskStatus(taskId)
+  return { task: getTaskDetail(taskId), unlocked }
+}
+
+export function skipSubtask(subtaskId, reason = '用户确认跳过该节点') {
+  const subtask = getSubtask(subtaskId)
+  if (!subtask) return null
+  updateSubtask(subtaskId, {
+    status: 'skipped',
+    progress: 100,
+    result_summary: reason,
+    completed_at: nowSeconds(),
+    error: null,
+  })
+  addTaskEvent({
+    taskId: subtask.task_id,
+    subtaskId,
+    agentId: subtask.assigned_agent_id,
+    type: 'workflow.node.skipped',
+    message: reason,
+  })
+  return refreshWorkflowReadiness(subtask.task_id).task
+}
+
 export function refreshTaskStatus(taskId) {
   const db = getDatabase()
   const subtasks = db.prepare('SELECT status FROM subtasks WHERE task_id = ?').all(taskId)
   if (!subtasks.length) return getTaskDetail(taskId)
-  const allCompleted = subtasks.every((subtask) => subtask.status === 'completed')
+  const allCompleted = subtasks.every((subtask) => ['completed', 'skipped'].includes(subtask.status))
   const anyFailed = subtasks.some((subtask) => subtask.status === 'failed')
   const status = allCompleted ? 'reviewing' : anyFailed ? 'failed' : 'running'
   db.prepare('UPDATE tasks SET status = ?, updated_at = unixepoch() WHERE id = ?').run(status, taskId)
@@ -405,6 +764,338 @@ export function listTaskOutputs({ taskId, agentId, status } = {}) {
     ORDER BY o.created_at DESC
     LIMIT 200
   `).all(...params).map(normalizeOutput)
+}
+
+export function getTaskOutput(outputId) {
+  const db = getDatabase()
+  return normalizeOutput(db.prepare(`
+    SELECT o.*, t.title as task_title, t.project_cwd as task_project_cwd, s.title as subtask_title
+    FROM task_outputs o
+    LEFT JOIN tasks t ON t.id = o.task_id
+    LEFT JOIN subtasks s ON s.id = o.subtask_id
+    WHERE o.id = ?
+  `).get(outputId))
+}
+
+export function updateTaskOutput(outputId, updates) {
+  const allowed = ['status']
+  const entries = Object.entries(updates).filter(([key]) => allowed.includes(key))
+  if (!entries.length) return null
+  const db = getDatabase()
+  const setClause = entries.map(([key]) => `${key} = ?`).join(', ')
+  const values = entries.map(([, value]) => value)
+  db.prepare(`UPDATE task_outputs SET ${setClause} WHERE id = ?`).run(...values, outputId)
+  return getTaskOutput(outputId)
+}
+
+export function createAgentRun({
+  id,
+  taskId,
+  subtaskId = null,
+  agentId,
+  roleName = '',
+  claudeSessionId = null,
+  status = 'queued',
+  kind = '',
+  cwd = '',
+  prompt = '',
+  model = '',
+}) {
+  const db = getDatabase()
+  db.prepare(`
+    INSERT INTO agent_runs (
+      id, task_id, subtask_id, agent_id, role_name, claude_session_id,
+      status, kind, cwd, prompt, model, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, unixepoch(), unixepoch())
+  `).run(id, taskId, subtaskId, agentId, roleName, claudeSessionId, status, kind, cwd, prompt, model)
+  return getAgentRun(id)
+}
+
+export function updateAgentRun(runId, updates) {
+  const allowed = [
+    'claude_session_id',
+    'status',
+    'kind',
+    'cwd',
+    'prompt',
+    'model',
+    'result_summary',
+    'output_path',
+    'error',
+    'started_at',
+    'completed_at',
+  ]
+  const entries = Object.entries(updates).filter(([key]) => allowed.includes(key))
+  if (!entries.length) return getAgentRun(runId)
+  const db = getDatabase()
+  const setClause = entries.map(([key]) => `${key} = ?`).join(', ')
+  const values = entries.map(([, value]) => value)
+  db.prepare(`UPDATE agent_runs SET ${setClause}, updated_at = unixepoch() WHERE id = ?`).run(...values, runId)
+  return getAgentRun(runId)
+}
+
+export function getAgentRun(runId) {
+  const db = getDatabase()
+  return normalizeRun(db.prepare('SELECT * FROM agent_runs WHERE id = ?').get(runId))
+}
+
+export function listAgentRuns({ taskId, subtaskId, status, limit = 100 } = {}) {
+  const db = getDatabase()
+  const clauses = []
+  const params = []
+  if (taskId) {
+    clauses.push('task_id = ?')
+    params.push(taskId)
+  }
+  if (subtaskId) {
+    clauses.push('subtask_id = ?')
+    params.push(subtaskId)
+  }
+  if (status) {
+    clauses.push('status = ?')
+    params.push(status)
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
+  params.push(Number(limit) || 100)
+  return db.prepare(`
+    SELECT *
+    FROM agent_runs
+    ${where}
+    ORDER BY created_at DESC
+    LIMIT ?
+  `).all(...params).map(normalizeRun)
+}
+
+export function listActiveAgentRuns({ taskId, subtaskId, limit = 500 } = {}) {
+  const db = getDatabase()
+  const clauses = [`status IN ('queued', 'running')`]
+  const params = []
+  if (taskId) {
+    clauses.push('task_id = ?')
+    params.push(taskId)
+  }
+  if (subtaskId) {
+    clauses.push('subtask_id = ?')
+    params.push(subtaskId)
+  }
+  const where = `WHERE ${clauses.join(' AND ')}`
+  params.push(Number(limit) || 500)
+  return db.prepare(`
+    SELECT *
+    FROM agent_runs
+    ${where}
+    ORDER BY created_at DESC
+    LIMIT ?
+  `).all(...params).map(normalizeRun)
+}
+
+export function listActiveRunsForSubtask(subtaskId) {
+  const db = getDatabase()
+  return db.prepare(`
+    SELECT *
+    FROM agent_runs
+    WHERE subtask_id = ?
+      AND status IN ('queued', 'running')
+    ORDER BY created_at DESC
+  `).all(subtaskId).map(normalizeRun)
+}
+
+export function addAgentRunLog({
+  runId,
+  taskId,
+  subtaskId = null,
+  agentId = null,
+  type,
+  message,
+  payload = null,
+  createdAtMs = Date.now(),
+}) {
+  const db = getDatabase()
+  const result = db.prepare(`
+    INSERT INTO agent_run_logs (
+      run_id, task_id, subtask_id, agent_id, type, message, payload_json, created_at, created_at_ms
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch(), ?)
+  `).run(
+    runId,
+    taskId,
+    subtaskId,
+    agentId,
+    type,
+    String(message || ''),
+    payload ? JSON.stringify(payload) : null,
+    Number(createdAtMs || Date.now())
+  )
+  return normalizeRunLog(db.prepare('SELECT * FROM agent_run_logs WHERE id = ?').get(result.lastInsertRowid))
+}
+
+export function addTraceEvent({
+  runId,
+  taskId,
+  subtaskId = null,
+  agentId = null,
+  type,
+  message,
+  payload = null,
+  createdAtMs = Date.now(),
+}) {
+  const db = getDatabase()
+  const result = db.prepare(`
+    INSERT INTO runtime_trace_events (
+      run_id, task_id, subtask_id, agent_id, type, message, payload_json, created_at, created_at_ms
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, unixepoch(), ?)
+  `).run(
+    runId,
+    taskId,
+    subtaskId,
+    agentId,
+    type,
+    String(message || ''),
+    payload ? JSON.stringify(payload) : null,
+    Number(createdAtMs || Date.now())
+  )
+  return normalizeTraceEvent(db.prepare('SELECT * FROM runtime_trace_events WHERE id = ?').get(result.lastInsertRowid))
+}
+
+export function listTraceEvents({ runId, taskId, subtaskId, limit = 2000, beforeId = null } = {}) {
+  const db = getDatabase()
+  const clauses = []
+  const params = []
+  if (runId) {
+    clauses.push('run_id = ?')
+    params.push(runId)
+  }
+  if (taskId) {
+    clauses.push('task_id = ?')
+    params.push(taskId)
+  }
+  if (subtaskId) {
+    clauses.push('subtask_id = ?')
+    params.push(subtaskId)
+  }
+  if (beforeId != null) {
+    clauses.push('id < ?')
+    params.push(Number(beforeId))
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
+  params.push(Math.max(1, Number(limit) || 2000))
+  const rows = db.prepare(`
+    SELECT *
+    FROM runtime_trace_events
+    ${where}
+    ORDER BY id DESC
+    LIMIT ?
+  `).all(...params)
+  return rows.reverse().map(normalizeTraceEvent)
+}
+
+export function addVerificationResult({
+  runId,
+  taskId,
+  subtaskId = null,
+  agentId = null,
+  mode = 'report',
+  status,
+  message,
+  details = null,
+}) {
+  const db = getDatabase()
+  const result = db.prepare(`
+    INSERT INTO runtime_verifications (
+      run_id, task_id, subtask_id, agent_id, mode, status, message, details_json, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, unixepoch())
+  `).run(
+    runId,
+    taskId,
+    subtaskId,
+    agentId,
+    mode || 'report',
+    status,
+    String(message || ''),
+    details ? JSON.stringify(details) : null
+  )
+  return normalizeVerificationResult(db.prepare('SELECT * FROM runtime_verifications WHERE id = ?').get(result.lastInsertRowid))
+}
+
+export function listVerificationResults({ runId, taskId, subtaskId, limit = 200 } = {}) {
+  const db = getDatabase()
+  const clauses = []
+  const params = []
+  if (runId) {
+    clauses.push('run_id = ?')
+    params.push(runId)
+  }
+  if (taskId) {
+    clauses.push('task_id = ?')
+    params.push(taskId)
+  }
+  if (subtaskId) {
+    clauses.push('subtask_id = ?')
+    params.push(subtaskId)
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
+  params.push(Math.max(1, Number(limit) || 200))
+  return db.prepare(`
+    SELECT *
+    FROM runtime_verifications
+    ${where}
+    ORDER BY id DESC
+    LIMIT ?
+  `).all(...params).reverse().map(normalizeVerificationResult)
+}
+
+export function listAgentRunLogs({ runId, taskId, subtaskId, limit = 2000, beforeId = null } = {}) {
+  const db = getDatabase()
+  const clauses = []
+  const params = []
+  if (runId) {
+    clauses.push('run_id = ?')
+    params.push(runId)
+  }
+  if (taskId) {
+    clauses.push('task_id = ?')
+    params.push(taskId)
+  }
+  if (subtaskId) {
+    clauses.push('subtask_id = ?')
+    params.push(subtaskId)
+  }
+  if (beforeId != null) {
+    clauses.push('id < ?')
+    params.push(Number(beforeId))
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''
+  params.push(Math.max(1, Number(limit) || 2000))
+  const rows = db.prepare(`
+    SELECT *
+    FROM agent_run_logs
+    ${where}
+    ORDER BY id DESC
+    LIMIT ?
+  `).all(...params)
+  return rows.reverse().map(normalizeRunLog)
+}
+
+export function getActiveRunForSubtask(subtaskId) {
+  const db = getDatabase()
+  return normalizeRun(db.prepare(`
+    SELECT *
+    FROM agent_runs
+    WHERE subtask_id = ?
+      AND status IN ('queued', 'running')
+    ORDER BY created_at DESC
+    LIMIT 1
+  `).get(subtaskId))
+}
+
+export function patchSubtaskContext(subtaskId, patch) {
+  const subtask = getSubtask(subtaskId)
+  if (!subtask) return null
+  return updateSubtask(subtaskId, {
+    context_json: {
+      ...(subtask.context_json || {}),
+      ...patch,
+    },
+  })
 }
 
 export function completeTask(taskId, summary) {

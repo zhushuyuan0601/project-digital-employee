@@ -29,15 +29,12 @@ syncSkillsFromDisk().then(result => {
 function getSkillRoots() {
   const home = homedir()
   const cwd = process.cwd()
-  const openclawState = process.env.OPENCLAW_STATE_DIR || process.env.OPENCLAW_HOME || join(home, '.openclaw')
 
   return [
     { source: 'user-agents', path: process.env.MC_SKILLS_USER_AGENTS_DIR || join(home, '.agents', 'skills') },
     { source: 'user-codex', path: process.env.MC_SKILLS_USER_CODEX_DIR || join(home, '.codex', 'skills') },
     { source: 'project-agents', path: process.env.MC_SKILLS_PROJECT_AGENTS_DIR || join(cwd, '.agents', 'skills') },
-    { source: 'project-codex', path: process.env.MC_SKILLS_PROJECT_CODEX_DIR || join(cwd, '.codex', 'skills') },
-    { source: 'openclaw', path: process.env.MC_SKILLS_OPENCLAW_DIR || join(openclawState, 'skills') },
-    { source: 'workspace', path: process.env.MC_SKILLS_WORKSPACE_DIR || join(process.env.OPENCLAW_WORKSPACE_DIR || process.env.MISSION_CONTROL_WORKSPACE_DIR || join(openclawState, 'workspace'), 'skills') }
+    { source: 'project-codex', path: process.env.MC_SKILLS_PROJECT_CODEX_DIR || join(cwd, '.codex', 'skills') }
   ]
 }
 
@@ -50,9 +47,7 @@ function convertSkillFormat(skill) {
     'user-agents': 'tool',
     'user-codex': 'tool',
     'project-agents': 'automation',
-    'project-codex': 'automation',
-    'openclaw': 'tool',
-    'workspace': 'analysis'
+    'project-codex': 'automation'
   }
 
   // 从 source 推断 icon
@@ -60,9 +55,7 @@ function convertSkillFormat(skill) {
     'user-agents': '🔧',
     'user-codex': '📚',
     'project-agents': '⚙️',
-    'project-codex': '📖',
-    'openclaw': '🔌',
-    'workspace': '💼'
+    'project-codex': '📖'
   }
 
   // 从 security_status 推断 securityScan
@@ -361,7 +354,7 @@ router.post('/install', async (req, res) => {
     // Registry 安装
     if (registry?.source && registry?.slug) {
       const roots = getSkillRoots()
-      const targetRoot = roots.find(r => r.source === 'openclaw')?.path || join(homedir(), '.openclaw', 'skills')
+      const targetRoot = roots.find(r => r.source === 'user-agents')?.path || join(homedir(), '.agents', 'skills')
 
       const result = await installFromRegistry({
         source: registry.source,
@@ -406,9 +399,7 @@ router.post('/install', async (req, res) => {
 
       const skillName = url.split('/').pop() || `custom-${Date.now()}`
       const roots = getSkillRoots()
-      const targetRoot = roots.find(r => r.source === 'openclaw')?.path || join(homedir(), '.openclaw', 'skills')
-
-      const { skillPath, skillDocPath } = await upsertSkill('openclaw', skillName, content)
+      const { skillPath, skillDocPath } = await upsertSkill('user-agents', skillName, content)
 
       return res.json({
         success: true,
@@ -579,7 +570,7 @@ router.post('/registry/install', async (req, res) => {
     const roots = getSkillRoots()
     const root = targetRoot
       ? { source: 'custom', path: targetRoot }
-      : roots.find(r => r.source === 'openclaw')
+      : roots.find(r => r.source === 'user-agents')
 
     if (!root) {
       return res.status(400).json({
