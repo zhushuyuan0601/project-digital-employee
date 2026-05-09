@@ -3,8 +3,8 @@
     <header class="market-header">
       <div>
         <p class="eyebrow">Agent Market</p>
-        <h1>能力市场</h1>
-        <span>按能力、契约、权限、成本和风险组织可调度 Agent。</span>
+        <h1>Agent 市场</h1>
+        <span>用名称、能力和场景关键词发现可调度 Agent。</span>
       </div>
       <div class="market-header__actions">
         <button class="ghost-btn" type="button" :disabled="agentRegistry.loading" @click="refreshAgents">
@@ -18,119 +18,50 @@
       </div>
     </header>
 
-    <section class="market-stats">
-      <article>
-        <span>可调度</span>
-        <strong>{{ agentRegistry.routableAgents.length }}</strong>
-      </article>
-      <article>
-        <span>市场可见</span>
-        <strong>{{ agentRegistry.marketAgents.length }}</strong>
-      </article>
-      <article>
-        <span>系统统筹</span>
-        <strong>{{ agentRegistry.coordinatorAgents.length }}</strong>
-      </article>
-      <article>
-        <span>历史兼容</span>
-        <strong>{{ agentRegistry.legacyAgents.length }}</strong>
-      </article>
+    <section class="market-search-panel" aria-label="Agent 搜索">
+      <div class="market-search-panel__main">
+        <label class="market-search">
+          <el-icon><Search /></el-icon>
+          <input
+            v-model="searchQuery"
+            type="search"
+            placeholder="搜索 Agent 名称、能力或场景关键词"
+            aria-label="搜索 Agent 名称、能力或场景关键词"
+          />
+        </label>
+        <button v-if="searchQuery" class="ghost-btn ghost-btn--small" type="button" @click="clearSearch">清空</button>
+      </div>
+      <div class="market-overview">
+        <article>
+          <span>可调度 Agent</span>
+          <strong>{{ agentRegistry.routableAgents.length }}</strong>
+        </article>
+        <article>
+          <span>{{ searchQuery ? '搜索结果' : '市场可见' }}</span>
+          <strong>{{ filteredAgents.length }}</strong>
+        </article>
+        <article>
+          <span>本地 Agent</span>
+          <strong>{{ localAgentCount }}</strong>
+        </article>
+      </div>
     </section>
 
     <section class="market-workbench">
-      <aside class="market-filters">
-        <label>
-          <span>搜索</span>
-          <input v-model="filters.search" class="field" placeholder="名称、能力、场景、关键词" />
-        </label>
-        <label>
-          <span>分类</span>
-          <select v-model="filters.category" class="field">
-            <option value="">全部分类</option>
-            <option v-for="category in filterOptions.categories" :key="category" :value="category">
-              {{ categoryLabel(category) }}
-            </option>
-          </select>
-        </label>
-        <label>
-          <span>能力标签</span>
-          <select v-model="filters.skill" class="field">
-            <option value="">全部能力</option>
-            <option v-for="skill in filterOptions.skills" :key="skill" :value="skill">{{ skill }}</option>
-          </select>
-        </label>
-        <label>
-          <span>输入类型</span>
-          <select v-model="filters.inputArtifact" class="field">
-            <option value="">全部输入</option>
-            <option v-for="item in filterOptions.inputArtifacts" :key="item" :value="item">{{ item }}</option>
-          </select>
-        </label>
-        <label>
-          <span>输出类型</span>
-          <select v-model="filters.outputArtifact" class="field">
-            <option value="">全部输出</option>
-            <option v-for="item in filterOptions.outputArtifacts" :key="item" :value="item">{{ item }}</option>
-          </select>
-        </label>
-        <label>
-          <span>工具权限</span>
-          <select v-model="filters.tool" class="field">
-            <option value="">全部工具</option>
-            <option v-for="tool in filterOptions.tools" :key="tool" :value="tool">{{ tool }}</option>
-          </select>
-        </label>
-        <label>
-          <span>成本等级</span>
-          <select v-model="filters.costTier" class="field">
-            <option value="">全部成本</option>
-            <option value="low">low</option>
-            <option value="medium">medium</option>
-            <option value="high">high</option>
-          </select>
-        </label>
-        <label>
-          <span>风险等级</span>
-          <select v-model="filters.riskLevel" class="field">
-            <option value="">全部风险</option>
-            <option value="low">low</option>
-            <option value="medium">medium</option>
-            <option value="high">high</option>
-          </select>
-        </label>
-        <label>
-          <span>来源</span>
-          <select v-model="filters.source" class="field">
-            <option value="">全部来源</option>
-            <option value="builtin">内置</option>
-            <option value="local">本地</option>
-            <option value="history">历史</option>
-          </select>
-        </label>
-        <label class="check-row">
-          <input v-model="filters.parallelOnly" type="checkbox" />
-          <span>仅看可并发</span>
-        </label>
-        <label class="check-row">
-          <input v-model="filters.includeHidden" type="checkbox" />
-          <span>显示历史兼容</span>
-        </label>
-      </aside>
-
       <main class="market-main">
         <div class="market-toolbar">
           <div>
             <strong>{{ filteredAgents.length }}</strong>
-            <span>个 Agent 匹配当前条件</span>
+            <span>{{ searchQuery ? '个 Agent 匹配搜索' : '个 Agent 可浏览' }}</span>
           </div>
-          <button class="ghost-btn ghost-btn--small" type="button" @click="clearFilters">清空筛选</button>
+          <small>完整契约、权限、成本和治理策略在详情中查看</small>
         </div>
 
         <div v-if="agentRegistry.loading && !agentRegistry.agents.length" class="market-empty">
           正在读取 Agent 市场...
         </div>
         <div v-else-if="!filteredAgents.length" class="market-empty">
-          没有匹配的 Agent。
+          没有匹配的 Agent，换一个名称、能力或场景关键词试试。
         </div>
         <div v-else class="agent-grid">
           <article
@@ -155,18 +86,9 @@
               <span :class="`risk-${agent.riskLevel}`">{{ agent.riskLevel }}</span>
               <span>{{ agent.marketProfile.source === 'builtin' ? '内置' : agent.marketProfile.source }}</span>
             </div>
-            <div class="contract-row">
-              <div>
-                <span>输入</span>
-                <strong>{{ shortList(agent.capabilityProfile.inputArtifacts) }}</strong>
-              </div>
-              <div>
-                <span>输出</span>
-                <strong>{{ shortList(agent.capabilityProfile.outputArtifacts) }}</strong>
-              </div>
-            </div>
             <div class="tag-list">
-              <span v-for="skill in agent.capabilityProfile.skills.slice(0, 5)" :key="skill">{{ skill }}</span>
+              <span v-for="skill in visibleSkills(agent)" :key="skill">{{ skill }}</span>
+              <span v-if="hiddenSkillCount(agent)">+{{ hiddenSkillCount(agent) }}</span>
             </div>
             <div class="agent-card__footer">
               <label class="switch-row">
@@ -439,6 +361,7 @@ const agentRegistry = useAgentRegistryStore()
 const savingAgentId = ref('')
 const selectedAgent = ref<AgentDefinition | null>(null)
 const detailOpen = ref(false)
+const searchQuery = ref('')
 const previewText = ref('分析代码并修复 500 错误，最后运行验证。')
 const previewLoading = ref(false)
 const routePreview = ref<AgentRoutePreviewResponse | null>(null)
@@ -450,20 +373,6 @@ const createForm = reactive({
   description: '',
   skills: '',
   keywords: '',
-})
-
-const filters = reactive({
-  search: '',
-  category: '',
-  skill: '',
-  inputArtifact: '',
-  outputArtifact: '',
-  tool: '',
-  costTier: '',
-  riskLevel: '',
-  source: '',
-  parallelOnly: false,
-  includeHidden: false,
 })
 
 const iconMap: Record<string, any> = {
@@ -503,9 +412,10 @@ const categoryNames: Record<string, string> = {
   local: '本地 Agent',
 }
 
-const sourceAgents = computed(() => filters.includeHidden ? agentRegistry.agents : agentRegistry.marketAgents)
+const sourceAgents = computed(() => agentRegistry.marketAgents)
+const localAgentCount = computed(() => sourceAgents.value.filter((agent) => agent.marketProfile.source === 'local' || agent.source === 'local').length)
 const filteredAgents = computed(() => {
-  const query = filters.search.trim().toLowerCase()
+  const query = searchQuery.value.trim().toLowerCase()
   return sourceAgents.value.filter((agent) => {
     const haystack = [
       agent.id,
@@ -516,32 +426,15 @@ const filteredAgents = computed(() => {
       ...agent.aliases,
       ...agent.capabilityProfile.skills,
       ...agent.capabilityProfile.intents,
+      ...agent.capabilityProfile.domains,
+      ...agent.capabilityProfile.inputArtifacts,
+      ...agent.capabilityProfile.outputArtifacts,
       ...agent.routingProfile.routeKeywords,
+      ...agent.routingProfile.preferredWhen,
+      ...agent.allowedTools,
     ].join(' ').toLowerCase()
-    if (query && !haystack.includes(query)) return false
-    if (filters.category && agent.category !== filters.category) return false
-    if (filters.skill && !agent.capabilityProfile.skills.includes(filters.skill)) return false
-    if (filters.inputArtifact && !agent.capabilityProfile.inputArtifacts.includes(filters.inputArtifact)) return false
-    if (filters.outputArtifact && !agent.capabilityProfile.outputArtifacts.includes(filters.outputArtifact)) return false
-    if (filters.tool && !agent.allowedTools.includes(filters.tool)) return false
-    if (filters.costTier && agent.routingProfile.costTier !== filters.costTier) return false
-    if (filters.riskLevel && agent.riskLevel !== filters.riskLevel) return false
-    if (filters.source && agent.marketProfile.source !== filters.source && agent.source !== filters.source) return false
-    if (filters.parallelOnly && agent.routingProfile.canRunInParallel === false) return false
-    return true
+    return !query || haystack.includes(query)
   })
-})
-
-const filterOptions = computed(() => {
-  const agents = sourceAgents.value
-  const uniq = (items: string[]) => [...new Set(items.filter(Boolean))].sort((a, b) => a.localeCompare(b))
-  return {
-    categories: uniq(agents.map((agent) => agent.category)),
-    skills: uniq(agents.flatMap((agent) => agent.capabilityProfile.skills)),
-    inputArtifacts: uniq(agents.flatMap((agent) => agent.capabilityProfile.inputArtifacts)),
-    outputArtifacts: uniq(agents.flatMap((agent) => agent.capabilityProfile.outputArtifacts)),
-    tools: uniq(agents.flatMap((agent) => agent.allowedTools)),
-  }
 })
 
 function categoryLabel(category: string) {
@@ -552,13 +445,18 @@ function iconComponent(icon: string) {
   return iconMap[icon] || markRaw(User)
 }
 
-function shortList(items: string[] = []) {
-  if (!items.length) return '--'
-  return items.slice(0, 3).join(' / ')
-}
-
 function formatList(items: string[] = [], separator = ' / ') {
   return items.filter(Boolean).join(separator) || '--'
+}
+
+function visibleSkills(agent: AgentDefinition) {
+  const skills = agent.capabilityProfile.skills.length ? agent.capabilityProfile.skills : agent.capabilities
+  return skills.slice(0, 3)
+}
+
+function hiddenSkillCount(agent: AgentDefinition) {
+  const skills = agent.capabilityProfile.skills.length ? agent.capabilityProfile.skills : agent.capabilities
+  return Math.max(0, skills.length - 3)
 }
 
 function isRoutable(agent: AgentDefinition) {
@@ -593,20 +491,8 @@ async function refreshAgents() {
   await agentRegistry.loadAgents({ includeHidden: true, includeCoordinator: true })
 }
 
-function clearFilters() {
-  Object.assign(filters, {
-    search: '',
-    category: '',
-    skill: '',
-    inputArtifact: '',
-    outputArtifact: '',
-    tool: '',
-    costTier: '',
-    riskLevel: '',
-    source: '',
-    parallelOnly: false,
-    includeHidden: false,
-  })
+function clearSearch() {
+  searchQuery.value = ''
 }
 
 async function toggleAgent(agent: AgentDefinition, enabled: boolean) {
@@ -781,41 +667,83 @@ onMounted(async () => {
   opacity: 0.55;
 }
 
-.market-stats {
+.market-search-panel {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  gap: 14px;
   margin-top: 20px;
-}
-
-.market-stats article {
   padding: 16px;
   border: 1px solid var(--border-default);
   border-radius: 8px;
   background: var(--bg-panel);
 }
 
-.market-stats span {
+.market-search-panel__main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.market-search {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  background: var(--bg-base);
+}
+
+.market-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  color: var(--text-primary);
+  background: transparent;
+  font-size: 14px;
+}
+
+.market-search input::placeholder {
+  color: var(--text-secondary);
+}
+
+.market-overview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.market-overview article {
+  padding: 12px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--bg-base);
+}
+
+.market-overview span {
   display: block;
   color: var(--text-secondary);
   font-size: 12px;
 }
 
-.market-stats strong {
+.market-overview strong {
   display: block;
-  margin-top: 8px;
-  font-size: 24px;
+  margin-top: 6px;
+  font-size: 20px;
 }
 
 .market-workbench {
   display: grid;
-  grid-template-columns: 250px minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
   gap: 16px;
   margin-top: 16px;
   align-items: start;
 }
 
-.market-filters,
 .router-preview {
   position: sticky;
   top: 16px;
@@ -827,7 +755,6 @@ onMounted(async () => {
   background: var(--bg-panel);
 }
 
-.market-filters label,
 .create-form label {
   display: grid;
   gap: 6px;
@@ -866,9 +793,14 @@ onMounted(async () => {
   background: var(--bg-panel);
 }
 
+.market-toolbar small {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 .agent-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: 12px;
 }
 
@@ -879,6 +811,16 @@ onMounted(async () => {
   border: 1px solid var(--border-default);
   border-radius: 8px;
   background: var(--bg-panel);
+}
+
+.agent-card p {
+  display: -webkit-box;
+  min-height: 42px;
+  margin: 0;
+  overflow: hidden;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .agent-card--disabled {
@@ -935,30 +877,6 @@ onMounted(async () => {
 
 .risk-low {
   color: #059669 !important;
-}
-
-.contract-row {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.contract-row div {
-  padding: 10px;
-  border: 1px solid var(--border-default);
-  border-radius: 7px;
-  background: var(--bg-base);
-}
-
-.contract-row span {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-
-.contract-row strong {
-  font-size: 12px;
 }
 
 .preview-head h2 {
@@ -1351,29 +1269,25 @@ onMounted(async () => {
 
 @media (max-width: 1280px) {
   .market-workbench {
-    grid-template-columns: 240px minmax(0, 1fr);
+    grid-template-columns: 1fr;
   }
 
   .router-preview {
     position: static;
-    grid-column: 1 / -1;
   }
 }
 
 @media (max-width: 860px) {
   .market-header,
-  .market-toolbar {
+  .market-toolbar,
+  .market-search-panel__main {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .market-stats,
-  .market-workbench {
+  .market-workbench,
+  .market-overview {
     grid-template-columns: 1fr;
-  }
-
-  .market-filters {
-    position: static;
   }
 
   .agent-modal-backdrop {

@@ -174,7 +174,7 @@
       <div class="runtime-panel__head">
         <div>
           <p class="eyebrow">Agent Market</p>
-          <h2>能力市场已独立管理</h2>
+          <h2>Agent 市场已独立管理</h2>
         </div>
         <div class="runtime-panel__chips">
           <span>Router 调度</span>
