@@ -325,7 +325,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { request } from '@/api/base'
+import { apiFetch, request } from '@/api/base'
 import { useAgentsStore } from '@/stores/agents'
 import { ElMessage } from 'element-plus'
 import { Loading, Warning, Document } from '@element-plus/icons-vue'
@@ -624,7 +624,7 @@ const previewFile = (file: PreviewFileItem) => {
   // 优先从后端 API 获取文件内容
   if (filePath) {
     console.log('[DigitalEmployee] 预览文件，filePath:', filePath)
-    fetch(`/api/files/content?path=${encodeURIComponent(filePath)}`)
+    apiFetch(`/api/files/content?path=${encodeURIComponent(filePath)}`)
       .then(res => res.json())
       .then(data => {
         console.log('[DigitalEmployee] API 返回:', data)

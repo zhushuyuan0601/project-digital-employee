@@ -24,6 +24,10 @@
           <span>密码</span>
           <input v-model="form.password" type="password" autocomplete="current-password" placeholder="请输入密码" />
         </label>
+        <label class="login-field">
+          <span>安全令牌</span>
+          <input v-model="form.apiToken" type="password" autocomplete="off" placeholder="请输入远程访问令牌" />
+        </label>
         <button type="submit" class="login-submit" :disabled="submitting">
           {{ submitting ? '登录中...' : '进入平台' }}
         </button>
@@ -47,6 +51,7 @@ const submitting = ref(false)
 const form = reactive({
   username: 'admin',
   password: 'admin123',
+  apiToken: '',
 })
 
 const handleLogin = async () => {
@@ -54,7 +59,7 @@ const handleLogin = async () => {
   submitting.value = true
 
   try {
-    await authStore.login(form.username, form.password)
+    await authStore.login(form.username, form.password, form.apiToken)
     notification.success(`欢迎，${authStore.user?.displayName || form.username}`)
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard'
     router.replace(redirect)

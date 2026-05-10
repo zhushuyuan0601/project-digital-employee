@@ -61,12 +61,6 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
   },
   {
-    path: '/group-chat',
-    name: 'group-chat',
-    component: () => import('@/views/GroupChat.vue'),
-    meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] }
-  },
-  {
     path: '/analysis',
     name: 'analysis',
     component: () => import('@/views/AnalysisWorkbench.vue'),

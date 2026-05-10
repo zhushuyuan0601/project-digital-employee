@@ -61,10 +61,6 @@ export default defineConfig({
         target: 'http://127.0.0.1:18888',
         changeOrigin: true
       },
-      '/api/group-chat': {
-        target: 'http://127.0.0.1:18888',
-        changeOrigin: true
-      },
       '/api/mail': {
         target: 'http://127.0.0.1:18888',
         changeOrigin: true

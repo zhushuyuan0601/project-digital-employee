@@ -1,7 +1,6 @@
 import { watch, type WatchStopHandle } from 'vue'
 import { useAgentsStore } from '@/stores/agents'
 import { useAgentRegistryStore } from '@/stores/agentRegistry'
-import { useGroupChatStore } from '@/stores/groupChat'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
 
 let syncStarted = false
@@ -10,7 +9,6 @@ let stopHandle: WatchStopHandle | null = null
 export function useAgentSync() {
   const agentsStore = useAgentsStore()
   const agentRegistry = useAgentRegistryStore()
-  const groupStore = useGroupChatStore()
   const multiAgentStore = useMultiAgentChatStore()
 
   function toChatConfig(agent: { id: string; name: string; roleName: string; runtimeAgentId: string }) {
@@ -48,7 +46,6 @@ export function useAgentSync() {
     ]
     agentsStore.initializeFromRegistry(visibleAgents)
     multiAgentStore.setAgentConfigs(chatAgents.map(toChatConfig))
-    groupStore.setGroupAgents(chatAgents.map((agent) => agent.id))
 
     if (syncStarted) {
       syncAgentStates()

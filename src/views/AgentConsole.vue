@@ -191,6 +191,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import MarkdownIt from 'markdown-it'
+import { apiUrlWithAuthToken } from '@/api/base'
 import { taskApi, type AgentDefinition, type AgentRun, type AgentRunLog } from '@/api/tasks'
 import type { Task } from '@/types/task'
 import { useAgentRegistryStore } from '@/stores/agentRegistry'
@@ -609,7 +610,7 @@ async function cancelRun(runId: string) {
 }
 
 function openTaskStream(taskId: string) {
-  taskEventSource = new EventSource(`/api/tasks/${encodeURIComponent(taskId)}/events/stream`)
+  taskEventSource = new EventSource(apiUrlWithAuthToken(`/api/tasks/${encodeURIComponent(taskId)}/events/stream`))
   taskEventSource.onmessage = async (event) => {
     try {
       const data = JSON.parse(event.data) as Record<string, any>

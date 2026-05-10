@@ -1,3 +1,4 @@
+import './config/load-env.js'
 /**
  * 文件扫描 API 服务
  * 用于扫描指定目录并返回文件列表
@@ -13,7 +14,6 @@ import skillsRouter from './routes/skills.js'
 import agentsRouter from './routes/agents.js'
 import taskRouter from './routes/tasks.js'
 import analysisRouter from './routes/analysis.js'
-import groupChatRouter from './routes/group-chat.js'
 import mailRouter from './routes/mail.js'
 import { createAutomationRouter } from './routes/automation.js'
 import { initializeSchema } from './db/index.js'
@@ -26,6 +26,7 @@ import { cleanupOrphanAgentRunsOnStartup } from './claude-runtime/index.js'
 import { getClaudeRuntimeConfig } from './claude-runtime/config.js'
 import { startMailScanner } from './mail/mail-service.js'
 import { DEFAULT_SERVER_CONFIG, ensureDir, envString } from './config/defaults.js'
+import { createApiAuthMiddleware } from './middleware/api-auth.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -40,13 +41,7 @@ app.use(express.json())
 
 // 认证中间件：若设置 API_AUTH_TOKEN 则对 /api/* 路由启用 Bearer token 校验
 const API_AUTH_TOKEN = process.env.API_AUTH_TOKEN || ''
-function requireAuth(req, res, next) {
-  if (!API_AUTH_TOKEN) return next()
-  const auth = req.headers.authorization || ''
-  if (auth === `Bearer ${API_AUTH_TOKEN}`) return next()
-  return res.status(401).json({ error: 'Unauthorized: invalid or missing token' })
-}
-app.use('/api', requireAuth)
+app.use('/api', createApiAuthMiddleware(API_AUTH_TOKEN))
 
 // 用户主目录
 const HOME_DIR = process.env.HOME || process.env.USERPROFILE || ''
@@ -1198,7 +1193,6 @@ startMailScanner()
 app.use('/api', createAutomationRouter())
 app.use('/api', agentsRouter)
 app.use('/api', taskRouter)
-app.use('/api', groupChatRouter)
 app.use('/api', mailRouter)
 app.use('/api/analysis', analysisRouter)
 

@@ -34,7 +34,6 @@ export const navigationSections: NavigationSection[] = [
       { to: '/task-center-2', label: '任务指挥中心', meta: '派发与执行流', icon: markRaw(Operation), roles: ['admin', 'operator'] },
       { to: '/agent-market', label: 'Agent 市场', meta: '能力卡、路由预览与调度权限', icon: markRaw(Goods), roles: ['admin', 'operator'] },
       { to: '/agent-console', label: 'Agent 实时控制台', meta: '流式日志与旁路追问', icon: markRaw(Connection), roles: ['admin', 'operator'] },
-      { to: '/group-chat', label: '群聊会话', meta: '多人协作频道', icon: markRaw(Connection), roles: ['admin', 'operator'] },
     ],
   },
   {

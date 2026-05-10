@@ -1189,6 +1189,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import MarkdownIt from 'markdown-it'
 import TaskControlBar from '@/components/task-center/TaskControlBar.vue'
+import { apiFetch, apiUrlWithAuthToken } from '@/api/base'
 import { taskApi } from '@/api/tasks'
 import type { AgentRunLog } from '@/api/tasks'
 import { useAuthStore } from '@/stores/auth'
@@ -2922,7 +2923,7 @@ async function previewOutput(output: TaskOutput | null | undefined) {
       taskId: output.task_id || selectedTask.value?.id || '',
       outputId: String(output.id || ''),
     })
-    const data = await fetch(`/api/files/content?${search.toString()}`).then(res => res.json())
+    const data = await apiFetch(`/api/files/content?${search.toString()}`).then(res => res.json())
     if (!data.success) throw new Error(data.error || '读取失败')
     previewContent.value = data.content || ''
   } catch (err) {
@@ -3426,7 +3427,7 @@ function ingestRuntimeStreamEvent(taskId: string, data: Record<string, unknown>)
 
 function openTaskEventStream(taskId: string) {
   closeTaskEventStream()
-  taskEventSource = new EventSource(`/api/tasks/${encodeURIComponent(taskId)}/events/stream`)
+  taskEventSource = new EventSource(apiUrlWithAuthToken(`/api/tasks/${encodeURIComponent(taskId)}/events/stream`))
   taskEventSource.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data) as Record<string, unknown>

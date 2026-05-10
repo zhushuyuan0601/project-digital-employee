@@ -1,4 +1,5 @@
 import { computed, ref, watch } from 'vue'
+import { apiFetch } from '@/api/base'
 
 export interface ModelConfig {
   id: string
@@ -164,7 +165,7 @@ export function useAnalysisModelConfigs(options: UseAnalysisModelConfigsOptions 
     testing.value = true
     testResult.value = null
     try {
-      const res = await fetch('/api/analysis/test-connection', {
+      const res = await apiFetch('/api/analysis/test-connection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ api_base: apiBase.trim(), api_key: apiKey?.trim() || '' }),

@@ -1,4 +1,4 @@
-import { request } from './base'
+import { apiFetch, request } from './base'
 
 export interface AnalysisSession {
   id: string
@@ -225,7 +225,7 @@ export interface ExportAnalysisReportPayload {
 }
 
 export async function exportAnalysisReport(payload: ExportAnalysisReportPayload) {
-  const response = await fetch('/api/analysis/export/report', {
+  const response = await apiFetch('/api/analysis/export/report', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -238,7 +238,7 @@ export async function streamAnalysisChat(
   onChunk: (chunk: { content?: string; session_id?: string; files?: Array<{ name: string; url: string }>; done?: boolean }) => void,
   options?: { signal?: AbortSignal },
 ) {
-  const response = await fetch('/api/analysis/chat/completions', {
+  const response = await apiFetch('/api/analysis/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

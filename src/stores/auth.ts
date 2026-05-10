@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
+import { clearApiAuthToken, getApiAuthToken, setApiAuthToken } from '@/api/base'
 
 export type UserRole = 'admin' | 'operator' | 'readonly'
 
@@ -21,6 +22,10 @@ const DEFAULT_USERS = import.meta.env.DEV ? DEV_USERS : {} as typeof DEV_USERS
 
 function readStoredUser() {
   if (typeof localStorage === 'undefined') return null
+  if (!getApiAuthToken()) {
+    localStorage.removeItem(AUTH_STORAGE_KEY)
+    return null
+  }
 
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY)
@@ -38,12 +43,20 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = readStoredUser()
   }
 
-  async function login(username: string, password: string) {
+  async function login(username: string, password: string, apiToken = '') {
     const normalized = username.trim().toLowerCase()
     const matched = DEFAULT_USERS[normalized]
 
     if (!matched || matched.password !== password) {
       throw new Error('用户名或密码错误')
+    }
+
+    if (!getApiAuthToken() && !apiToken.trim()) {
+      throw new Error('请输入访问安全令牌')
+    }
+
+    if (apiToken.trim()) {
+      setApiAuthToken(apiToken)
     }
 
     user.value = {
@@ -58,6 +71,7 @@ export const useAuthStore = defineStore('auth', () => {
   function logout() {
     user.value = null
     localStorage.removeItem(AUTH_STORAGE_KEY)
+    clearApiAuthToken()
   }
 
   function hasAnyRole(roles?: UserRole[]) {
