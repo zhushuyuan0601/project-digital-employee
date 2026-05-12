@@ -134,7 +134,7 @@ watch(chatContainer, (element, oldElement) => {
   min-height: 0;
   height: 100%;
   background:
-    linear-gradient(180deg, rgba(11, 18, 29, 0.74), rgba(11, 18, 29, 0.9));
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-panel) 94%, var(--color-primary) 4%), var(--bg-panel));
 }
 
 .chat-container {
@@ -147,7 +147,7 @@ watch(chatContainer, (element, oldElement) => {
   gap: 18px;
   background-image:
     radial-gradient(circle at top left, rgba(var(--color-primary-rgb), 0.08), transparent 24%),
-    linear-gradient(rgba(255, 255, 255, 0.015), rgba(255, 255, 255, 0.015)),
+    linear-gradient(color-mix(in srgb, var(--bg-elevated) 38%, transparent), color-mix(in srgb, var(--bg-elevated) 38%, transparent)),
     linear-gradient(90deg, rgba(121, 192, 255, 0.035) 1px, transparent 1px),
     linear-gradient(rgba(121, 192, 255, 0.03) 1px, transparent 1px);
   background-size: auto, auto, 28px 28px, 28px 28px;
@@ -200,13 +200,13 @@ watch(chatContainer, (element, oldElement) => {
   border: 1px solid rgba(88, 166, 255, 0.12);
   color: var(--text-primary);
   line-height: 1.6;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+  box-shadow: var(--shadow-sm);
 }
 
 .chat-msg.user .msg-bubble {
   background: linear-gradient(135deg, rgba(121, 192, 255, 0.92), rgba(49, 130, 206, 0.96));
   border-color: transparent;
-  color: white;
+  color: var(--text-on-primary);
 }
 
 .msg-time {
@@ -221,7 +221,7 @@ watch(chatContainer, (element, oldElement) => {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: rgba(10, 15, 23, 0.95);
+  background: var(--bg-panel);
 }
 
 .chat-input-row {
@@ -231,8 +231,8 @@ watch(chatContainer, (element, oldElement) => {
   padding: 8px;
   border-radius: 14px;
   border: 1px solid rgba(var(--color-primary-rgb), 0.16);
-  background: rgba(255, 255, 255, 0.03);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  background: var(--bg-card);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--border-default) 60%, transparent);
 }
 
 .chat-input {
@@ -260,7 +260,7 @@ watch(chatContainer, (element, oldElement) => {
   border: 0;
   border-radius: 10px;
   background: linear-gradient(135deg, var(--color-cyan), var(--color-primary));
-  color: white;
+  color: var(--text-on-primary);
   cursor: pointer;
   box-shadow: 0 8px 22px rgba(88, 166, 255, 0.24);
 }

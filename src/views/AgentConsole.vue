@@ -195,6 +195,7 @@ import { apiUrlWithAuthToken } from '@/api/base'
 import { taskApi, type AgentDefinition, type AgentRun, type AgentRunLog } from '@/api/tasks'
 import type { Task } from '@/types/task'
 import { useAgentRegistryStore } from '@/stores/agentRegistry'
+import { collectTaskScopedAgentIds } from '@/utils/agentConsoleDisplay'
 import { sanitizeHtml } from '@/utils/sanitize'
 
 type ConsoleEntry = {
@@ -245,7 +246,7 @@ const md = new MarkdownIt({
 
 const activeTasks = computed(() => tasks.value.filter(task => !['completed', 'cancelled'].includes(task.status)))
 const taskRuns = computed(() => runs.value.filter(run => run.task_id === selectedTaskId.value))
-const taskScopedAgentIds = computed(() => collectTaskAgentIds(selectedTask.value, taskRuns.value))
+const taskScopedAgentIds = computed(() => collectTaskScopedAgentIds(selectedTask.value, taskRuns.value))
 const taskScopedAgents = computed(() => taskScopedAgentIds.value.map(agentForTask).filter(Boolean))
 const selectedAgent = computed(() => taskScopedAgents.value.find(agent => agent.id === selectedAgentId.value) || null)
 const selectedAgentRuns = computed(() => taskRuns.value.filter(run => run.agent_id === selectedAgentId.value))
@@ -313,27 +314,6 @@ const chatMessages = computed<ChatMessage[]>(() => {
 
 function agentName(agentId = '') {
   return agentForTask(agentId).name || agentId || 'system'
-}
-
-function collectTaskAgentIds(task: Task | null, taskAgentRuns: AgentRun[]) {
-  if (!task) return []
-  const ids: string[] = []
-  const add = (agentId?: string | null) => {
-    const normalized = String(agentId || '').trim()
-    if (normalized && !ids.includes(normalized)) ids.push(normalized)
-  }
-
-  for (const subtask of task.subtasks || []) add(subtask.assigned_agent_id)
-  for (const node of task.plan_json?.workflow || []) add(node.assignedAgentId)
-  for (const subtask of task.plan_json?.subtasks || []) add(subtask.assignedAgentId)
-  for (const participant of task.plan_json?.participants || []) {
-    if (participant.needed !== false) add(participant.agentId)
-  }
-  for (const run of taskAgentRuns) {
-    if (!['plan', 'summary'].includes(String(run.kind || ''))) add(run.agent_id)
-  }
-
-  return ids
 }
 
 function agentForTask(agentId = ''): AgentDefinition {

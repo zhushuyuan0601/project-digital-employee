@@ -51,9 +51,9 @@ defineEmits<{
   position: relative;
   margin: 10px 12px;
   padding: 16px;
-  border: 1px solid transparent;
+  border: 1px solid var(--border-default);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--bg-panel);
   cursor: pointer;
   overflow: hidden;
   transition: transform var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
@@ -71,8 +71,8 @@ defineEmits<{
 
 .agent-card:hover {
   transform: translateY(-2px);
-  background: rgba(255, 255, 255, 0.04);
-  border-color: rgba(255, 255, 255, 0.08);
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
 }
 
 .agent-card:hover .agent-card__glow,
@@ -81,9 +81,9 @@ defineEmits<{
 }
 
 .agent-card.active {
-  background: rgba(var(--color-primary-rgb), 0.11);
-  border-color: rgba(var(--color-primary-rgb), 0.26);
-  box-shadow: inset 3px 0 0 var(--color-primary), 0 12px 24px rgba(0, 0, 0, 0.18);
+  background: color-mix(in srgb, var(--color-primary) 11%, var(--bg-panel));
+  border-color: color-mix(in srgb, var(--color-primary) 34%, transparent);
+  box-shadow: inset 3px 0 0 var(--color-primary), var(--shadow-sm);
 }
 
 .agent-card__header {
@@ -105,7 +105,7 @@ defineEmits<{
   height: 40px;
   border-radius: 999px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-card);
   border: 2px solid rgba(var(--color-primary-rgb), 0.12);
   display: flex;
   align-items: center;
@@ -190,7 +190,7 @@ defineEmits<{
   font-size: 11px;
   background: rgba(148, 163, 184, 0.12);
   color: var(--text-tertiary);
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-default);
 }
 
 .status-badge-mini.idle {

@@ -73,8 +73,10 @@ defineEmits<{
   align-items: center;
   gap: clamp(12px, 2vw, 28px);
   padding: 0 clamp(16px, 2.2vw, 32px);
-  background: linear-gradient(90deg, rgba(18, 23, 33, 0.9) 0%, rgba(18, 23, 33, 0.6) 100%);
-  border-bottom: 1px solid rgba(var(--color-primary-rgb), 0.2);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--bg-panel) 96%, var(--color-primary) 4%), color-mix(in srgb, var(--bg-panel) 88%, transparent)),
+    var(--bg-panel);
+  border-bottom: 1px solid var(--border-default);
   position: relative;
   flex-shrink: 0;
 }
@@ -106,8 +108,8 @@ defineEmits<{
   align-items: center;
   justify-content: center;
   font-size: 20px;
-  color: white;
-  box-shadow: 0 0 15px rgba(var(--color-primary-rgb), 0.5);
+  color: var(--text-on-primary);
+  box-shadow: var(--shadow-sm);
 }
 
 .header__title {
@@ -164,8 +166,8 @@ defineEmits<{
   gap: 6px;
   padding: 6px 12px;
   border-radius: 20px;
-  background: rgba(46, 160, 67, 0.1);
-  border: 1px solid rgba(46, 160, 67, 0.2);
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-success) 22%, transparent);
   font-size: 12px;
   font-weight: 500;
   color: var(--color-success);
@@ -190,22 +192,22 @@ defineEmits<{
 
 .status--disconnected {
   color: var(--color-error);
-  background: rgba(220, 38, 38, 0.1);
-  border-color: rgba(220, 38, 38, 0.2);
+  background: color-mix(in srgb, var(--color-error) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-error) 22%, transparent);
 }
 
 .status--error {
   color: var(--color-warning);
-  background: rgba(245, 158, 11, 0.1);
-  border-color: rgba(245, 158, 11, 0.2);
+  background: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  border-color: color-mix(in srgb, var(--color-warning) 22%, transparent);
 }
 
 .header__btn {
   height: 32px;
   padding: 0 14px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-default);
+  background: var(--bg-card);
   color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;
@@ -216,7 +218,7 @@ defineEmits<{
 }
 
 .header__btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
@@ -227,20 +229,20 @@ defineEmits<{
 
 .header__btn--success {
   color: var(--color-success);
-  border-color: rgba(46, 160, 67, 0.3);
+  border-color: color-mix(in srgb, var(--color-success) 34%, transparent);
 }
 
 .header__btn--success:hover {
-  background: rgba(46, 160, 67, 0.1);
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
 }
 
 .header__btn--danger {
   color: var(--color-error);
-  border-color: rgba(220, 38, 38, 0.3);
+  border-color: color-mix(in srgb, var(--color-error) 34%, transparent);
 }
 
 .header__btn--danger:hover {
-  background: rgba(220, 38, 38, 0.1);
+  background: color-mix(in srgb, var(--color-error) 12%, transparent);
 }
 
 .header__btn--secondary {
