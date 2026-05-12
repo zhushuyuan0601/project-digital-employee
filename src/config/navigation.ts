@@ -8,6 +8,7 @@ import {
   Operation,
   Setting,
   Timer,
+  Warning,
 } from '@element-plus/icons-vue'
 import type { UserRole } from '@/stores/auth'
 
@@ -40,6 +41,7 @@ export const navigationSections: NavigationSection[] = [
     items: [
       { to: '/automation', label: '自动化与集成中心', meta: '调度、回调与自动联动', icon: markRaw(Timer), roles: ['admin', 'operator'] },
       { to: '/mail-center', label: '邮件触发中心', meta: '邮箱扫描与任务入口', icon: markRaw(Message), roles: ['admin', 'operator'] },
+      { to: '/risk-management', label: '项目风险管理', meta: '风险登记、预警与统计', icon: markRaw(Warning), roles: ['admin', 'operator'] },
       { to: '/configs', label: '系统配置', meta: '环境与参数', icon: markRaw(Setting), roles: ['admin'] },
     ],
   },

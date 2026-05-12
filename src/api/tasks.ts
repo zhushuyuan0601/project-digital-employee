@@ -453,4 +453,17 @@ export const taskApi = {
       method: 'POST',
     })
   },
+
+  deleteTask(taskId: string) {
+    return request<{ success: boolean; message: string; taskId: string }>(`/api/tasks/${encodeURIComponent(taskId)}`, {
+      method: 'DELETE',
+    })
+  },
+
+  updateTask(taskId: string, payload: { title?: string; description?: string; priority?: string }) {
+    return request<TaskResponse>(`/api/tasks/${encodeURIComponent(taskId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    })
+  },
 }

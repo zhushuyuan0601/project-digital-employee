@@ -446,6 +446,26 @@ export const useTasksStore = defineStore('tasks', () => {
     return task
   }
 
+  async function deleteTask(taskId: string) {
+    await taskApi.deleteTask(taskId)
+    tasks.value = tasks.value.filter(t => t.id !== taskId)
+    if (selectedTaskId.value === taskId) {
+      selectedTaskId.value = tasks.value[0]?.id || ''
+      selectedTask.value = tasks.value[0] || null
+    }
+    return { success: true }
+  }
+
+  async function updateTaskMeta(taskId: string, payload: { title?: string; description?: string; priority?: string }) {
+    const response = await taskApi.updateTask(taskId, payload)
+    const updated = applyTaskResponse(response.task)
+    tasks.value = tasks.value.map(t => t.id === taskId ? taskWithoutEvents(updated) : t)
+    if (selectedTaskId.value === taskId) {
+      selectedTask.value = updated
+    }
+    return response
+  }
+
   async function fetchOutputs(params: { taskId?: string; agentId?: string; status?: string } = {}) {
     const response = await taskApi.listOutputs(params)
     outputs.value = response.outputs || []
@@ -523,6 +543,8 @@ export const useTasksStore = defineStore('tasks', () => {
     scanOutputs,
     fetchOutputs,
     updateOutputStatus,
+    deleteTask,
+    updateTaskMeta,
     ingestRuntimeEvent,
     clearTaskEvents,
   }

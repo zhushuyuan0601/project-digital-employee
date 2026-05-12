@@ -1114,3 +1114,47 @@ export function completeTask(taskId, summary) {
   })
   return getTaskDetail(taskId)
 }
+
+export function deleteTask(taskId) {
+  const db = getDatabase()
+  const task = getTaskDetail(taskId)
+  if (!task) return null
+
+  db.prepare('DELETE FROM tasks WHERE id = ?').run(taskId)
+  return { success: true, deletedTaskId: taskId }
+}
+
+export function updateTaskMeta(taskId, { title, description, priority }) {
+  const db = getDatabase()
+  const task = getTaskDetail(taskId)
+  if (!task) return null
+
+  const updates = []
+  const params = []
+
+  if (title !== undefined) {
+    updates.push('title = ?')
+    params.push(title)
+  }
+  if (description !== undefined) {
+    updates.push('description = ?')
+    params.push(description)
+  }
+  if (priority !== undefined) {
+    updates.push('priority = ?')
+    params.push(priority)
+  }
+
+  if (updates.length === 0) return task
+
+  updates.push('updated_at = unixepoch()')
+  params.push(taskId)
+
+  db.prepare(`
+    UPDATE tasks
+    SET ${updates.join(', ')}
+    WHERE id = ?
+  `).run(...params)
+
+  return getTaskDetail(taskId)
+}

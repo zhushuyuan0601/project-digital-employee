@@ -10,6 +10,7 @@ import {
   completeTask,
   createSubtasksFromPlan,
   createTask,
+  deleteTask,
   getSubtask,
   getTaskDetail,
   getTaskOutput,
@@ -24,6 +25,7 @@ import {
   skipSubtask,
   updateSubtask,
   updateTask,
+  updateTaskMeta,
   updateTaskOutput,
   upsertTaskOutput,
 } from '../db/tasks.js'
@@ -781,6 +783,31 @@ router.get('/tasks/:id', (req, res) => {
     const task = getTaskDetail(req.params.id, { includeEvents, eventLimit, beforeEventId })
     if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
     res.json({ success: true, task })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.delete('/tasks/:id', (req, res) => {
+  try {
+    const task = getTaskDetail(req.params.id)
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+    const result = deleteTask(req.params.id)
+    if (!result) return res.status(500).json({ success: false, error: 'Failed to delete task' })
+    res.json({ success: true, message: 'Task deleted', taskId: req.params.id })
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.patch('/tasks/:id', (req, res) => {
+  try {
+    const task = getTaskDetail(req.params.id)
+    if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+    const { title, description, priority } = req.body || {}
+    const updated = updateTaskMeta(req.params.id, { title, description, priority })
+    if (!updated) return res.status(500).json({ success: false, error: 'Failed to update task' })
+    res.json({ success: true, task: updated })
   } catch (err) {
     res.status(500).json({ success: false, error: err.message })
   }

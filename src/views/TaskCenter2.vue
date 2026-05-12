@@ -58,7 +58,25 @@
               >
                 <div class="task-row__top">
                   <strong>{{ task.title }}</strong>
-                  <span class="status-chip" :class="`status-chip--${task.status}`">{{ statusText(task.status) }}</span>
+                  <div class="task-row__actions">
+                    <span class="status-chip" :class="`status-chip--${task.status}`">{{ statusText(task.status) }}</span>
+                    <button
+                      type="button"
+                      class="icon-btn icon-btn--small"
+                      title="编辑任务"
+                      @click.stop="openEditTaskDialog(task)"
+                    >
+                      <i class="ri-edit-line"></i>
+                    </button>
+                    <button
+                      type="button"
+                      class="icon-btn icon-btn--small icon-btn--danger"
+                      title="删除任务"
+                      @click.stop="confirmDeleteTask(task)"
+                    >
+                      <i class="ri-delete-bin-line"></i>
+                    </button>
+                  </div>
                 </div>
                 <div class="task-row__meta">
                   <span>{{ task.progress || 0 }}%</span>
@@ -1180,6 +1198,47 @@
         </div>
       </div>
     </el-drawer>
+
+    <el-dialog
+      v-model="editTaskDialog"
+      title="编辑任务"
+      width="560px"
+      :close-on-click-modal="false"
+    >
+      <el-form :model="editTaskForm" label-position="top">
+        <el-form-item label="任务标题">
+          <el-input
+            v-model="editTaskForm.title"
+            placeholder="输入任务标题"
+            maxlength="100"
+            show-word-limit
+          />
+        </el-form-item>
+        <el-form-item label="任务描述">
+          <el-input
+            v-model="editTaskForm.description"
+            type="textarea"
+            :rows="4"
+            placeholder="输入任务描述（可选）"
+            maxlength="500"
+            show-word-limit
+          />
+        </el-form-item>
+        <el-form-item label="优先级">
+          <el-radio-group v-model="editTaskForm.priority">
+            <el-radio-button label="low">低</el-radio-button>
+            <el-radio-button label="medium">中</el-radio-button>
+            <el-radio-button label="high">高</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editTaskDialog = false">取消</el-button>
+        <el-button type="primary" :loading="editTaskLoading" @click="handleEditTask">
+          保存
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -1278,6 +1337,9 @@ const previewLoading = ref(false)
 const previewError = ref<string | null>(null)
 const memberDialog = ref(false)
 const memberLogsDrawer = ref(false)
+const editTaskDialog = ref(false)
+const editTaskForm = ref({ id: '', title: '', description: '', priority: 'medium' })
+const editTaskLoading = ref(false)
 const activeMemberSubtaskId = ref('')
 const memberRunLogs = ref<Record<string, AgentRunLog[]>>({})
 const memberLogsLoading = ref(false)
@@ -2641,6 +2703,59 @@ async function refreshRuntimeStatus() {
   } catch {
     runtimeStatus.value = { healthy: false, running: 0, queued: 0, maxConcurrency: 3, maxTurns: 256 }
   }
+}
+
+function openEditTaskDialog(task: Task) {
+  editTaskForm.value = {
+    id: task.id,
+    title: task.title,
+    description: task.description || '',
+    priority: task.priority || 'medium',
+  }
+  editTaskDialog.value = true
+}
+
+async function handleEditTask() {
+  if (!editTaskForm.value.title.trim()) {
+    ElMessage.warning('请输入任务标题')
+    return
+  }
+  editTaskLoading.value = true
+  try {
+    await tasksStore.updateTaskMeta(editTaskForm.value.id, {
+      title: editTaskForm.value.title.trim(),
+      description: editTaskForm.value.description.trim(),
+      priority: editTaskForm.value.priority,
+    })
+    ElMessage.success('任务已更新')
+    editTaskDialog.value = false
+  } catch (err) {
+    ElMessage.error(err instanceof Error ? err.message : '更新任务失败')
+  } finally {
+    editTaskLoading.value = false
+  }
+}
+
+function confirmDeleteTask(task: Task) {
+  ElMessageBox.confirm(
+    `确定要删除任务 "${task.title}" 吗？此操作不可撤销，任务及其所有子任务、事件记录将被永久删除。`,
+    '删除任务',
+    {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+      confirmButtonClass: 'el-button--danger',
+    }
+  )
+    .then(async () => {
+      try {
+        await tasksStore.deleteTask(task.id)
+        ElMessage.success('任务已删除')
+      } catch (err) {
+        ElMessage.error(err instanceof Error ? err.message : '删除任务失败')
+      }
+    })
+    .catch(() => {})
 }
 
 async function selectTask(taskId: string) {
@@ -4424,6 +4539,48 @@ watch(
 .task-row__top strong {
   font-size: 14px;
   line-height: 1.35;
+}
+
+.task-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.icon-btn--small {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.15s ease;
+}
+
+.icon-btn--small:hover {
+  background: rgba(var(--color-primary-rgb), 0.1);
+  color: var(--color-primary);
+}
+
+.icon-btn--danger:hover {
+  background: rgba(var(--color-error-rgb), 0.1);
+  color: var(--color-error);
+}
+
+.task-row:hover .icon-btn--small {
+  opacity: 1;
+}
+
+.task-row .icon-btn--small {
+  opacity: 0;
+  transition: opacity 0.15s ease;
 }
 
 .task-row__meta,
