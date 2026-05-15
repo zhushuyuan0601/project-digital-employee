@@ -50,11 +50,11 @@
 
       <section class="agent-picker">
         <div class="section-title">
-          <span>点击切换 Agent 输出页</span>
-          <small>单选</small>
+          <span>本任务 Agent 会话</span>
+          <small>{{ taskScopedAgents.length }} 个</small>
         </div>
         <button
-          v-for="agent in executableAgents"
+          v-for="agent in taskScopedAgents"
           :key="agent.id"
           type="button"
           class="agent-choice"
@@ -64,9 +64,12 @@
           <span class="agent-avatar">{{ agent.name.slice(0, 1) }}</span>
           <span>
             <strong>{{ agent.name }}</strong>
-            <small>{{ agent.roleName }} · {{ agentStatusText(agent.id) }}</small>
+            <small>{{ taskAgentSubtitle(agent.id) }}</small>
           </span>
         </button>
+        <div v-if="selectedTask && taskScopedAgents.length === 0" class="quiet-state">
+          当前任务还没有生成执行 Agent。等待小呦拆解或选择其他任务。
+        </div>
       </section>
     </aside>
 
@@ -77,7 +80,7 @@
           <div>
             <p class="eyebrow">Live Agent Output</p>
             <h2>{{ selectedAgent?.name || '选择 Agent' }}</h2>
-            <small>{{ selectedAgent?.roleName || '点击左侧成员查看独立输出页面' }}</small>
+            <small>{{ selectedAgent ? taskAgentSubtitle(selectedAgent.id) : '点击左侧本任务 Agent 查看会话' }}</small>
           </div>
         </div>
         <div class="chat-header__actions">
@@ -103,7 +106,7 @@
         <template v-else>
           <div v-if="chatMessages.length === 0" class="empty-chat">
             <strong>{{ selectedAgent.name }} 暂无输出</strong>
-            <p>在下方发送旁路追问后，Claude Code 的工具、日志和回复会流式显示在这里。</p>
+            <p>该 Agent 在当前任务中的正式执行与旁路追问会话会显示在这里。</p>
           </div>
           <article
             v-for="message in chatMessages"
@@ -141,7 +144,7 @@
           v-model="draft"
           class="message-box"
           :disabled="sending || !selectedTask || !selectedAgent"
-          :placeholder="selectedAgent ? `向 ${selectedAgent.name} 发送旁路追问` : '先选择一个 Agent'"
+          :placeholder="selectedAgent ? `向 ${selectedAgent.name} 发送当前任务旁路追问` : '先选择本任务 Agent'"
           rows="4"
           @keydown.meta.enter.prevent="sendConsoleMessage"
           @keydown.ctrl.enter.prevent="sendConsoleMessage"
@@ -161,6 +164,13 @@
         <span class="node-count">{{ selectedAgentKeyEntries.length }}</span>
       </header>
       <div ref="terminalRef" class="terminal-screen">
+        <section v-if="selectedAgentTaskNodes.length" class="agent-node-list">
+          <p>任务节点</p>
+          <article v-for="node in selectedAgentTaskNodes" :key="node.id">
+            <strong>{{ node.title }}</strong>
+            <span>{{ node.status }} · {{ node.progress || 0 }}%</span>
+          </article>
+        </section>
         <div v-if="selectedAgentKeyEntries.length === 0" class="terminal-empty">暂无关键产出，完整回答请看中间聊天区。</div>
         <article
           v-for="entry in selectedAgentKeyEntries"
@@ -235,10 +245,31 @@ const md = new MarkdownIt({
 
 const activeTasks = computed(() => tasks.value.filter(task => !['completed', 'cancelled'].includes(task.status)))
 const executableAgents = computed(() => agents.value.filter(agent => agent.enabled))
-const selectedAgent = computed(() => executableAgents.value.find(agent => agent.id === selectedAgentId.value) || null)
 const taskRuns = computed(() => runs.value.filter(run => run.task_id === selectedTaskId.value))
+const taskScopedAgentIds = computed(() => {
+  const ids = new Set<string>()
+  for (const participant of selectedTask.value?.plan_json?.participants || []) {
+    if (participant.needed !== false && participant.agentId) ids.add(participant.agentId)
+  }
+  for (const node of selectedTask.value?.plan_json?.workflow || []) {
+    if (node.assignedAgentId) ids.add(node.assignedAgentId)
+  }
+  for (const subtask of selectedTask.value?.subtasks || []) {
+    if (subtask.assigned_agent_id) ids.add(subtask.assigned_agent_id)
+  }
+  for (const run of taskRuns.value) {
+    if (run.agent_id && run.agent_id !== selectedTask.value?.coordinator_agent_id) ids.add(run.agent_id)
+  }
+  ids.delete('xiaomu')
+  return [...ids]
+})
+const taskScopedAgents = computed(() => taskScopedAgentIds.value.map((agentId) =>
+  agents.value.find(agent => agent.id === agentId) || fallbackAgent(agentId)
+))
+const selectedAgent = computed(() => taskScopedAgents.value.find(agent => agent.id === selectedAgentId.value) || null)
 const selectedAgentRuns = computed(() => taskRuns.value.filter(run => run.agent_id === selectedAgentId.value))
 const selectedAgentActiveRun = computed(() => selectedAgentRuns.value.find(run => ['queued', 'running'].includes(run.status)) || null)
+const selectedAgentTaskNodes = computed(() => (selectedTask.value?.subtasks || []).filter(subtask => subtask.assigned_agent_id === selectedAgentId.value))
 const sendDisabled = computed(() => sending.value || !selectedTask.value || !selectedAgent.value || !draft.value.trim())
 const selectedTaskDescription = computed(() => normalizeTaskDescription(selectedTask.value?.description || ''))
 const selectedTaskSummary = computed(() => summarizeTaskDescription(selectedTaskDescription.value))
@@ -302,6 +333,27 @@ const chatMessages = computed<ChatMessage[]>(() => {
 
 function agentName(agentId = '') {
   return agents.value.find(agent => agent.id === agentId)?.name || agentId || 'system'
+}
+
+function fallbackAgent(agentId: string): AgentDefinition {
+  return {
+    id: agentId,
+    name: agentId,
+    roleName: '任务 Agent',
+    description: '该 Agent 来自当前任务计划或运行记录。',
+    boundary: '',
+    runtimeAgentId: agentId,
+    roleId: agentId,
+    capabilities: [],
+    allowedTools: [],
+    inputContract: [],
+    outputContract: [],
+    riskLevel: 'medium',
+    maxConcurrency: 1,
+    enabled: true,
+    sortOrder: 999,
+    coordinator: false,
+  }
 }
 
 function shortRunId(runId = '') {
@@ -454,6 +506,12 @@ function agentStatusText(agentId: string) {
   return latest?.status || '待命'
 }
 
+function taskAgentSubtitle(agentId: string) {
+  const nodeCount = (selectedTask.value?.subtasks || []).filter(subtask => subtask.assigned_agent_id === agentId).length
+  const runCount = taskRuns.value.filter(run => run.agent_id === agentId).length
+  return `${agentName(agentId)} · ${agentStatusText(agentId)} · ${nodeCount} 节点 · ${runCount} 会话`
+}
+
 async function refreshAll() {
   const [taskResponse, agentResponse] = await Promise.all([
     taskApi.listTasks({ limit: 80 }),
@@ -463,9 +521,6 @@ async function refreshAll() {
   agents.value = agentResponse.agents
   if (!selectedTaskId.value && activeTasks.value[0]) {
     selectedTaskId.value = activeTasks.value[0].id
-  }
-  if (!selectedAgentId.value && executableAgents.value[0]) {
-    selectedAgentId.value = executableAgents.value[0].id
   }
   if (selectedTaskId.value) await loadSelectedTaskContext()
 }
@@ -485,6 +540,9 @@ async function loadSelectedTaskContext() {
   selectedTask.value = taskResponse.task
   runs.value = runResponse.runs
   await Promise.all(runs.value.map(run => fetchRunLogs(run.id)))
+  if (!taskScopedAgentIds.value.includes(selectedAgentId.value)) {
+    selectedAgentId.value = taskScopedAgentIds.value[0] || ''
+  }
   openTaskStream(selectedTaskId.value)
   scrollPanelsToBottom()
 }
@@ -1133,6 +1191,40 @@ h2 {
   left: 17px;
   width: 1px;
   background: linear-gradient(180deg, rgba(var(--color-primary-rgb), 0.38), rgba(255, 255, 255, 0.06));
+}
+
+.agent-node-list {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.agent-node-list p {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.agent-node-list article {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  padding: 9px;
+  background: color-mix(in srgb, var(--bg-card) 84%, transparent);
+}
+
+.agent-node-list strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.agent-node-list span {
+  color: var(--text-tertiary);
+  font-size: 11px;
 }
 
 .terminal-row {

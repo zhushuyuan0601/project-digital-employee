@@ -16,7 +16,6 @@ export const RUNTIME_AGENT_MAP = new Proxy({}, {
   },
 })
 
-const PHASES = ['research', 'product', 'design', 'engineering', 'testing', 'review', 'summary']
 const EXECUTION_MODES = ['report', 'code', 'test']
 const TOPOLOGIES = ['hierarchical', 'parallel', 'review-gate']
 
@@ -82,29 +81,40 @@ function normalizeParticipants(participants = [], workflow = []) {
 function normalizeWorkflowNode(raw, index, knownIds) {
   const explicitId = String(raw?.id || '').trim()
   const id = explicitId || `node-${String(index + 1).padStart(2, '0')}`
-  const phase = PHASES.includes(raw?.phase) ? raw.phase : 'review'
+  const phase = String(raw?.phase || 'review').trim() || 'review'
   const validAgents = executableAgentIds()
   const assignedAgentId = validAgents.has(raw?.assignedAgentId) ? raw.assignedAgentId : ''
   const dependsOn = stringArray(raw?.dependsOn).filter((item) => knownIds.has(item))
   const objective = String(raw?.objective || raw?.description || '').trim()
   const expectedOutputs = stringArray(raw?.expectedOutputs?.length ? raw.expectedOutputs : [raw?.expectedOutput])
+  const expectedOutputArtifacts = stringArray(raw?.expectedOutputArtifacts?.length ? raw.expectedOutputArtifacts : expectedOutputs)
+  const inputArtifacts = stringArray(raw?.inputArtifacts?.length ? raw.inputArtifacts : raw?.requiredInputs)
 
   return {
     id,
     title: String(raw?.title || '').trim(),
     phase,
+    intent: String(raw?.intent || phase || 'general').trim(),
+    requiredCapabilities: stringArray(raw?.requiredCapabilities),
     assignedAgentId,
+    routingReason: String(raw?.routingReason || '').trim(),
     objective,
     description: objective,
     dependsOn,
+    parallelGroup: String(raw?.parallelGroup || '').trim(),
+    inputArtifacts,
+    expectedOutputArtifacts,
     requiredInputs: stringArray(raw?.requiredInputs),
     expectedOutputs,
     expectedOutput: expectedOutputs.join('\n'),
     executionMode: EXECUTION_MODES.includes(raw?.executionMode) ? raw.executionMode : 'report',
     successCriteria: stringArray(raw?.successCriteria),
+    acceptanceCriteria: stringArray(raw?.acceptanceCriteria),
     skipCondition: String(raw?.skipCondition || '').trim(),
     requiredTools: stringArray(raw?.requiredTools),
     riskLevel: String(raw?.riskLevel || '').trim(),
+    costEstimate: String(raw?.costEstimate || '').trim(),
+    requiresApproval: raw?.requiresApproval === true,
     agentCapabilityHints: stringArray(raw?.agentCapabilityHints),
   }
 }
@@ -147,18 +157,27 @@ function normalizeLegacyPlan(plan) {
     id: subtask.id || `node-${String(index + 1).padStart(2, '0')}`,
     title: subtask.title,
     phase: subtask.phase || 'review',
+    intent: subtask.intent || subtask.phase || 'general',
+    requiredCapabilities: stringArray(subtask.requiredCapabilities),
     assignedAgentId: subtask.assignedAgentId,
+    routingReason: subtask.routingReason || '',
     objective: subtask.description,
     description: subtask.description,
     dependsOn: stringArray(subtask.dependsOn),
+    parallelGroup: subtask.parallelGroup || '',
+    inputArtifacts: stringArray(subtask.inputArtifacts?.length ? subtask.inputArtifacts : subtask.requiredInputs),
+    expectedOutputArtifacts: stringArray(subtask.expectedOutputArtifacts?.length ? subtask.expectedOutputArtifacts : subtask.expectedOutputs),
     requiredInputs: stringArray(subtask.requiredInputs),
     expectedOutputs: stringArray(subtask.expectedOutputs?.length ? subtask.expectedOutputs : [subtask.expectedOutput]),
     expectedOutput: subtask.expectedOutput || '',
     executionMode: subtask.executionMode || 'report',
     successCriteria: stringArray(subtask.successCriteria),
+    acceptanceCriteria: stringArray(subtask.acceptanceCriteria),
     skipCondition: subtask.skipCondition || '',
     requiredTools: stringArray(subtask.requiredTools),
     riskLevel: subtask.riskLevel || '',
+    costEstimate: subtask.costEstimate || '',
+    requiresApproval: subtask.requiresApproval === true,
     agentCapabilityHints: stringArray(subtask.agentCapabilityHints),
   }))
   return {
@@ -238,14 +257,23 @@ export function validatePlan(plan) {
       assignedAgentId: node.assignedAgentId,
       expectedOutput: node.expectedOutputs.join('\n'),
       phase: node.phase,
+      intent: node.intent,
+      requiredCapabilities: node.requiredCapabilities,
+      routingReason: node.routingReason,
       dependsOn: node.dependsOn,
+      parallelGroup: node.parallelGroup,
+      inputArtifacts: node.inputArtifacts,
+      expectedOutputArtifacts: node.expectedOutputArtifacts,
       requiredInputs: node.requiredInputs,
       expectedOutputs: node.expectedOutputs,
       executionMode: node.executionMode,
       successCriteria: node.successCriteria,
+      acceptanceCriteria: node.acceptanceCriteria,
       skipCondition: node.skipCondition,
       requiredTools: node.requiredTools,
       riskLevel: node.riskLevel,
+      costEstimate: node.costEstimate,
+      requiresApproval: node.requiresApproval,
       agentCapabilityHints: node.agentCapabilityHints,
     })),
     acceptanceCriteria: stringArray(source.acceptanceCriteria),

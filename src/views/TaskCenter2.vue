@@ -152,11 +152,11 @@
             </div>
             <div>
               <span>子任务</span>
-              <strong>{{ completedCount(selectedTask) }}/{{ selectedTask.subtasks.length }}</strong>
+              <strong>{{ completedCount(selectedTask) }}/{{ selectedTaskSubtasks.length }}</strong>
             </div>
             <div>
               <span>成果</span>
-              <strong>{{ selectedTask.outputs.length }}</strong>
+              <strong>{{ selectedTaskOutputs.length }}</strong>
             </div>
           </div>
         </section>
@@ -207,7 +207,7 @@
             </button>
           </div>
 
-          <div v-if="selectedTask.subtasks.length === 0" class="quiet-state">等待小呦完成诊断并确认协作流程。</div>
+          <div v-if="selectedTaskSubtasks.length === 0" class="quiet-state">等待小呦完成诊断并确认协作流程。</div>
           <div v-else class="work-package-board">
             <article
               v-for="pack in workflowWorkPackages"
@@ -307,7 +307,7 @@
         </section>
 
         <section
-          v-if="selectedTask?.subtasks.length"
+          v-if="selectedTaskSubtasks.length"
           class="surface team-live"
           :class="{
             'team-live--active': liveSubtaskCount > 0,
@@ -326,7 +326,7 @@
               <span class="status-chip" :class="{ 'status-chip--pulse': recentTeamChangeCount > 0 }">
                 刚更新 {{ recentTeamChangeCount }}
               </span>
-              <span class="status-chip">产出 {{ selectedTask.outputs.length }}</span>
+              <span class="status-chip">产出 {{ selectedTaskOutputs.length }}</span>
             </div>
           </div>
           <div class="team-live-grid">
@@ -424,7 +424,7 @@
             <div>
               <p class="eyebrow">拆解计划</p>
               <h2>
-                {{ isPlanFeedbackPending ? '小呦正在调整方案' : isClarificationPending ? '小呦正在重新诊断' : isClarificationPlan ? '小呦需要补充信息' : acceptedPlan ? (selectedTask.subtasks.length ? '已确认的动态协作流程' : '确认动态协作流程') : '等待小呦任务诊断' }}
+                {{ isPlanFeedbackPending ? '小呦正在调整方案' : isClarificationPending ? '小呦正在重新诊断' : isClarificationPlan ? '小呦需要补充信息' : acceptedPlan ? (selectedTaskSubtasks.length ? '已确认的动态协作流程' : '确认动态协作流程') : '等待小呦任务诊断' }}
               </h2>
             </div>
             <div class="plan-heading-actions">
@@ -449,7 +449,7 @@
               <i class="ri-loader-4-line"></i>
               <div>
                 <strong>补充信息已提交，小呦正在重新诊断</strong>
-                <p>当前会保留你刚才的回答，等 Claude Runtime 返回后，这里会自动切换成新的参与矩阵和流程 DAG。</p>
+                <p>当前会保留你刚才的回答，等 {{ selectedTaskRuntimeLabel }} Runtime 返回后，这里会自动切换成新的参与矩阵和流程 DAG。</p>
               </div>
             </div>
             <div class="plan-review__summary">
@@ -471,7 +471,7 @@
               <i class="ri-loader-4-line"></i>
               <div>
                 <strong>方案反馈已提交，小呦正在调整计划</strong>
-                <p>当前会保留原方案作为上下文，等 Claude Runtime 返回后，这里会自动展示新版参与矩阵和流程 DAG。</p>
+                <p>当前会保留原方案作为上下文，等 {{ selectedTaskRuntimeLabel }} Runtime 返回后，这里会自动展示新版参与矩阵和流程 DAG。</p>
               </div>
             </div>
 
@@ -598,7 +598,7 @@
               </ol>
             </div>
 
-            <div v-if="selectedTask.subtasks.length === 0" class="plan-feedback-box">
+            <div v-if="selectedTaskSubtasks.length === 0" class="plan-feedback-box">
               <div>
                 <span>方案提问 / 修改意见</span>
                 <p>可以问“小呦为什么让测试参与”，也可以要求“去掉研发节点”或“先加市场调研再产品设计”。提交后不会启动流程，只会生成新版方案。</p>
@@ -636,7 +636,7 @@
             ></textarea>
           </details>
           <div class="plan-actions">
-            <span>状态：{{ acceptedPlan && selectedTask.subtasks.length ? '已确认派发' : statusText(selectedTask.status) }}</span>
+            <span>状态：{{ acceptedPlan && selectedTaskSubtasks.length ? '已确认派发' : statusText(selectedTask.status) }}</span>
             <button
               v-if="isClarificationPlan"
               class="primary-btn"
@@ -648,7 +648,7 @@
               {{ isClarificationPending ? '小呦重新诊断中' : submittingClarifications ? '提交中' : '提交补充并重新诊断' }}
             </button>
             <button
-              v-else-if="isReadyWorkflowPlan && selectedTask.subtasks.length === 0"
+              v-else-if="isReadyWorkflowPlan && selectedTaskSubtasks.length === 0"
               class="primary-btn"
               type="button"
               :disabled="confirmingPlan || isPlanFeedbackPending"
@@ -908,7 +908,7 @@
       <div class="dialog-create-form">
         <div class="dialog-create-form__head">
           <span class="agent-pill">ceo</span>
-          <p>任务会先交给小呦拆解，再由 Claude Runtime 队列派发给执行 Agent。</p>
+          <p>任务会先交给小呦拆解，再由所选执行引擎队列派发给执行 Agent。</p>
         </div>
         <label>
           <span>任务标题</span>
@@ -925,6 +925,13 @@
             class="field"
             placeholder="留空使用系统默认项目，例如 /Users/lh/git/gui-web"
           />
+        </label>
+        <label>
+          <span>执行引擎</span>
+          <select v-model="createForm.runtimeEngine" class="field field--select" aria-label="执行引擎">
+            <option value="claudecode">Claude Code（默认）</option>
+            <option value="codex">Codex</option>
+          </select>
         </label>
         <label>
           <span>优先级</span>
@@ -1121,7 +1128,7 @@
       <template #header>
         <div class="member-logs-drawer__header" v-if="activeMemberSubtask">
           <div>
-            <p class="eyebrow">Claude 原始日志</p>
+            <p class="eyebrow">{{ selectedTaskRuntimeLabel }} 原始日志</p>
             <h2>{{ agentName(activeMemberSubtask.assigned_agent_id) }} · {{ activeMemberSubtask.title }}</h2>
           </div>
           <button class="ghost-btn ghost-btn--compact" type="button" :disabled="memberLogsLoading" @click="fetchMemberRunLogs(activeMemberSubtask.id)">
@@ -1132,7 +1139,7 @@
       </template>
       <div v-if="activeMemberSubtask" class="member-terminal">
         <div class="member-terminal__bar">
-          <span class="member-terminal__pill">claude-runtime</span>
+          <span class="member-terminal__pill">{{ selectedTaskRuntimeSlug }}</span>
           <span>status={{ subtaskStatusText(activeMemberSubtask.status) }}</span>
           <span>progress={{ activeMemberSubtask.progress || 0 }}%</span>
           <span>run={{ activeMemberRunId || '--' }}</span>
@@ -1142,13 +1149,13 @@
         </div>
         <div ref="memberLogListRef" class="member-terminal__screen">
           <div v-if="memberLogsLoading && activeMemberTerminalLogs.length === 0" class="member-terminal__empty">
-            正在同步 Claude Runtime 日志...
+            正在同步 {{ selectedTaskRuntimeLabel }} Runtime 日志...
           </div>
           <div v-else-if="memberLogsError && activeMemberTerminalLogs.length === 0" class="member-terminal__empty member-terminal__empty--error">
             {{ memberLogsError }}
           </div>
           <div v-else-if="activeMemberTerminalLogs.length === 0" class="member-terminal__empty">
-            暂无执行日志。Claude Runtime 开始运行后，这里会实时显示步骤、工具、文件和结果。
+            暂无执行日志。{{ selectedTaskRuntimeLabel }} Runtime 开始运行后，这里会实时显示步骤、工具、文件和结果。
           </div>
           <article
             v-for="log in activeMemberTerminalLogs"
@@ -1308,6 +1315,7 @@ const createForm = reactive({
   title: '',
   description: '',
   projectCwd: '',
+  runtimeEngine: 'claudecode' as const,
   priority: 'normal',
 })
 const createDialog = ref(false)
@@ -1435,6 +1443,7 @@ type TaskFlowCallout = {
 const tasks = computed(() => tasksStore.tasks)
 const selectedTask = computed(() => tasksStore.selectedTask)
 const selectedTaskEvents = computed(() => selectedTask.value?.events || [])
+const selectedTaskSubtasks = computed(() => selectedTask.value?.subtasks || [])
 const selectedTaskOutputs = computed(() => selectedTask.value?.outputs || [])
 const isLight = computed(() => themeStore.isLight)
 const runtimeStatus = ref<{ healthy: boolean; running: number; queued: number; maxConcurrency: number; maxTurns?: number } | null>(null)
@@ -1443,13 +1452,16 @@ const allConnected = computed(() => !!runtimeStatus.value?.healthy)
 const anyConnected = computed(() => !!runtimeStatus.value?.healthy)
 const aiStatus = computed<'connected' | 'disconnected' | 'error'>(() => runtimeStatus.value?.healthy ? 'connected' : 'disconnected')
 const aiStatusText = computed(() => {
-  if (!runtimeStatus.value?.healthy) return 'Claude Runtime 未就绪'
-  return `Claude Runtime 就绪 · 运行 ${runtimeStatus.value.running} / 排队 ${runtimeStatus.value.queued} / 并发 ${runtimeStatus.value.maxConcurrency}`
+  const label = selectedTaskRuntimeLabel.value
+  if (!runtimeStatus.value?.healthy) return `${label} Runtime 未就绪`
+  return `${label} Runtime 就绪 · 运行 ${runtimeStatus.value.running} / 排队 ${runtimeStatus.value.queued} / 并发 ${runtimeStatus.value.maxConcurrency}`
 })
 const timestampText = computed(() => new Date(currentTimeMs.value).toLocaleString('zh-CN', { hour12: false }))
 const currentUserLabel = computed(() => authStore.user?.username || 'Admin')
 const canCreateTask = computed(() => createForm.title.trim().length > 0 && createForm.description.trim().length > 0)
-const canFinalize = computed(() => !!selectedTask.value?.subtasks.length && selectedTask.value.subtasks.every(subtask => ['completed', 'skipped'].includes(subtask.status)))
+const selectedTaskRuntimeLabel = computed(() => taskRuntimeLabel(selectedTask.value))
+const selectedTaskRuntimeSlug = computed(() => taskRuntimeSlug(selectedTask.value))
+const canFinalize = computed(() => selectedTaskSubtasks.value.length > 0 && selectedTaskSubtasks.value.every(subtask => ['completed', 'skipped'].includes(subtask.status)))
 const hasReviewSummary = computed(() => !!selectedTask.value?.summary?.trim())
 const summaryRequested = computed(() => selectedTaskEvents.value.some(event => event.type === 'summary.request.queued'))
 const hasSummaryOutput = computed(() => selectedTaskOutputs.value.some(output => isSummaryOutput(output)))
@@ -1476,13 +1488,13 @@ const canArchiveTask = computed(() =>
   selectedTask.value.status !== 'completed' &&
   reviewSummaryReady.value
 )
-const orderedTaskSubtasks = computed(() => sortSubtasksByExecutionOrder(selectedTask.value?.subtasks || [], selectedTask.value?.plan_json || null))
+const orderedTaskSubtasks = computed(() => sortSubtasksByExecutionOrder(selectedTaskSubtasks.value, selectedTask.value?.plan_json || null))
 const summaryNodeEvents = computed(() =>
   selectedTaskEvents.value.filter(event => event.type.startsWith('summary.') || event.type === 'workflow.completed')
 )
 const reviewNode = computed<Subtask | null>(() => {
   const task = selectedTask.value
-  if (!task?.subtasks.length || !canFinalize.value) return null
+  if (!selectedTaskSubtasks.value.length || !canFinalize.value) return null
   return {
     id: REVIEW_NODE_ID,
     task_id: task.id,
@@ -1508,7 +1520,7 @@ const collaborationNodes = computed(() => {
   if (reviewNode.value) nodes.push(reviewNode.value)
   return nodes
 })
-const activeMemberSubtask = computed(() => selectedTask.value?.subtasks.find(subtask => subtask.id === activeMemberSubtaskId.value) || null)
+const activeMemberSubtask = computed(() => selectedTaskSubtasks.value.find(subtask => subtask.id === activeMemberSubtaskId.value) || null)
 const activeMemberRunId = computed(() => {
   const subtask = activeMemberSubtask.value
   if (!subtask) return ''
@@ -1653,6 +1665,27 @@ function cleanText(value: unknown, max = 120) {
   return normalized.length > max ? `${normalized.slice(0, max - 1)}…` : normalized
 }
 
+function taskRuntimeLabel(task?: Task | null) {
+  return task?.runtime_engine === 'codex' ? 'Codex' : 'Claude Code'
+}
+
+function taskRuntimeSlug(task?: Task | null) {
+  return task?.runtime_engine === 'codex' ? 'codex-runtime' : 'claude-runtime'
+}
+
+function runtimeLabelForSelectedTask() {
+  return selectedTaskRuntimeLabel.value
+}
+
+function replaceRuntimeCopy(message = '', task?: Task | null) {
+  const targetTask = task || selectedTask.value
+  const label = taskRuntimeLabel(targetTask)
+  return String(message || '')
+    .replace(/Claude Runtime/g, `${label} Runtime`)
+    .replace(/Claude Code/g, label)
+    .replace(/claude-runtime/g, taskRuntimeSlug(targetTask))
+}
+
 function eventPayload(event: TaskEvent) {
   return event.payload_json && typeof event.payload_json === 'object'
     ? event.payload_json
@@ -1789,7 +1822,7 @@ function insightHeadline(event: TaskEvent) {
     case 'agent.start':
       return 'Agent 开始执行'
     case 'agent.run.queued':
-      return '进入 Claude Runtime 队列'
+      return `进入 ${runtimeLabelForSelectedTask()} Runtime 队列`
     case 'subtask.retry.queued':
       return '子任务已重新入队'
     case 'plan.accepted':
@@ -1814,7 +1847,7 @@ function terminalEventLabel(event: TaskEvent) {
     case 'agent.start':
       return 'START'
     case 'agent.assistant':
-      return 'CLAUDE'
+      return selectedTask.value?.runtime_engine === 'codex' ? 'CODEX' : 'CLAUDE'
     case 'agent.tool':
       return 'TOOL'
     case 'outputs.bound':
@@ -1847,12 +1880,12 @@ function terminalEventContent(event: TaskEvent) {
       : toolName === 'Bash'
         ? 'command tool'
         : 'read tool')
-    return toolName ? `invoke ${categoryLabel}: ${toolName}` : event.message
+    return toolName ? `invoke ${categoryLabel}: ${toolName}` : replaceRuntimeCopy(event.message)
   }
   if (event.type === 'agent.assistant') {
-    return String(event.message || '')
+    return replaceRuntimeCopy(event.message)
   }
-  return String(event.message || '').trim()
+  return replaceRuntimeCopy(event.message).trim()
 }
 
 function mergeAssistantContent(previous: string, incoming: string) {
@@ -1889,8 +1922,8 @@ function runLogLabel(type: string) {
     start: 'START',
     system: 'SYSTEM',
     tool: 'TOOL',
-    'assistant.delta': 'CLAUDE',
-    'assistant.snapshot': 'CLAUDE',
+    'assistant.delta': selectedTask.value?.runtime_engine === 'codex' ? 'CODEX' : 'CLAUDE',
+    'assistant.snapshot': selectedTask.value?.runtime_engine === 'codex' ? 'CODEX' : 'CLAUDE',
     output: 'OUTPUT',
     'code.assets': 'CODE',
     result: 'RESULT',
@@ -1953,7 +1986,7 @@ function toTimelineInsight(event: TaskEvent, outputs = selectedTaskOutputs.value
     tone: eventTone(event.type),
     badge: EVENT_BADGES[event.type] || event.type,
     headline: insightHeadline(event),
-    detail: cleanText(event.message, 160),
+    detail: cleanText(replaceRuntimeCopy(event.message), 160),
     actor: agentName(event.agent_id || 'system'),
     fileLabel: files,
     linkedOutput: output,
@@ -2082,7 +2115,7 @@ const activeMemberTerminalLogs = computed<TerminalLogEntry[]>(() => {
 function terminalPrompt(log: TerminalLogEntry) {
   switch (log.sourceType) {
     case 'agent.assistant':
-      return 'claude >'
+      return selectedTask.value?.runtime_engine === 'codex' ? 'codex  >' : 'claude >'
     case 'queue':
       return 'queue  >'
     case 'start':
@@ -2130,7 +2163,7 @@ function storyStepDefinition(log: TerminalLogEntry) {
   if (source === 'tool' || source === 'agent.tool' || label === 'TOOL') {
     return { key: 'tool', title: '使用工具', icon: 'ri-tools-line', tone: 'progress' as EventTone }
   }
-  if (source === 'agent.assistant' || label === 'CLAUDE') {
+  if (source === 'agent.assistant' || label === 'CLAUDE' || label === 'CODEX') {
     return { key: 'assistant', title: '生成内容', icon: 'ri-quill-pen-line', tone: 'progress' as EventTone }
   }
   if (source === 'code.assets' || source === 'code.assets.bound' || label === 'CODE') {
@@ -2207,10 +2240,10 @@ const activeMemberStoryTitle = computed(() => {
   if (subtask.status === 'skipped') return '该节点已跳过'
   if (subtask.status === 'completed') return '执行已完成，报告可进入产出区查看'
   if (subtask.status === 'running') return '正在执行，关键步骤会持续更新'
-  if (subtask.status === 'queued') return '节点已排队，等待 Claude Runtime 执行'
+  if (subtask.status === 'queued') return `节点已排队，等待 ${runtimeLabelForSelectedTask()} Runtime 执行`
   if (subtask.status === 'ready') return '依赖已满足，可以启动执行'
   if (subtask.status === 'blocked') return '等待前置依赖完成'
-  if (subtask.status === 'assigned') return '任务已分配，等待进入 Claude Runtime'
+  if (subtask.status === 'assigned') return `任务已分配，等待进入 ${runtimeLabelForSelectedTask()} Runtime`
   return '任务等待执行'
 })
 
@@ -2240,7 +2273,7 @@ const isClarificationPending = computed(() =>
   isClarificationPlan.value &&
   selectedTask.value?.status === 'planning' &&
   !!acceptedPlan.value?.clarificationAnswers &&
-  selectedTask.value.subtasks.length === 0
+  selectedTaskSubtasks.value.length === 0
 )
 const isReadyWorkflowPlan = computed(() => acceptedPlan.value?.decision === 'ready_to_plan' || !!acceptedPlan.value?.workflow?.length || !!acceptedPlan.value?.subtasks?.length)
 const isPlanFeedbackPending = computed(() =>
@@ -2249,7 +2282,7 @@ const isPlanFeedbackPending = computed(() =>
     isReadyWorkflowPlan.value &&
     selectedTask.value?.status === 'planning' &&
     !!acceptedPlan.value?.planFeedback &&
-    selectedTask.value.subtasks.length === 0
+    selectedTaskSubtasks.value.length === 0
   )
 )
 const isPlanFeedbackBusy = computed(() => submittingPlanFeedback.value || isPlanFeedbackPending.value)
@@ -2513,7 +2546,7 @@ const taskFlowCallout = computed<TaskFlowCallout>(() => {
 
 const reviewHint = computed(() => {
   if (selectedTask.value?.status === 'completed') return '任务已经归档完成，可在成果资产和事件流中回看最终结果。'
-  if ((summaryRequested.value || hasActiveSummaryRun.value) && !reviewSummaryReady.value) return '小呦最终汇总已自动进入 Claude Runtime，生成后会在成果资产中高亮显示。'
+  if ((summaryRequested.value || hasActiveSummaryRun.value) && !reviewSummaryReady.value) return `小呦最终汇总已自动进入 ${runtimeLabelForSelectedTask()} Runtime，生成后会在成果资产中高亮显示。`
   if (reviewSummaryReady.value) return '汇总报告已生成，请在成果资产里查看高亮的汇总报告，再点击“验收归档”。'
   if (canFinalize.value) return '所有子任务已完成，系统会自动触发小呦最终汇总；汇总生成后即可验收归档。'
   return '进入验收前，需要先等待所有子任务执行完成。'
@@ -2647,7 +2680,7 @@ function agentWorkbench(subtask: Subtask): AgentWorkbenchSummary {
     : subtask.error || subtask.result_summary || latestEvent?.message || subtask.description
   const lastToolEvent = [...events].reverse().find(event => event.type === 'agent.tool')
   const statusNote = lastToolEvent
-    ? cleanText(lastToolEvent.message.replace(/Claude Code 使用(?:只读工具|读取工具|写入工具|命令工具|工具)：/, '最近工具：'), 48)
+    ? cleanText(replaceRuntimeCopy(lastToolEvent.message).replace(/(?:Claude Code|Codex) 使用(?:只读工具|读取工具|写入工具|命令工具|工具)：/, '最近工具：'), 48)
     : latestOutput
       ? `最新文件 ${latestOutput.name}`
       : isReviewNode
@@ -2778,14 +2811,16 @@ async function createTask() {
       description: createForm.description.trim(),
       priority: createForm.priority,
       projectCwd: createForm.projectCwd.trim() || undefined,
+      runtimeEngine: createForm.runtimeEngine,
     })
     await tasksStore.fetchTask(response.task.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
     await scrollTaskRowIntoView(response.task.id)
     createForm.title = ''
     createForm.description = ''
     createForm.projectCwd = ''
+    createForm.runtimeEngine = 'claudecode'
     createDialog.value = false
-    ElMessage.success('任务已创建，小呦拆解已进入 Claude Runtime 队列')
+    ElMessage.success(`任务已创建，小呦拆解已进入 ${taskRuntimeLabel(response.task)} Runtime 队列`)
     await refreshRuntimeStatus()
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '创建任务失败')
@@ -2881,7 +2916,7 @@ async function rerunPlan() {
   try {
     const response = await tasksStore.runPlan(selectedTask.value.id)
     await tasksStore.fetchTask(response.task.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
-    ElMessage.success('小呦拆解已重新进入 Claude Runtime 队列')
+    ElMessage.success(`小呦拆解已重新进入 ${runtimeLabelForSelectedTask()} Runtime 队列`)
     await refreshRuntimeStatus()
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '重新拆解失败')
@@ -2896,7 +2931,7 @@ async function retrySubtask(subtaskId: string) {
   try {
     const response = await tasksStore.retrySubtask(subtaskId)
     await tasksStore.fetchTask(response.task.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
-    ElMessage.success('子任务已进入 Claude Runtime 重试队列')
+    ElMessage.success(`子任务已进入 ${runtimeLabelForSelectedTask()} Runtime 重试队列`)
     await refreshRuntimeStatus()
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '重试失败')
@@ -2911,7 +2946,7 @@ async function runSingleSubtask(subtaskId: string) {
   try {
     const response = await tasksStore.runSubtask(subtaskId)
     await tasksStore.fetchTask(response.task.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
-    ElMessage.success('流程节点已进入 Claude Runtime 队列')
+    ElMessage.success(`流程节点已进入 ${runtimeLabelForSelectedTask()} Runtime 队列`)
     await refreshRuntimeStatus()
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '启动节点失败')
@@ -2995,7 +3030,7 @@ async function finalizeTask() {
   try {
     await tasksStore.finalizeTask(selectedTask.value.id)
     await tasksStore.fetchTask(selectedTask.value.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
-    ElMessage.success('最终汇总已进入 Claude Runtime 队列')
+    ElMessage.success(`最终汇总已进入 ${runtimeLabelForSelectedTask()} Runtime 队列`)
     await refreshRuntimeStatus()
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '汇总请求失败')
@@ -3434,11 +3469,11 @@ function toggleTheme() {
 
 function handleConnectAll() {
   refreshRuntimeStatus()
-  ElMessage.success('已刷新 Claude Runtime 状态')
+  ElMessage.success(`已刷新 ${runtimeLabelForSelectedTask()} Runtime 状态`)
 }
 
 function handleDisconnectAll() {
-  ElMessage.warning('Claude Runtime 运行任务请在任务事件中取消')
+  ElMessage.warning(`${runtimeLabelForSelectedTask()} Runtime 运行任务请在任务事件中取消`)
 }
 
 function closeTaskEventStream() {
@@ -3626,7 +3661,7 @@ watch(
 watch(
   () => acceptedPlanRaw.value,
   (raw) => {
-    if (raw && (!planDraft.value.trim() || selectedTask.value?.subtasks.length === 0)) {
+    if (raw && (!planDraft.value.trim() || selectedTaskSubtasks.value.length === 0)) {
       planDraft.value = raw
     }
     if (isClarificationPlan.value) {
@@ -3654,7 +3689,7 @@ watch(
   () => [
     selectedTask.value?.id,
     selectedTask.value?.status,
-    selectedTask.value?.subtasks.length,
+    selectedTaskSubtasks.value.length,
     acceptedPlan.value?.planFeedbackResolvedAt,
   ],
   ([taskId, status, subtaskCount]) => {

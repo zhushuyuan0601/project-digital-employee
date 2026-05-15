@@ -105,6 +105,7 @@ export function initializeTaskSchema() {
       title TEXT NOT NULL,
       description TEXT NOT NULL,
       project_cwd TEXT,
+      runtime_engine TEXT NOT NULL DEFAULT 'claudecode',
       status TEXT NOT NULL DEFAULT 'draft',
       coordinator_agent_id TEXT NOT NULL DEFAULT 'xiaomu',
       coordinator_session_key TEXT NOT NULL DEFAULT 'agent:ceo:main',
@@ -120,6 +121,7 @@ export function initializeTaskSchema() {
   `)
 
   ensureColumn(db, 'tasks', 'project_cwd', 'TEXT')
+  ensureColumn(db, 'tasks', 'runtime_engine', "TEXT NOT NULL DEFAULT 'claudecode'")
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS subtasks (
@@ -311,23 +313,24 @@ export function initializeTaskSchema() {
   console.log('[DB] Task orchestration tables initialized')
 }
 
-export function createTask({ title, description, priority = 'normal', createdBy = 'operator', projectCwd = null }) {
+export function createTask({ title, description, priority = 'normal', createdBy = 'operator', projectCwd = null, runtimeEngine = 'claudecode' }) {
   const db = getDatabase()
   const id = `task-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const coordinatorSessionKey = `claude:task:${id}:xiaomu`
+  const engine = ['claudecode', 'codex'].includes(runtimeEngine) ? runtimeEngine : 'claudecode'
   const stmt = db.prepare(`
     INSERT INTO tasks (
-      id, title, description, project_cwd, status, coordinator_agent_id, coordinator_session_key,
+      id, title, description, project_cwd, runtime_engine, status, coordinator_agent_id, coordinator_session_key,
       created_by, priority, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, 'planning', 'xiaomu', ?, ?, ?, unixepoch(), unixepoch())
+    ) VALUES (?, ?, ?, ?, ?, 'planning', 'xiaomu', ?, ?, ?, unixepoch(), unixepoch())
   `)
-  stmt.run(id, title, description, projectCwd || null, coordinatorSessionKey, createdBy, priority)
+  stmt.run(id, title, description, projectCwd || null, engine, coordinatorSessionKey, createdBy, priority)
   addTaskEvent({
     taskId: id,
     agentId: 'xiaomu',
     type: 'task.created',
     message: `任务已创建，等待小呦拆解：${title}`,
-    payload: { priority, projectCwd: projectCwd || null },
+    payload: { priority, projectCwd: projectCwd || null, runtimeEngine: engine },
   })
   return getTaskDetail(id)
 }
@@ -527,6 +530,8 @@ export function createSubtasksFromPlan(taskId, plan, agentMap = runtimeAgentMap(
   const task = getTaskDetail(taskId)
   if (!task) return null
   if (plan?.decision === 'need_clarification') return task
+  const runtimeEngine = task.runtime_engine === 'codex' ? 'codex' : 'claudecode'
+  const runtimeMode = runtimeEngine === 'codex' ? 'codex-runtime' : 'claude-runtime'
 
   const existing = db.prepare('SELECT COUNT(*) as count FROM subtasks WHERE task_id = ?').get(taskId)
   if (existing.count > 0) {
@@ -613,7 +618,7 @@ export function createSubtasksFromPlan(taskId, plan, agentMap = runtimeAgentMap(
     taskId,
     type: 'plan.confirmed',
     message: `平台已确认动态协作计划，创建 ${plan.workflow?.length || plan.subtasks?.length || 0} 个流程节点`,
-    payload: { nodeCount: plan.workflow?.length || plan.subtasks?.length || 0, mode: 'claude-runtime' },
+    payload: { nodeCount: plan.workflow?.length || plan.subtasks?.length || 0, mode: runtimeMode, runtimeEngine },
   })
 
   return getTaskDetail(taskId)

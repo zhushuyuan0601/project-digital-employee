@@ -1,8 +1,9 @@
 export type TaskStatus = 'draft' | 'planning' | 'clarifying' | 'dispatching' | 'running' | 'reviewing' | 'completed' | 'failed' | 'cancelled'
 export type SubtaskStatus = 'pending' | 'ready' | 'queued' | 'assigned' | 'running' | 'waiting_user' | 'blocked' | 'completed' | 'failed' | 'skipped'
 export type TaskOutputStatus = 'pending_review' | 'accepted' | 'rejected'
+export type RuntimeEngine = 'claudecode' | 'codex'
 
-export type WorkflowPhase = 'research' | 'product' | 'design' | 'engineering' | 'testing' | 'review' | 'summary'
+export type WorkflowPhase = string
 export type WorkflowExecutionMode = 'report' | 'code' | 'test'
 export type WorkflowTopology = 'hierarchical' | 'parallel' | 'review-gate'
 
@@ -23,17 +24,26 @@ export interface WorkflowNodePlan {
   id: string
   title: string
   phase: WorkflowPhase
+  intent?: string
+  requiredCapabilities?: string[]
   assignedAgentId: string
+  routingReason?: string
   objective: string
   description?: string
   dependsOn: string[]
+  parallelGroup?: string
+  inputArtifacts?: string[]
+  expectedOutputArtifacts?: string[]
   requiredInputs: string[]
   expectedOutputs: string[]
   executionMode: WorkflowExecutionMode
   successCriteria: string[]
+  acceptanceCriteria?: string[]
   skipCondition?: string
   requiredTools?: string[]
   riskLevel?: string
+  costEstimate?: string
+  requiresApproval?: boolean
   agentCapabilityHints?: string[]
 }
 
@@ -44,14 +54,23 @@ export interface TaskPlanSubtask {
   assignedAgentId: string
   expectedOutput?: string
   phase?: WorkflowPhase
+  intent?: string
+  requiredCapabilities?: string[]
+  routingReason?: string
   dependsOn?: string[]
+  parallelGroup?: string
+  inputArtifacts?: string[]
+  expectedOutputArtifacts?: string[]
   requiredInputs?: string[]
   expectedOutputs?: string[]
   executionMode?: WorkflowExecutionMode
   successCriteria?: string[]
+  acceptanceCriteria?: string[]
   skipCondition?: string
   requiredTools?: string[]
   riskLevel?: string
+  costEstimate?: string
+  requiresApproval?: boolean
   agentCapabilityHints?: string[]
 }
 
@@ -139,6 +158,7 @@ export interface Task {
   title: string
   description: string
   project_cwd?: string | null
+  runtime_engine?: RuntimeEngine
   status: TaskStatus
   coordinator_agent_id: string
   coordinator_session_key: string
@@ -164,6 +184,7 @@ export interface CreateTaskRequest {
   description: string
   priority?: string
   projectCwd?: string
+  runtimeEngine?: RuntimeEngine
 }
 
 export interface TaskDispatch {

@@ -71,6 +71,7 @@ const RUNTIME_ENV_KEYS = [
   'CLAUDE_OUTPUT_ROOT',
   'CLAUDE_AGENT_MODEL',
   'CLAUDE_RUNTIME_MOCK',
+  'CODEX_AGENT_MODEL',
 ]
 
 const require = createRequire(import.meta.url)
@@ -134,6 +135,18 @@ function findExecutable(name) {
     if (existsSync(candidate) && canExecutePath(candidate)) return candidate
   }
   return null
+}
+
+function runtimeEngineForTask(task) {
+  return task?.runtime_engine === 'codex' ? 'codex' : 'claudecode'
+}
+
+function runtimeMode(engine) {
+  return engine === 'codex' ? 'codex-runtime' : 'claude-runtime'
+}
+
+function runtimeQueueLabel(engine) {
+  return engine === 'codex' ? 'Codex Runtime' : 'Claude Code Runtime'
 }
 
 function bundledClaudePackageName() {
@@ -287,6 +300,7 @@ async function runtimeDiagnostics() {
     } catch {}
   }
   const claudeCliPath = findExecutable(process.platform === 'win32' ? 'claude.cmd' : 'claude')
+  const codexCliPath = findExecutable(process.platform === 'win32' ? 'codex.cmd' : 'codex')
   const agentDefaults = Object.fromEntries(
     listAgentDefinitions().map((agent) => [agent.id, agent.defaultModel || ''])
   )
@@ -301,17 +315,19 @@ async function runtimeDiagnostics() {
     sdkPath,
     claudePath: claudeCliPath || claudeBundledPath || null,
     claudeCliPath,
+    codexCliPath,
     claudeBundledPath,
-    runtimeDriver: sdkAvailable ? 'claude-agent-sdk' : 'unavailable',
+    runtimeDriver: sdkAvailable ? 'multi-engine-runtime' : 'unavailable',
     claudeSdkVersion,
     claudeCodeVersion,
     nodePath: process.execPath,
     pathEnv: process.env.PATH || '',
     modelRouting: {
       globalModel: config.model || '',
+      codexModel: process.env.CODEX_AGENT_MODEL || '',
       defaultModel: config.model || 'Claude Code default',
       agentDefaults,
-      precedence: ['agent.defaultModel', 'CLAUDE_AGENT_MODEL', 'Claude Code default'],
+      precedence: ['claudecode: agent.defaultModel', 'claudecode: CLAUDE_AGENT_MODEL', 'codex: CODEX_AGENT_MODEL', 'engine default'],
     },
     hasEnvFile: existsSync(join(PROJECT_ROOT, '.env')),
     configSource: existsSync(join(PROJECT_ROOT, '.env')) ? 'defaults + .env overrides' : 'built-in defaults',
@@ -621,13 +637,16 @@ router.post('/tasks', (req, res) => {
     }
 
     const projectCwd = normalizeProjectCwd(req.body?.projectCwd || req.body?.project_cwd)
-    const task = createTask({ title, description, priority, projectCwd })
+    const runtimeEngine = ['claudecode', 'codex'].includes(req.body?.runtimeEngine || req.body?.runtime_engine)
+      ? (req.body?.runtimeEngine || req.body?.runtime_engine)
+      : 'claudecode'
+    const task = createTask({ title, description, priority, projectCwd, runtimeEngine })
     addTaskEvent({
       taskId: task.id,
       agentId: 'xiaomu',
       type: 'plan.request.queued',
-      message: '已生成小呦任务诊断请求，进入 Claude Runtime 队列',
-      payload: { sessionKey: task.coordinator_session_key, mode: 'claude-runtime', projectCwd },
+      message: `已生成小呦任务诊断请求，进入 ${runtimeQueueLabel(runtimeEngine)} 队列`,
+      payload: { sessionKey: task.coordinator_session_key, mode: runtimeMode(runtimeEngine), projectCwd, runtimeEngine },
     })
 
     const run = enqueuePlanRun(task.id)
@@ -991,12 +1010,13 @@ router.post('/tasks/:id/workflow/run', (req, res) => {
   try {
     const task = getTaskDetail(req.params.id)
     if (!task) return res.status(404).json({ success: false, error: 'Task not found' })
+    const runtimeEngine = runtimeEngineForTask(task)
     const runs = runReadyWorkflow(task.id)
     addTaskEvent({
       taskId: task.id,
       type: 'task.dispatch.queued',
       message: `依赖调度器已启动，本轮入队 ${runs.length} 个可执行节点`,
-      payload: { runCount: runs.length, mode: 'claude-runtime' },
+      payload: { runCount: runs.length, mode: runtimeMode(runtimeEngine), runtimeEngine },
     })
     res.json({ success: true, task: getTaskDetail(task.id), runs })
   } catch (err) {
@@ -1076,14 +1096,16 @@ router.post('/subtasks/:id/retry', (req, res) => {
   try {
     const subtask = getSubtask(req.params.id)
     if (!subtask) return res.status(404).json({ success: false, error: 'Subtask not found' })
+    const task = getTaskDetail(subtask.task_id)
+    const runtimeEngine = runtimeEngineForTask(task)
     updateSubtask(subtask.id, { status: 'ready', progress: 10, error: null })
     addTaskEvent({
       taskId: subtask.task_id,
       subtaskId: subtask.id,
       agentId: subtask.assigned_agent_id,
       type: 'subtask.retry.queued',
-      message: '已生成流程节点重试请求，进入 Claude Runtime 队列',
-      payload: { sessionKey: subtask.session_key, mode: 'claude-runtime' },
+      message: `已生成流程节点重试请求，进入 ${runtimeQueueLabel(runtimeEngine)} 队列`,
+      payload: { sessionKey: subtask.session_key, mode: runtimeMode(runtimeEngine), runtimeEngine },
     })
     const run = retrySubtaskRun(subtask.id, { resumeSession: Boolean(req.body?.resumeSession) })
     res.json({ success: true, task: getTaskDetail(subtask.task_id), run })
@@ -1262,13 +1284,14 @@ router.post('/tasks/:id/finalize', (req, res) => {
     if (!task.subtasks.length || !task.subtasks.every((subtask) => ['completed', 'skipped'].includes(subtask.status))) {
       return res.status(400).json({ success: false, error: 'All subtasks must be completed before finalize' })
     }
+    const runtimeEngine = runtimeEngineForTask(task)
     updateTask(task.id, { status: 'reviewing' })
     addTaskEvent({
       taskId: task.id,
       agentId: 'xiaomu',
       type: 'summary.request.queued',
-      message: '已生成最终汇总请求，进入 Claude Runtime 队列',
-      payload: { sessionKey: task.coordinator_session_key, mode: 'claude-runtime' },
+      message: `已生成最终汇总请求，进入 ${runtimeQueueLabel(runtimeEngine)} 队列`,
+      payload: { sessionKey: task.coordinator_session_key, mode: runtimeMode(runtimeEngine), runtimeEngine },
     })
     const run = enqueueSummaryRun(task.id)
     res.json({ success: true, task: getTaskDetail(task.id), summaryRunId: run.id, run })

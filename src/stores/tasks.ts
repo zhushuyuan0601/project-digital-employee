@@ -30,7 +30,11 @@ type RuntimeEventPayload = {
 }
 
 function taskWithoutEvents(task: Task): Task {
-  const next = { ...task }
+  const next = {
+    ...task,
+    subtasks: Array.isArray(task.subtasks) ? task.subtasks : [],
+    outputs: Array.isArray(task.outputs) ? task.outputs : [],
+  }
   delete next.events
   return next
 }
@@ -478,7 +482,7 @@ export const useTasksStore = defineStore('tasks', () => {
     if (selectedTask.value) {
       selectedTask.value = {
         ...selectedTask.value,
-        outputs: selectedTask.value.outputs.map(output => output.id === outputId ? response.output : output),
+        outputs: (selectedTask.value.outputs || []).map(output => output.id === outputId ? response.output : output),
       }
     }
     return response.output

@@ -11,6 +11,18 @@ export function setWorkflowRuntimeApi(api) {
   runtimeApi = api
 }
 
+function runtimeEngineForTask(task) {
+  return task?.runtime_engine === 'codex' ? 'codex' : 'claudecode'
+}
+
+function runtimeMode(engine) {
+  return engine === 'codex' ? 'codex-runtime' : 'claude-runtime'
+}
+
+function runtimeQueueLabel(engine) {
+  return engine === 'codex' ? 'Codex Runtime' : 'Claude Code Runtime'
+}
+
 function requireRuntimeApi() {
   if (!runtimeApi?.enqueueSubtaskRun || !runtimeApi?.enqueueSummaryRun) {
     throw new Error('Workflow runtime API has not been configured')
@@ -51,6 +63,7 @@ export function runWorkflowScheduler(taskId) {
   const runs = enqueueSubtasksForTask(taskId)
   const allDone = task.subtasks.length > 0 && task.subtasks.every((subtask) => ['completed', 'skipped'].includes(subtask.status))
   if (allDone && !hasActiveSummaryRun(taskId) && task.status !== 'completed') {
+    const runtimeEngine = runtimeEngineForTask(task)
     addTaskEvent({
       taskId,
       agentId: 'xiaomu',
@@ -61,8 +74,8 @@ export function runWorkflowScheduler(taskId) {
       taskId,
       agentId: 'xiaomu',
       type: 'summary.request.queued',
-      message: '所有流程节点已完成，小呦最终汇总已自动进入 Claude Runtime 队列',
-      payload: { sessionKey: task.coordinator_session_key, mode: 'claude-runtime', trigger: 'auto' },
+      message: `所有流程节点已完成，小呦最终汇总已自动进入 ${runtimeQueueLabel(runtimeEngine)} 队列`,
+      payload: { sessionKey: task.coordinator_session_key, mode: runtimeMode(runtimeEngine), runtimeEngine, trigger: 'auto' },
     })
     runs.push(enqueueSummaryRun(taskId))
   }

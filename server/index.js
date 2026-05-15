@@ -10,6 +10,7 @@ import { promises as fs, existsSync, readdirSync, statSync, readFileSync } from 
 import { fileURLToPath } from 'url'
 import { dirname, join, resolve } from 'path'
 import skillsRouter from './routes/skills.js'
+import agentsRouter from './routes/agents.js'
 import taskRouter from './routes/tasks.js'
 import analysisRouter from './routes/analysis.js'
 import groupChatRouter from './routes/group-chat.js'
@@ -1203,6 +1204,7 @@ if (runtimeRecovery.cleaned > 0) {
 }
 startMailScanner()
 app.use('/api', createAutomationRouter())
+app.use('/api', agentsRouter)
 app.use('/api', taskRouter)
 app.use('/api', groupChatRouter)
 app.use('/api', mailRouter)

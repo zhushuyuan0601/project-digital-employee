@@ -1,5 +1,8 @@
 import { request } from './base'
+import type { AgentDefinition } from '@/types/agent'
 import type { CreateTaskRequest, Task, TaskDispatch, TaskEvent, TaskOutput } from '@/types/task'
+
+export type { AgentDefinition } from '@/types/agent'
 
 export interface TaskResponse {
   success: boolean
@@ -43,29 +46,6 @@ export interface RuntimeAgentStat {
   cancelled: number
   total: number
   avgDurationMs: number
-}
-
-export interface AgentDefinition {
-  id: string
-  name: string
-  roleName: string
-  reportName?: string
-  description: string
-  boundary: string
-  runtimeAgentId: string
-  roleId: string
-  capabilities: string[]
-  allowedTools: string[]
-  inputContract: string[]
-  outputContract: string[]
-  riskLevel: string
-  defaultModel?: string
-  maxConcurrency: number
-  enabled: boolean
-  sortOrder: number
-  coordinator: boolean
-  createdAt?: number
-  updatedAt?: number
 }
 
 export interface RuntimeConfig {
@@ -133,6 +113,7 @@ interface RuntimeStatusResponse {
     sdkPath?: string | null
     claudePath?: string | null
     claudeCliPath?: string | null
+    codexCliPath?: string | null
     claudeBundledPath?: string | null
     runtimeDriver?: string
     claudeSdkVersion?: string | null
@@ -141,6 +122,7 @@ interface RuntimeStatusResponse {
     pathEnv?: string
     modelRouting?: {
       globalModel?: string
+      codexModel?: string
       defaultModel?: string
       agentDefaults?: Record<string, string>
       precedence?: string[]

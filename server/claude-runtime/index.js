@@ -53,6 +53,7 @@ import {
 } from './roles.js'
 import { RUNTIME_AGENT_MAP, extractJsonPlan, validatePlan } from './plan-utils.js'
 import { runClaudeQuery } from './sdk-runner.js'
+import { runCodexQuery } from './codex-runner.js'
 import { ensureTaskWorkspace } from './workspace.js'
 import { codeAssetCount, diffCodeAssets, snapshotCodeAssets } from './code-assets.js'
 import {
@@ -113,9 +114,24 @@ function toolCategoryLabel(category) {
   }[category] || '工具'
 }
 
-function resolveAgentModel(agentId, config) {
+function resolveAgentModel(agentId, config, runtimeEngine = 'claudecode') {
+  if (runtimeEngine === 'codex') {
+    return String(process.env.CODEX_AGENT_MODEL || '').trim()
+  }
   const agent = getAgentDefinition(agentId)
   return String(agent?.defaultModel || config.model || '').trim()
+}
+
+function runtimeEngineForTask(task) {
+  return task?.runtime_engine === 'codex' ? 'codex' : 'claudecode'
+}
+
+function runtimeEngineLabel(engine = 'claudecode') {
+  return engine === 'codex' ? 'Codex' : 'Claude Code'
+}
+
+function runtimeQueueLabel(engine = 'claudecode') {
+  return `${runtimeEngineLabel(engine)} Runtime`
 }
 
 function resolveExecutionSettings(job, config = getClaudeRuntimeConfig()) {
@@ -132,7 +148,7 @@ function resolveExecutionSettings(job, config = getClaudeRuntimeConfig()) {
   })
   return {
     executionMode,
-    model: resolveAgentModel(job.agentId, config),
+    model: resolveAgentModel(job.agentId, config, job.runtimeEngine),
     effectiveTools: toolsForExecutionMode(baseTools, executionMode),
   }
 }
@@ -391,8 +407,9 @@ class ClaudeRuntimeQueue {
       maxAttempts: job.maxAttempts,
     })
     job.runtimeJob = runtimeJob
-    emitRunLog(job, 'queue', `${ROLE_DEFINITIONS[job.agentId]?.name || job.agentId} 已进入 Claude Runtime 队列`, {
+    emitRunLog(job, 'queue', `${ROLE_DEFINITIONS[job.agentId]?.name || job.agentId} 已进入 ${runtimeQueueLabel(job.runtimeEngine)} 队列`, {
       queueDepth: listQueuedRuntimeJobs().length,
+      runtimeEngine: job.runtimeEngine,
     })
     this.pump()
     return job.run
@@ -404,13 +421,13 @@ class ClaudeRuntimeQueue {
       const run = getAgentRun(runId)
       const job = hydrateJobFromRun(run, runtimeJob)
       cancelRuntimeJob(runId)
-      emitRunLog(job, 'cancelled', 'Claude Runtime 排队任务已取消')
+      emitRunLog(job, 'cancelled', `${runtimeQueueLabel(job.runtimeEngine)} 排队任务已取消`)
       addTaskEvent({
         taskId: run.task_id,
         subtaskId: run.subtask_id,
         agentId: run.agent_id,
         type: 'agent.cancelled',
-        message: 'Claude Runtime 排队任务已取消',
+        message: `${runtimeQueueLabel(job.runtimeEngine)} 排队任务已取消`,
         payload: { runId },
       })
       emitTaskEvent('agent.cancelled', { taskId: run.task_id, subtaskId: run.subtask_id, agentId: run.agent_id, runId })
@@ -458,7 +475,18 @@ class ClaudeRuntimeQueue {
     }
   }
 
-  async runClaudeForJob(job, workspace, controller) {
+  async runEngineForJob(job, workspace, controller) {
+    if (job.runtimeEngine === 'codex') {
+      return runCodexQuery({
+        prompt: job.prompt,
+        config: { ...this.config, model: job.model || '' },
+        outputFormat: job.outputFormat,
+        cwd: workspace.cwd,
+        executionMode: job.executionMode || 'report',
+        abortController: controller,
+        onEvent: (event) => this.handleSdkEvent(job, event),
+      })
+    }
     const config = this.config
     const runConfig = {
       ...config,
@@ -569,16 +597,16 @@ class ClaudeRuntimeQueue {
       subtaskId: job.subtaskId,
       agentId: job.agentId,
       type: 'agent.start',
-      message: `${ROLE_DEFINITIONS[job.agentId]?.name || job.agentId} 开始执行 Claude Runtime run`,
-      payload: { runId: run.id, kind: job.kind },
+      message: `${ROLE_DEFINITIONS[job.agentId]?.name || job.agentId} 开始执行 ${runtimeQueueLabel(job.runtimeEngine)} run`,
+      payload: { runId: run.id, kind: job.kind, runtimeEngine: job.runtimeEngine },
     })
-    emitTaskEvent('agent.start', { taskId: job.taskId, subtaskId: job.subtaskId, agentId: job.agentId, runId: run.id, kind: job.kind })
+    emitTaskEvent('agent.start', { taskId: job.taskId, subtaskId: job.subtaskId, agentId: job.agentId, runId: run.id, kind: job.kind, runtimeEngine: job.runtimeEngine })
 
     try {
-      const result = await this.runClaudeForJob(job, workspace, controller)
+      const result = await this.runEngineForJob(job, workspace, controller)
 
       if (!result.ok) {
-        await this.failJob(job, result.error || 'Claude Runtime 执行失败', result)
+        await this.failJob(job, result.error || `${runtimeQueueLabel(job.runtimeEngine)} 执行失败`, result)
         return
       }
 
@@ -595,7 +623,7 @@ class ClaudeRuntimeQueue {
       if (controller.signal.aborted) {
         await this.cancelRunningJob(job)
       } else {
-        await this.failJob(job, err instanceof Error ? err.message : String(err || 'Claude Runtime 执行失败'))
+        await this.failJob(job, err instanceof Error ? err.message : String(err || `${runtimeQueueLabel(job.runtimeEngine)} 执行失败`))
       }
     }
   }
@@ -619,9 +647,11 @@ class ClaudeRuntimeQueue {
       }
     }
 
+    const engineLabel = runtimeEngineLabel(job.runtimeEngine)
     if (event.type === 'start') {
-      emitRunLog(job, 'system', `Claude session 已初始化${event.sessionId ? `: ${event.sessionId}` : ''}`, {
+      emitRunLog(job, 'system', `${engineLabel} session 已初始化${event.sessionId ? `: ${event.sessionId}` : ''}`, {
         sessionId: event.sessionId || null,
+        runtimeEngine: job.runtimeEngine,
       })
     }
 
@@ -629,34 +659,37 @@ class ClaudeRuntimeQueue {
       emitRunLog(job, event.snapshot ? 'assistant.snapshot' : 'assistant.delta', event.text, {
         sessionId: event.sessionId || null,
         snapshot: Boolean(event.snapshot),
+        runtimeEngine: job.runtimeEngine,
       })
     }
 
     if (event.type === 'tool') {
       const category = toolCategory(event.toolName)
       const categoryLabel = toolCategoryLabel(category)
-      emitRunLog(job, 'tool', `Claude Code 使用${categoryLabel}：${event.toolName}`, {
+      emitRunLog(job, 'tool', `${engineLabel} 使用${categoryLabel}：${event.toolName}`, {
         toolName: event.toolName,
         toolCategory: category,
         sessionId: event.sessionId || null,
+        runtimeEngine: job.runtimeEngine,
       })
       addTaskEvent({
         taskId: job.taskId,
         subtaskId: job.subtaskId,
         agentId: job.agentId,
         type: 'agent.tool',
-        message: `Claude Code 使用${categoryLabel}：${event.toolName}`,
-        payload: { runId: job.run.id, toolName: event.toolName, toolCategory: category },
+        message: `${engineLabel} 使用${categoryLabel}：${event.toolName}`,
+        payload: { runId: job.run.id, toolName: event.toolName, toolCategory: category, runtimeEngine: job.runtimeEngine },
       })
       emitTaskEvent('agent.tool', { taskId: job.taskId, subtaskId: job.subtaskId, agentId: job.agentId, runId: job.run.id, toolName: event.toolName, toolCategory: category })
     }
 
     if (event.type === 'result') {
-      emitRunLog(job, event.ok ? 'result' : 'error', event.ok ? 'Claude Code 返回成功结果' : (event.error || 'Claude Code 返回失败结果'), {
+      emitRunLog(job, event.ok ? 'result' : 'error', event.ok ? `${engineLabel} 返回成功结果` : (event.error || `${engineLabel} 返回失败结果`), {
         sessionId: event.sessionId || null,
         costUsd: event.costUsd || 0,
         durationMs: event.durationMs || 0,
         subtype: event.subtype || null,
+        runtimeEngine: job.runtimeEngine,
       })
     }
   }
@@ -1020,7 +1053,7 @@ class ClaudeRuntimeQueue {
   async cancelRunningJob(job) {
     cancelRuntimeJob(job.run.id, { releaseLock: false })
     updateAgentRun(job.run.id, { status: 'cancelled', completed_at: nowSeconds(), error: '用户取消运行中任务' })
-    emitRunLog(job, 'cancelled', 'Claude Runtime 运行中任务已取消')
+    emitRunLog(job, 'cancelled', `${runtimeQueueLabel(job.runtimeEngine)} 运行中任务已取消`)
     if (job.subtaskId) {
       updateSubtask(job.subtaskId, { status: 'blocked', error: '运行已取消' })
     }
@@ -1029,7 +1062,7 @@ class ClaudeRuntimeQueue {
       subtaskId: job.subtaskId,
       agentId: job.agentId,
       type: 'agent.cancelled',
-      message: 'Claude Runtime 运行中任务已取消',
+      message: `${runtimeQueueLabel(job.runtimeEngine)} 运行中任务已取消`,
       payload: { runId: job.run.id },
     })
     emitTaskEvent('agent.cancelled', { taskId: job.taskId, subtaskId: job.subtaskId, agentId: job.agentId, runId: job.run.id })
@@ -1134,6 +1167,7 @@ export function cleanupOrphanAgentRunsOnStartup() {
 function createRunAndJob({ taskId, subtaskId = null, agentId, kind, prompt, outputFormat, resume = null }) {
   const config = getClaudeRuntimeConfig()
   const task = getTaskDetail(taskId)
+  const runtimeEngine = runtimeEngineForTask(task)
   const sourceCwd = taskSourceCwd(task, config)
   const subtask = subtaskId ? getSubtask(subtaskId) : null
   const executionMode = kind === 'plan'
@@ -1144,7 +1178,7 @@ function createRunAndJob({ taskId, subtaskId = null, agentId, kind, prompt, outp
   const cwd = config.workspaceIsolation && !['code', 'test'].includes(executionMode)
     ? `${config.workspaceRoot}/${taskId}/project`
     : sourceCwd
-  const model = resolveAgentModel(agentId, config)
+  const model = resolveAgentModel(agentId, config, runtimeEngine)
   const run = createAgentRun({
     id: makeRunId(kind),
     taskId,
@@ -1163,10 +1197,10 @@ function createRunAndJob({ taskId, subtaskId = null, agentId, kind, prompt, outp
     subtaskId,
     agentId,
     type: 'agent.run.queued',
-    message: `${ROLE_DEFINITIONS[agentId]?.name || agentId} 已进入 Claude Runtime 队列`,
-    payload: { runId: run.id, kind, resumeSessionId: resume || null, model: model || null },
+    message: `${ROLE_DEFINITIONS[agentId]?.name || agentId} 已进入 ${runtimeQueueLabel(runtimeEngine)} 队列`,
+    payload: { runId: run.id, kind, resumeSessionId: resume || null, model: model || null, runtimeEngine },
   })
-  emitTaskEvent('agent.run.queued', { taskId, subtaskId, agentId, runId: run.id, kind, sessionId: resume || undefined, model: model || undefined })
+  emitTaskEvent('agent.run.queued', { taskId, subtaskId, agentId, runId: run.id, kind, sessionId: resume || undefined, model: model || undefined, runtimeEngine })
   const sessionKey = subtask?.session_key ||
     (kind === 'console' ? `claude:task:${taskId}:console:${agentId}` : task?.coordinator_session_key || `claude:task:${taskId}:${agentId}`)
   return {
@@ -1184,6 +1218,7 @@ function createRunAndJob({ taskId, subtaskId = null, agentId, kind, prompt, outp
     resumeSessionId: resume,
     sessionFallback: false,
     executionMode,
+    runtimeEngine,
     model,
     topology: task?.plan_json?.topology || 'hierarchical',
     effectiveTools: toolsForExecutionMode(effectiveToolsForJob({
@@ -1198,6 +1233,7 @@ function createRunAndJob({ taskId, subtaskId = null, agentId, kind, prompt, outp
 function hydrateJobFromRun(run, runtimeJob) {
   if (!run || !runtimeJob) return null
   const task = getTaskDetail(run.task_id)
+  const runtimeEngine = runtimeEngineForTask(task)
   const subtask = run.subtask_id ? getSubtask(run.subtask_id) : null
   const kind = inferRunKind(run)
   const executionMode = kind === 'plan'
@@ -1221,7 +1257,8 @@ function hydrateJobFromRun(run, runtimeJob) {
     resumeSessionId: run.claude_session_id || null,
     sessionFallback: false,
     executionMode,
-    model: run.model || resolveAgentModel(run.agent_id, getClaudeRuntimeConfig()),
+    runtimeEngine,
+    model: run.model || resolveAgentModel(run.agent_id, getClaudeRuntimeConfig(), runtimeEngine),
     topology: task?.plan_json?.topology || 'hierarchical',
     effectiveTools: toolsForExecutionMode(effectiveToolsForJob({
       systemTools: getClaudeRuntimeConfig().allowedTools,
@@ -1315,8 +1352,8 @@ export function enqueueSubtaskRun(subtaskId, { resume = null, prompt = null, kin
     subtaskId: subtask.id,
     agentId: subtask.assigned_agent_id,
     type: 'workflow.node.ready',
-    message: `${subtask.title} 已满足依赖并进入 Claude Runtime 队列`,
-    payload: { runId: job.run.id, executionMode: subtask.context_json?.executionMode || 'report' },
+    message: `${subtask.title} 已满足依赖并进入 ${runtimeQueueLabel(job.runtimeEngine)} 队列`,
+    payload: { runId: job.run.id, executionMode: subtask.context_json?.executionMode || 'report', runtimeEngine: job.runtimeEngine },
   })
   return claudeRuntimeQueue.enqueue(job)
 }
