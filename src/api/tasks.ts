@@ -1,4 +1,4 @@
-import { request } from './base'
+import { buildEventSourceUrl, request } from './base'
 import type { AgentDefinition } from '@/types/agent'
 import type { CreateTaskRequest, Task, TaskDispatch, TaskEvent, TaskOutput } from '@/types/task'
 
@@ -447,5 +447,9 @@ export const taskApi = {
       method: 'PATCH',
       body: JSON.stringify(payload),
     })
+  },
+
+  buildTaskEventStreamUrl(taskId: string) {
+    return buildEventSourceUrl(`/api/tasks/${encodeURIComponent(taskId)}/events/stream`)
   },
 }

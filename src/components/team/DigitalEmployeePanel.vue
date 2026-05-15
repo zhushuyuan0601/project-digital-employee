@@ -325,12 +325,13 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { request } from '@/api/base'
+import { getDashboard, getRecentActivities } from '@/api/dashboard'
+import { getFileContent } from '@/api/files'
 import { useAgentsStore } from '@/stores/agents'
 import { ElMessage } from 'element-plus'
 import { Loading, Warning, Document } from '@element-plus/icons-vue'
-import MarkdownIt from 'markdown-it'
-import { sanitizeHtml } from '@/utils/sanitize'
+import { escapeHtml, sanitizeHtml } from '@/utils/sanitize'
+import { renderMarkdown } from '@/utils/markdown'
 import DigitalEmployeeAgentCard from '@/components/digital-employee/DigitalEmployeeAgentCard.vue'
 import ProjectCard from '@/components/digital-employee/ProjectCard.vue'
 
@@ -411,7 +412,6 @@ interface TeamMemberCard {
 }
 
 const agentsStore = useAgentsStore()
-const md = new MarkdownIt()
 
 const showShellHeader = computed(() => !props.embedded)
 const showStatsCards = computed(() => props.viewMode === 'all')
@@ -576,16 +576,9 @@ const getOutputFileTypeName = (type: string) => {
 // 渲染预览内容
 const renderPreviewContent = () => {
   if (previewContent.value.type === 'markdown' || previewContent.value.type === 'report' || previewContent.value.type === 'doc' || previewContent.value.type === 'code') {
-    return md.render(previewContent.value.content)
+    return renderMarkdown(previewContent.value.content)
   }
   return previewContent.value.content
-}
-
-// 转义 HTML
-const escapeHtml = (content: string) => {
-  const div = document.createElement('div')
-  div.textContent = content
-  return div.innerHTML
 }
 
 // 获取文件类型
@@ -644,15 +637,14 @@ const previewFile = (file: PreviewFileItem) => {
   // 优先从后端 API 获取文件内容
   if (filePath) {
     console.log('[DigitalEmployee] 预览文件，filePath:', filePath)
-    fetch(`/api/files/content?path=${encodeURIComponent(filePath)}`)
-      .then(res => res.json())
+    getFileContent({ path: filePath })
       .then(data => {
         console.log('[DigitalEmployee] API 返回:', data)
         previewLoading.value = false
         if (data.success) {
           previewContent.value = {
             type: fileType,
-            content: data.content
+            content: data.content || ''
           }
         } else {
           previewError.value = data.error || '读取文件失败'
@@ -700,8 +692,8 @@ const refreshData = async () => {
   try {
     // 并行获取 dashboard 数据和 activities 数据
     const [data, activitiesData] = await Promise.all([
-      request<any>('/api/dashboard'),
-      request<any>('/api/activities?hours=24&limit=100')
+      getDashboard(),
+      getRecentActivities({ hours: 24, limit: 100 }),
     ])
 
     // 统计

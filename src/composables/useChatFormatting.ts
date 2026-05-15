@@ -1,4 +1,4 @@
-import { sanitizeHtml } from '@/utils/sanitize'
+import { renderMarkdown } from '@/utils/markdown'
 
 export function useChatFormatting() {
   const formatTime = (timestamp: number) => {
@@ -11,15 +11,7 @@ export function useChatFormatting() {
 
   const formatRichText = (content: string) => {
     if (!content) return ''
-
-    const raw = content
-      .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="code-block"><code>$2</code></pre>')
-      .replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
-      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-      .replace(/\n/g, '<br>')
-
-    return sanitizeHtml(raw)
+    return renderMarkdown(content, { profile: 'chat' })
   }
 
   return {

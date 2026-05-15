@@ -223,6 +223,16 @@ import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import ChatMessageBubble from '@/components/chat/ChatMessageBubble.vue'
 import { useChatFormatting } from '@/composables/useChatFormatting'
+import {
+  buildGroupChatEventStreamUrl,
+  cancelGroupChatRun,
+  clearGroupChatMessages,
+  getGroupChatStatus,
+  listGroupChatMessages,
+  persistGroupChatMessage,
+  queueGroupAgentRun,
+  type GroupChatRuntimeStatus,
+} from '@/api/group-chat'
 
 const groupStore = useGroupChatStore()
 const multiAgentStore = useMultiAgentChatStore()
@@ -231,13 +241,7 @@ const { formatTime, formatRichText } = useChatFormatting()
 const groupConfig = computed(() => groupStore.groupConfig)
 const messages = computed(() => groupStore.messages)
 
-const runtimeStatus = ref<{
-  healthy: boolean
-  running: number
-  queued: number
-  completedToday: number
-  recentRuns?: Array<{ id: string; status: string; task_id?: string | null; agent_id: string }>
-} | null>(null)
+const runtimeStatus = ref<GroupChatRuntimeStatus | null>(null)
 const streamConnected = ref(false)
 const activeRunIds = ref<string[]>([])
 const agentRunStates = ref<Record<string, string>>({})
@@ -424,8 +428,7 @@ function handleComposerKeydown(event: KeyboardEvent) {
 
 async function refreshRuntimeStatus() {
   try {
-    const response = await fetch('/api/group-chat/status')
-    const data = await response.json()
+    const data = await getGroupChatStatus()
     runtimeStatus.value = data.status
   } catch (err) {
     console.warn('[GroupChat] Runtime status failed:', err)
@@ -461,7 +464,7 @@ function setAgentRunState(agentId?: string | null, state = 'ready') {
 
 function setupRuntimeEventStream() {
   groupEventSource?.close()
-  groupEventSource = new EventSource('/api/group-chat/events/stream')
+  groupEventSource = new EventSource(buildGroupChatEventStreamUrl())
   groupEventSource.onopen = () => {
     streamConnected.value = true
   }
@@ -530,11 +533,7 @@ const handleSend = async () => {
 
   const content = inputContent.value.trim()
   const { mentions, invalidMentions, offlineAgents } = groupStore.handleUserMessage(content)
-  fetch('/api/group-chat/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content, sender: 'user', senderId: 'user', senderName: '我' }),
-  }).catch(() => null)
+  persistGroupChatMessage({ content, sender: 'user', senderId: 'user', senderName: '我' }).catch(() => null)
   if (invalidMentions.length > 0 || offlineAgents.length > 0) {
     console.warn('[GroupChat] ignored mentions', { invalidMentions, offlineAgents })
   }
@@ -544,16 +543,10 @@ const handleSend = async () => {
     if (!agentState) continue
 
     try {
-      const response = await fetch(`/api/group-chat/agents/${encodeURIComponent(agentId)}/run`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: content.replace(/@[^\s]+/g, '').trim(),
-          roomId: groupConfig.value.id,
-        })
+      const data = await queueGroupAgentRun(agentId, {
+        content: content.replace(/@[^\s]+/g, '').trim(),
+        roomId: groupConfig.value.id,
       })
-
-      const data = await response.json()
 
       if (data.success) {
         upsertActiveRun(data.run?.id)
@@ -585,8 +578,7 @@ const scrollToBottom = () => {
 
 async function loadServerMessages() {
   try {
-    const response = await fetch(`/api/group-chat/messages?roomId=${encodeURIComponent(groupConfig.value.id)}&limit=120`)
-    const data = await response.json()
+    const data = await listGroupChatMessages({ roomId: groupConfig.value.id, limit: 120 })
     if (data.success && Array.isArray(data.messages)) {
       const normalized = data.messages.map((message: any) => ({
         id: String(message.id),
@@ -619,7 +611,7 @@ const confirmClearHistory = () => {
     groupStore.clearMessages()
     runBuffers.value = {}
     agentRunStates.value = {}
-    await fetch(`/api/group-chat/messages?roomId=${encodeURIComponent(groupConfig.value.id)}`, { method: 'DELETE' }).catch(() => null)
+    await clearGroupChatMessages(groupConfig.value.id).catch(() => null)
     await refreshRuntimeStatus()
     ElMessage.success('历史会话已清除')
   }).catch(() => {})
@@ -634,7 +626,7 @@ const handleDisconnectAll = async () => {
   const runIds = activeGroupRunIds.value
   if (!runIds.length) return
   await Promise.all(runIds.map(runId =>
-    fetch(`/api/group-chat/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }).catch(() => null)
+    cancelGroupChatRun(runId).catch(() => null)
   ))
   activeRunIds.value = []
   agentRunStates.value = Object.fromEntries(Object.keys(agentRunStates.value).map(agentId => [agentId, 'stopped']))

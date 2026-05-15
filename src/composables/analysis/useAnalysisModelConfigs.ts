@@ -1,4 +1,5 @@
 import { computed, ref, watch } from 'vue'
+import { testAnalysisConnection } from '@/api/analysis'
 
 export interface ModelConfig {
   id: string
@@ -164,24 +165,12 @@ export function useAnalysisModelConfigs(options: UseAnalysisModelConfigsOptions 
     testing.value = true
     testResult.value = null
     try {
-      const res = await fetch('/api/analysis/test-connection', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ api_base: apiBase.trim(), api_key: apiKey?.trim() || '' }),
-      })
-      const text = await res.text()
-      let data: any
-      try {
-        data = text ? JSON.parse(text) : {}
-      } catch {
-        testResult.value = { ok: false, error: text.slice(0, 120) || `HTTP ${res.status}` }
-        return
-      }
+      const data = await testAnalysisConnection({ api_base: apiBase.trim(), api_key: apiKey?.trim() || '' })
       if (data.ok) {
         const statusNote = data.status && data.status !== 200 ? ` (HTTP ${data.status})` : ''
         testResult.value = { ok: true, ms: data.ms, statusNote }
       } else {
-        testResult.value = { ok: false, error: data.error || `HTTP ${res.status}` }
+        testResult.value = { ok: false, error: data.error || '连接失败' }
       }
     } catch (err) {
       testResult.value = { ok: false, error: (err as Error).message || '连接失败' }

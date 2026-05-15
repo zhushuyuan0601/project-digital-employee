@@ -46,6 +46,17 @@ export interface AgentGovernanceProfile {
   dataAccessLevel: string
 }
 
+export interface AgentContractProfile {
+  mission: string
+  rules: string[]
+  workflow: string[]
+  deliverables: string[]
+  outputSchema: Record<string, unknown>
+  handoffContext: string[]
+  failurePolicy: string
+  acceptanceCriteria: string[]
+}
+
 export interface AgentDefinition {
   id: string
   name: string
@@ -77,6 +88,7 @@ export interface AgentDefinition {
   capabilityProfile?: AgentCapabilityProfile
   routingProfile?: AgentRoutingProfile
   governanceProfile?: AgentGovernanceProfile
+  contractProfile?: AgentContractProfile
   createdAt?: number
   updatedAt?: number
 }
@@ -119,6 +131,15 @@ export interface AgentRouteWorkflowNode {
 }
 
 export interface AgentRoutePreview {
+  taskIntent?: {
+    primaryIntent: string
+    labels: string[]
+    requiresCodeChange: boolean
+    requiresUserSelection: boolean
+    requiresSourceReport: boolean
+    suggestedMode: 'plan' | 'report' | 'code' | 'test'
+    routingConstraints: string[]
+  }
   intent: {
     text: string
     intents: string[]

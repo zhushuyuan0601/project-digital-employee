@@ -59,7 +59,7 @@
 
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue'
-import MarkdownIt from 'markdown-it'
+import { renderMarkdown as renderMarkdownContent } from '@/utils/markdown'
 
 interface TaskMessage {
   id: string
@@ -82,15 +82,10 @@ defineEmits<{
   send: []
 }>()
 
-const md = new MarkdownIt({
-  html: false,
-  linkify: true,
-  typographer: true
-})
 const chatContainer = ref<HTMLElement | null>(null)
 const userScrolledUp = ref(false)
 
-const renderMarkdown = (content: string) => md.render(content || '')
+const renderMarkdown = (content: string) => renderMarkdownContent(content || '', { profile: 'chat' })
 
 const formatTime = (timestamp: number) =>
   new Date(timestamp).toLocaleTimeString('zh-CN', {

@@ -19,7 +19,7 @@
       </label>
       <div class="category-tabs">
         <button
-          v-for="category in categories"
+          v-for="category in departmentFilters"
           :key="category"
           type="button"
           :class="{ active: activeCategory === category }"
@@ -27,6 +27,51 @@
         >
           {{ categoryLabel(category) }}
         </button>
+      </div>
+    </section>
+
+    <section class="market-directory">
+      <div>
+        <span>部门</span>
+        <div class="filter-pills">
+          <button
+            v-for="category in departmentFilters"
+            :key="category"
+            type="button"
+            :class="{ active: activeCategory === category }"
+            @click="activeCategory = category"
+          >
+            {{ categoryLabel(category) }}
+          </button>
+        </div>
+      </div>
+      <div>
+        <span>场景</span>
+        <div class="filter-pills">
+          <button
+            v-for="scene in sceneFilters"
+            :key="scene"
+            type="button"
+            :class="{ active: activeScene === scene }"
+            @click="activeScene = scene"
+          >
+            {{ sceneLabel(scene) }}
+          </button>
+        </div>
+      </div>
+      <div>
+        <span>能力</span>
+        <div class="filter-pills">
+          <button
+            v-for="skill in skillFilters"
+            :key="skill"
+            type="button"
+            :class="{ active: activeSkill === skill }"
+            @click="activeSkill = skill"
+          >
+            {{ skillLabel(skill) }}
+          </button>
+        </div>
       </div>
     </section>
 
@@ -40,8 +85,8 @@
         <span>可路由</span>
       </div>
       <div>
-        <strong>{{ categories.length - 1 }}</strong>
-        <span>能力分类</span>
+        <strong>{{ departmentFilters.length - 1 }}</strong>
+        <span>部门目录</span>
       </div>
     </section>
 
@@ -130,6 +175,24 @@
         </div>
 
         <section class="detail-section">
+          <h3>能力契约</h3>
+          <div class="contract-panel">
+            <div>
+              <span>使命</span>
+              <p>{{ activeAgent.contractProfile?.mission || activeAgent.description }}</p>
+            </div>
+            <div>
+              <span>交付物</span>
+              <p>{{ joinList(activeAgent.contractProfile?.deliverables || activeAgent.outputContract) }}</p>
+            </div>
+            <div>
+              <span>失败策略</span>
+              <p>{{ activeAgent.contractProfile?.failurePolicy || '--' }}</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="detail-section">
           <h3>路由关键词</h3>
           <div class="skill-row skill-row--wrap">
             <span v-for="keyword in activeAgent.routingProfile?.routeKeywords || []" :key="keyword">{{ keyword }}</span>
@@ -170,12 +233,24 @@ import { useAgentRegistryStore } from '@/stores/agentRegistry'
 const registry = useAgentRegistryStore()
 const query = ref('')
 const activeCategory = ref('all')
+const activeScene = ref('all')
+const activeSkill = ref('all')
 const detailVisible = ref(false)
 const activeAgent = ref<AgentDefinition | null>(null)
 
-const categories = computed(() => {
+const departmentFilters = computed(() => {
   const values = registry.agents.map(agent => agent.category || 'general').filter(Boolean)
   return ['all', ...Array.from(new Set(values))]
+})
+
+const sceneFilters = computed(() => {
+  const values = registry.agents.flatMap(agent => agent.capabilityProfile?.intents || []).filter(Boolean)
+  return ['all', ...Array.from(new Set(values)).slice(0, 18)]
+})
+
+const skillFilters = computed(() => {
+  const values = registry.agents.flatMap(agent => agent.capabilityProfile?.skills || agent.capabilities || []).filter(Boolean)
+  return ['all', ...Array.from(new Set(values)).slice(0, 24)]
 })
 
 const filteredAgents = computed(() => {
@@ -183,6 +258,10 @@ const filteredAgents = computed(() => {
   return registry.agents.filter((agent) => {
     const categoryMatch = activeCategory.value === 'all' || (agent.category || 'general') === activeCategory.value
     if (!categoryMatch) return false
+    const sceneMatch = activeScene.value === 'all' || (agent.capabilityProfile?.intents || []).includes(activeScene.value)
+    if (!sceneMatch) return false
+    const skillMatch = activeSkill.value === 'all' || [...(agent.capabilityProfile?.skills || []), ...(agent.capabilities || [])].includes(activeSkill.value)
+    if (!skillMatch) return false
     if (!keyword) return true
     const haystack = [
       agent.name,
@@ -206,6 +285,8 @@ function categoryLabel(category: string) {
     product: '产品',
     engineering: '工程',
     quality: '质量',
+    security: '安全',
+    documentation: '文档',
     coordination: '编排',
     information: '信息',
     business: '业务',
@@ -213,6 +294,41 @@ function categoryLabel(category: string) {
     general: '通用',
     local: '本地',
   }[category] || category
+}
+
+function sceneLabel(scene: string) {
+  return {
+    all: '全部',
+    route: '任务路由',
+    orchestrate: '流程编排',
+    summarize: '汇总',
+    research: '调研',
+    compare: '对比',
+    fact_check: '核查',
+    requirements: '需求',
+    product_design: '产品设计',
+    workflow_design: '流程设计',
+    code_change: '代码修改',
+    code_diagnosis: '代码诊断',
+    implementation: '实现',
+    minimal_change: '最小变更',
+    frontend: '前端',
+    backend: '后端',
+    code_review: '代码审查',
+    security_review: '安全审查',
+    documentation: '文档',
+    test_analysis: '测试分析',
+    clarification: '需求澄清',
+    selective_followup_from_report: '报告选点跟进',
+    architecture: '架构',
+    verify: '验证',
+    test: '测试',
+    review: '审查',
+  }[scene] || scene
+}
+
+function skillLabel(skill: string) {
+  return skill.replace(/_/g, ' ')
 }
 
 function iconInitial(agent: AgentDefinition) {
@@ -355,6 +471,53 @@ onMounted(() => {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-top: 18px;
+}
+
+.market-directory {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+}
+
+.market-directory > div {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.market-directory > div > span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  line-height: 30px;
+}
+
+.filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filter-pills button {
+  min-height: 30px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  padding: 0 10px;
+  color: var(--text-secondary);
+  background: var(--bg-panel);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.filter-pills button.active {
+  color: var(--text-on-primary);
+  border-color: var(--color-primary);
+  background: var(--color-primary);
 }
 
 .market-summary div {
@@ -578,6 +741,31 @@ onMounted(() => {
   font-size: 16px;
 }
 
+.contract-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.contract-panel div {
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+}
+
+.contract-panel span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.contract-panel p {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
 .skill-row--wrap {
   align-items: flex-start;
 }
@@ -601,6 +789,7 @@ onMounted(() => {
   }
 
   .market-summary,
+  .market-directory > div,
   .detail-grid,
   .detail-grid.compact {
     grid-template-columns: 1fr;

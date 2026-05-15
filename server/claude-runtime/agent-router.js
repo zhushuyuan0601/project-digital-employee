@@ -2,13 +2,85 @@ import { listRoutableAgents } from './agent-registry.js'
 
 const INTENT_RULES = [
   {
+    intent: 'code_review',
+    domains: ['software'],
+    inputArtifacts: ['repo_files', 'patch', 'implementation_report'],
+    outputArtifacts: ['review_report', 'risk_list', 'fix_recommendations'],
+    requiredTools: ['Read', 'Glob', 'Grep'],
+    riskLevel: 'medium',
+    keywords: ['code review', '代码审查', '代码评审', 'review', '审查代码', '评审代码', '阻塞风险'],
+  },
+  {
+    intent: 'security_review',
+    domains: ['software'],
+    inputArtifacts: ['repo_files', 'patch', 'api_contract', 'runtime_logs'],
+    outputArtifacts: ['security_report', 'risk_list', 'mitigation_plan'],
+    requiredTools: ['Read', 'Glob', 'Grep'],
+    riskLevel: 'medium',
+    keywords: ['安全', '权限', '漏洞', '敏感信息', '命令执行', '文件读取', '越权', '注入', 'xss', 'secret'],
+  },
+  {
+    intent: 'minimal_change',
+    domains: ['software'],
+    inputArtifacts: ['repo_files', 'selected_report_items', 'task_description'],
+    outputArtifacts: ['patch', 'implementation_report', 'verification_result'],
+    requiredTools: ['Read', 'Glob', 'Grep'],
+    riskLevel: 'high',
+    keywords: ['最小变更', '小范围', '局部修改', '只修', '只做', '不要大改', '保守修改', '选取部分', '部分优化', '代码优化点', '优化点进行修改'],
+  },
+  {
+    intent: 'frontend',
+    domains: ['software', 'product'],
+    inputArtifacts: ['repo_files', 'ui_issue', 'api_contract'],
+    outputArtifacts: ['patch', 'implementation_report', 'ui_verification_notes'],
+    requiredTools: ['Read', 'Glob', 'Grep'],
+    riskLevel: 'high',
+    keywords: ['前端', '页面', '组件', 'vue', '交互', '样式', '弹窗', '按钮', '控制台', '面板', 'ui'],
+  },
+  {
+    intent: 'backend',
+    domains: ['software'],
+    inputArtifacts: ['repo_files', 'api_contract', 'runtime_logs'],
+    outputArtifacts: ['technical_plan', 'patch', 'migration_notes', 'verification_result'],
+    requiredTools: ['Read', 'Glob', 'Grep'],
+    riskLevel: 'high',
+    keywords: ['后端', '接口', 'api', '数据库', '队列', '运行时', '调度', '服务端', 'schema', 'runtime'],
+  },
+  {
+    intent: 'documentation',
+    domains: ['software', 'product', 'business'],
+    inputArtifacts: ['implementation_report', 'product_plan', 'api_contract', 'repo_files'],
+    outputArtifacts: ['document', 'release_notes', 'handoff_doc'],
+    requiredTools: ['Read', 'Glob', 'Grep'],
+    riskLevel: 'medium',
+    keywords: ['文档', 'readme', '使用说明', '变更说明', '发布说明', '交接文档', '接口文档'],
+  },
+  {
+    intent: 'test_analysis',
+    domains: ['software'],
+    inputArtifacts: ['test_log', 'build_log', 'error_log', 'repo_files'],
+    outputArtifacts: ['failure_analysis', 'root_cause_hypothesis', 'next_actions'],
+    requiredTools: ['Read', 'Glob', 'Grep'],
+    riskLevel: 'low',
+    keywords: ['测试失败', '构建失败', '日志', '报错日志', '失败原因', 'ci', '单测', 'test failed'],
+  },
+  {
+    intent: 'clarification',
+    domains: ['product', 'business', 'software'],
+    inputArtifacts: ['plain_text', 'source_report', 'business_context'],
+    outputArtifacts: ['clarified_requirements', 'acceptance_scope', 'open_questions'],
+    requiredTools: ['Read'],
+    riskLevel: 'low',
+    keywords: ['澄清', '不明确', '范围', '验收口径', '从报告中选择', '哪些点', '怎么拆'],
+  },
+  {
     intent: 'code_change',
     domains: ['software'],
     inputArtifacts: ['repo_files', 'error_log'],
     outputArtifacts: ['patch', 'verification_result'],
     requiredTools: ['Read', 'Glob', 'Grep'],
     riskLevel: 'high',
-    keywords: ['代码', '修复', 'bug', '500', '报错', '实现', '开发', '仓库', '构建', '测试', 'code', 'fix'],
+    keywords: ['修改代码', '修复代码', '修复', 'bug', '500', '报错', '实现', '开发', '仓库', '构建', 'fix'],
   },
   {
     intent: 'draft',
@@ -74,6 +146,12 @@ function cloneJson(value) {
   return JSON.parse(JSON.stringify(value ?? null))
 }
 
+const CODE_IMPLEMENTATION_INTENTS = ['minimal_change', 'frontend', 'backend', 'code_change']
+
+function hasCodeImplementationIntent(intent) {
+  return CODE_IMPLEMENTATION_INTENTS.some((item) => intent?.intents?.includes(item))
+}
+
 export function understandTaskIntent(taskDescription = '') {
   const matched = INTENT_RULES.filter((rule) => containsAny(taskDescription, rule.keywords))
   const selected = matched.length ? matched : [{
@@ -94,6 +172,34 @@ export function understandTaskIntent(taskDescription = '') {
     outputArtifacts: unique(selected.flatMap((rule) => rule.outputArtifacts)),
     requiredTools: unique(selected.flatMap((rule) => rule.requiredTools)),
     riskLevel: selected.some((rule) => rule.riskLevel === 'high') ? 'high' : selected.some((rule) => rule.riskLevel === 'medium') ? 'medium' : 'low',
+  }
+}
+
+export function deriveTaskIntentDecision(intent) {
+  const text = String(intent?.text || '')
+  const hasReport = containsAny(text, ['报告', '产出', '总结', '归纳', 'markdown', '.md', 'task-outputs'])
+  const requiresSelection = containsAny(text, ['部分', '选取', '选择', '只修', '只做', '第', '挑选'])
+  const requiresCodeChange = hasCodeImplementationIntent(intent) || containsAny(text, ['修改代码', '修复代码', '实现', '重构', '优化代码'])
+  const requiresUserSelection = hasReport && requiresSelection
+  const primaryIntent = requiresUserSelection
+    ? 'selective_followup_from_report'
+    : requiresCodeChange
+      ? 'code_change'
+      : intent.intents[0] || 'general'
+  const routingConstraints = []
+  if (requiresUserSelection) routingConstraints.push('先让用户选择报告中的具体条目，再拆代码执行节点')
+  if (requiresCodeChange) routingConstraints.push('代码节点必须产出可检测的文件变更和验证说明')
+  if (hasReport) routingConstraints.push('必须保留来源报告路径或摘录，传递给下游 Agent')
+  if (intent.riskLevel === 'high') routingConstraints.push('高风险任务需要测试或风险复核节点')
+
+  return {
+    primaryIntent,
+    labels: unique([primaryIntent, ...intent.intents]),
+    requiresCodeChange,
+    requiresUserSelection,
+    requiresSourceReport: hasReport,
+    suggestedMode: requiresCodeChange ? 'code' : requiresUserSelection ? 'plan' : 'report',
+    routingConstraints,
   }
 }
 
@@ -141,7 +247,7 @@ export function scoreAgentForTask(agent, intent) {
   const missingRequiredTools = (routing.requiresTools || []).filter((tool) => !agent.allowedTools.includes(tool))
   if (missingRequiredTools.length) return null
 
-  const taskRequiresWrite = intent.intents.includes('code_change')
+  const taskRequiresWrite = hasCodeImplementationIntent(intent)
   if (taskRequiresWrite && (capability.outputArtifacts || []).includes('patch') && !agent.allowedTools.some((tool) => ['Edit', 'Write', 'MultiEdit'].includes(tool))) {
     return null
   }
@@ -202,8 +308,9 @@ function nodeFromCandidate(candidate, index, overrides = {}) {
 
 function composeWorkflow(intent, candidates, agents, gaps) {
   if (!candidates.length) return []
-  if (intent.intents.includes('code_change')) {
-    const implementer = candidateByCapability(candidates, agents, intent, 'code_change')
+  if (hasCodeImplementationIntent(intent)) {
+    const implementationIntent = CODE_IMPLEMENTATION_INTENTS.find((item) => intent.intents.includes(item)) || 'code_change'
+    const implementer = candidateByCapability(candidates, agents, intent, implementationIntent)
     const verifier = candidateByCapability(candidates, agents, intent, 'verify', 1)
     const nodes = []
     if (implementer) {
@@ -211,7 +318,7 @@ function composeWorkflow(intent, candidates, agents, gaps) {
         id: 'node-01',
         title: '实现或修复代码',
         phase: 'implementation',
-        intent: 'code_change',
+        intent: implementationIntent,
         requiredCapabilities: ['code_reading', 'code_editing'],
         objective: '阅读相关代码，完成必要实现或修复，并记录变更依据。',
         inputArtifacts: ['repo_files', 'error_log', 'task_description'],
@@ -276,6 +383,7 @@ function governanceForWorkflow(workflow = [], constraints = {}, fallbackRiskLeve
 
 export function buildDeterministicPreview({ taskDescription = '', constraints = {}, agents = listRoutableAgents() } = {}) {
   const intent = understandTaskIntent(taskDescription)
+  const taskIntent = deriveTaskIntentDecision(intent)
   const candidates = agents
     .map((agent) => scoreAgentForTask(agent, intent))
     .filter(Boolean)
@@ -288,11 +396,12 @@ export function buildDeterministicPreview({ taskDescription = '', constraints = 
     available: true,
     confidence: candidates.length ? 0.72 : 0.12,
     intent,
+    taskIntent,
     candidates,
     workflow,
     gaps: unique(gaps),
     governance: governanceForWorkflow(workflow, constraints, intent.riskLevel),
-    notes: ['本预览由本地确定性路由规则生成。'],
+    notes: ['本预览由本地确定性路由规则生成。', ...taskIntent.routingConstraints],
   }
 }
 
@@ -301,6 +410,7 @@ export function previewAgentRoute({ taskDescription = '', constraints = {} } = {
   return {
     deterministicPreview: cloneJson(deterministicPreview),
     validatedRoute: cloneJson(deterministicPreview),
+    taskIntent: deterministicPreview.taskIntent,
     intent: deterministicPreview.intent,
     candidates: deterministicPreview.candidates,
     workflow: deterministicPreview.workflow,

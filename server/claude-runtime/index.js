@@ -30,6 +30,7 @@ import {
   enqueueRuntimeJob,
   failRuntimeJobFinal,
   getRuntimeJob,
+  listActiveRuntimeJobs,
   listQueuedRuntimeJobs,
   releaseRuntimeJobLock,
   retryRuntimeJob,
@@ -332,6 +333,20 @@ function verifySubtaskResult(job, result, report, codeChanges) {
     return verificationFailure('报告内容为空，未通过验收', { mode, reportPath: report?.path || null })
   }
   if (mode === 'code' && codeAssetCount(codeChanges) === 0) {
+    if (Number(job.fileChangeEventCount || 0) > 0) {
+      return {
+        ok: true,
+        status: 'passed',
+        message: '引擎已报告文件变更，但代码资产快照未解析到具体文件；已按降级规则通过',
+        details: {
+          mode,
+          reportPath: report?.path || null,
+          codeAssetCount: 0,
+          fileChangeEventCount: Number(job.fileChangeEventCount || 0),
+          degraded: true,
+        },
+      }
+    }
     return verificationFailure('代码模式未检测到代码产出变更', { mode, reportPath: report?.path || null })
   }
   if (mode === 'test' && !/(test|测试|passed|failed|pass|fail|npm|node --test|pytest|vitest|jest)/i.test(text)) {
@@ -359,6 +374,10 @@ class ClaudeRuntimeQueue {
     this.running = new Map()
     this.controllers = new Map()
     this.ownerId = `claude-runtime-${process.pid}-${Math.random().toString(36).slice(2, 8)}`
+    this.scheduler = null
+    this.wakeupTimer = null
+    this.schedulerIntervalMs = Math.max(1000, Number(process.env.CLAUDE_RUNTIME_QUEUE_SCAN_MS || 5000))
+    this.staleJobSeconds = Math.max(300, Number(process.env.CLAUDE_RUNTIME_STALE_JOB_SECONDS || 30 * 60))
   }
 
   get config() {
@@ -379,7 +398,40 @@ class ClaudeRuntimeQueue {
       outputRoot: config.outputRoot,
       queued: listQueuedRuntimeJobs().length,
       running: this.running.size,
+      queueScanIntervalMs: this.schedulerIntervalMs,
+      queueScannerRunning: Boolean(this.scheduler),
+      staleJobSeconds: this.staleJobSeconds,
     }
+  }
+
+  startScheduler() {
+    if (this.scheduler) return
+    this.scheduler = setInterval(() => {
+      this.pump()
+    }, this.schedulerIntervalMs)
+    if (typeof this.scheduler.unref === 'function') this.scheduler.unref()
+    this.pump()
+  }
+
+  stopScheduler() {
+    if (this.scheduler) {
+      clearInterval(this.scheduler)
+      this.scheduler = null
+    }
+    if (this.wakeupTimer) {
+      clearTimeout(this.wakeupTimer)
+      this.wakeupTimer = null
+    }
+  }
+
+  scheduleWakeup(delaySeconds = 0) {
+    const delayMs = Math.max(0, Number(delaySeconds) || 0) * 1000
+    if (this.wakeupTimer) clearTimeout(this.wakeupTimer)
+    this.wakeupTimer = setTimeout(() => {
+      this.wakeupTimer = null
+      this.pump()
+    }, delayMs)
+    if (typeof this.wakeupTimer.unref === 'function') this.wakeupTimer.unref()
   }
 
   trackedState(runId) {
@@ -447,11 +499,12 @@ class ClaudeRuntimeQueue {
   }
 
   pump() {
+    this.recoverUntrackedRunningJobs()
     const config = this.config
     while (this.running.size < config.maxConcurrency) {
       const agentCapacity = Object.fromEntries(listAgentDefinitions().map((agent) => [
         agent.id,
-        Math.max(0, Number(agent.maxConcurrency || 1) - this.runningCountForAgent(agent.id)),
+        agent.enabled === false ? 0 : Math.max(0, Number(agent.maxConcurrency || 1) - this.runningCountForAgent(agent.id)),
       ]))
       const runtimeJob = claimNextRuntimeJob({
         ownerId: this.ownerId,
@@ -472,6 +525,34 @@ class ClaudeRuntimeQueue {
         this.controllers.delete(job.run.id)
         this.pump()
       })
+    }
+  }
+
+  recoverUntrackedRunningJobs() {
+    const now = nowSeconds()
+    for (const runtimeJob of listActiveRuntimeJobs({ status: 'running', limit: 500 })) {
+      if (this.running.has(runtimeJob.run_id)) continue
+      const lockedAt = Number(runtimeJob.locked_at || 0)
+      if (lockedAt && now - lockedAt < this.staleJobSeconds) continue
+      const run = getAgentRun(runtimeJob.run_id)
+      deferRuntimeJob(runtimeJob.run_id, 0, 'Runtime 检测到未被当前进程跟踪的运行记录，已自动恢复排队')
+      if (run?.subtask_id) {
+        updateSubtask(run.subtask_id, {
+          status: 'queued',
+          progress: Math.max(Number(getSubtask(run.subtask_id)?.progress || 0), 15),
+          error: '运行记录已自动恢复排队',
+        })
+      }
+      if (run) {
+        addTaskEvent({
+          taskId: run.task_id,
+          subtaskId: run.subtask_id,
+          agentId: run.agent_id,
+          type: 'runtime.job.recovered',
+          message: '检测到运行记录未被当前进程跟踪，已自动恢复排队',
+          payload: { runId: run.id, lockedAt, staleJobSeconds: this.staleJobSeconds },
+        })
+      }
     }
   }
 
@@ -664,6 +745,9 @@ class ClaudeRuntimeQueue {
     }
 
     if (event.type === 'tool') {
+      if (event.toolName === 'file_change') {
+        job.fileChangeEventCount = Number(job.fileChangeEventCount || 0) + 1
+      }
       const category = toolCategory(event.toolName)
       const categoryLabel = toolCategoryLabel(category)
       emitRunLog(job, 'tool', `${engineLabel} 使用${categoryLabel}：${event.toolName}`, {
@@ -827,7 +911,9 @@ class ClaudeRuntimeQueue {
     if (!verification.ok) {
       const retryable = runtimeJobCanRetry(job)
       if (retryable) {
-        retryRuntimeJob(job.run.id, verification.message, 20, { releaseLock: false })
+        const retryDelaySeconds = 20
+        retryRuntimeJob(job.run.id, verification.message, retryDelaySeconds, { releaseLock: false })
+        this.scheduleWakeup(retryDelaySeconds)
         updateSubtask(job.subtaskId, {
           status: 'queued',
           progress: Math.max(Number(getSubtask(job.subtaskId)?.progress || 0), 15),
@@ -985,7 +1071,9 @@ class ClaudeRuntimeQueue {
     const failedSessionId = result.sessionId || getAgentRun(job.run.id)?.claude_session_id || null
     const retryable = runtimeJobCanRetry(job)
     if (retryable) {
-      retryRuntimeJob(job.run.id, error, 20, { releaseLock: false })
+      const retryDelaySeconds = 20
+      retryRuntimeJob(job.run.id, error, retryDelaySeconds, { releaseLock: false })
+      this.scheduleWakeup(retryDelaySeconds)
       emitRunLog(job, 'retry', error, {
         sessionId: failedSessionId,
         attemptCount: job.runtimeJob?.attempt_count || getRuntimeJob(job.run.id)?.attempt_count || 0,
@@ -1227,6 +1315,7 @@ function createRunAndJob({ taskId, subtaskId = null, agentId, kind, prompt, outp
       requiredTools: subtask?.context_json?.requiredTools || [],
     }), executionMode),
     agentDefinitionSnapshot: getAgentDefinition(agentId),
+    fileChangeEventCount: 0,
   }
 }
 
@@ -1266,6 +1355,7 @@ function hydrateJobFromRun(run, runtimeJob) {
       requiredTools: subtask?.context_json?.requiredTools || [],
     }), executionMode),
     agentDefinitionSnapshot: getAgentDefinition(run.agent_id),
+    fileChangeEventCount: 0,
   }
 }
 

@@ -1,5 +1,6 @@
 import { constants } from 'fs'
-import { access, lstat, readdir } from 'fs/promises'
+import { access, lstat, readFile, readdir } from 'fs/promises'
+import { createHash } from 'crypto'
 import { basename, extname, isAbsolute, join, relative, resolve } from 'path'
 
 const EXCLUDED_NAMES = new Set([
@@ -18,6 +19,11 @@ const EXCLUDED_NAMES = new Set([
   '.turbo',
   '.cache',
 ])
+
+const EXCLUDED_RELATIVE_PATHS = [
+  'server/data',
+  '.codex',
+]
 
 const CODE_EXTENSIONS = new Set([
   '.js',
@@ -67,7 +73,9 @@ function isInside(child, parent) {
 function shouldScan(path, root) {
   const resolved = resolve(path)
   if (!isInside(resolved, root)) return false
-  return !EXCLUDED_NAMES.has(basename(resolved))
+  if (EXCLUDED_NAMES.has(basename(resolved))) return false
+  const rel = relative(root, resolved)
+  return !EXCLUDED_RELATIVE_PATHS.some((excluded) => rel === excluded || rel.startsWith(`${excluded}/`))
 }
 
 function isCodeLike(path) {
@@ -90,15 +98,26 @@ async function walk(root, current, files, limit) {
     return
   }
   if (!stat.isFile() || !isCodeLike(current)) return
+  const hash = await hashFile(current)
   const rel = relative(root, current)
   files.set(rel, {
     path: current,
     size: stat.size,
     mtimeMs: Math.floor(stat.mtimeMs),
+    hash,
   })
 }
 
-export async function snapshotCodeAssets(root, { limit = 5000 } = {}) {
+async function hashFile(path) {
+  try {
+    const content = await readFile(path)
+    return createHash('sha1').update(content).digest('hex')
+  } catch {
+    return ''
+  }
+}
+
+export async function snapshotCodeAssets(root, { limit = 100000 } = {}) {
   const resolvedRoot = resolve(root)
   if (!(await exists(resolvedRoot))) return { root: resolvedRoot, files: new Map() }
   const files = new Map()
@@ -118,8 +137,8 @@ export function diffCodeAssets(before, after) {
     const previous = beforeFiles.get(rel)
     if (!previous) {
       added.push({ relativePath: rel, path: file.path, mtime: file.mtimeMs, size: file.size })
-    } else if (previous.size !== file.size || previous.mtimeMs !== file.mtimeMs) {
-      modified.push({ relativePath: rel, path: file.path, mtime: file.mtimeMs, size: file.size })
+    } else if (previous.size !== file.size || previous.mtimeMs !== file.mtimeMs || previous.hash !== file.hash) {
+      modified.push({ relativePath: rel, path: file.path, mtime: file.mtimeMs, size: file.size, hash: file.hash })
     }
   }
 

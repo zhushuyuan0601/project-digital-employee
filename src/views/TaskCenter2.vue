@@ -101,6 +101,16 @@
             </div>
             <div class="mission-hero__tools">
               <button
+                v-if="continuableFailedSubtask"
+                class="primary-btn primary-btn--compact"
+                type="button"
+                :disabled="isSubtaskRerunning(continuableFailedSubtask.id)"
+                @click="continueFailedNode"
+              >
+                <i class="ri-restart-line"></i>
+                {{ isSubtaskRerunning(continuableFailedSubtask.id) ? '提交中' : '继续执行失败节点' }}
+              </button>
+              <button
                 v-if="acceptedPlan"
                 class="ghost-btn ghost-btn--compact"
                 type="button"
@@ -115,6 +125,38 @@
               </button>
               <span class="status-chip" :class="`status-chip--${selectedTask.status}`">{{ statusText(selectedTask.status) }}</span>
             </div>
+          </div>
+          <div
+            v-if="taskRecoveryState"
+            class="task-recovery"
+            :class="`task-recovery--${taskRecoveryState.tone}`"
+          >
+            <div class="task-recovery__icon">
+              <i :class="taskRecoveryState.icon"></i>
+            </div>
+            <div class="task-recovery__body">
+              <strong>{{ taskRecoveryState.title }}</strong>
+              <p>{{ taskRecoveryState.detail }}</p>
+            </div>
+            <button
+              v-if="taskRecoveryState.action === 'continue' && continuableFailedSubtask"
+              class="primary-btn primary-btn--compact"
+              type="button"
+              :disabled="isSubtaskRerunning(continuableFailedSubtask.id)"
+              @click="continueFailedNode"
+            >
+              <i class="ri-restart-line"></i>
+              {{ isSubtaskRerunning(continuableFailedSubtask.id) ? '提交中' : '继续执行' }}
+            </button>
+            <button
+              v-else-if="taskRecoveryState.action === 'execution'"
+              class="ghost-btn ghost-btn--compact"
+              type="button"
+              @click="scrollToWorkflowTarget('execution')"
+            >
+              <i class="ri-arrow-down-line"></i>
+              查看执行区
+            </button>
           </div>
           <div class="mission-hero__tips">
             <span
@@ -1253,14 +1295,27 @@
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import MarkdownIt from 'markdown-it'
 import TaskControlBar from '@/components/task-center/TaskControlBar.vue'
+import { getFileContent } from '@/api/files'
 import { taskApi } from '@/api/tasks'
 import type { AgentRunLog } from '@/api/tasks'
+import { renderMarkdown } from '@/utils/markdown'
 import { useAuthStore } from '@/stores/auth'
 import { useMultiAgentChatStore } from '@/stores/multiAgentChat'
 import { useTasksStore } from '@/stores/tasks'
 import { useThemeStore } from '@/stores/theme'
+import {
+  WORKFLOW_PHASE_ORDER,
+  buildWorkflowWorkPackages,
+  sortPlanNodesByExecutionOrder,
+  sortSubtasksByExecutionOrder,
+  workPackageParallelHint,
+  workPackageStatusClass,
+  workPackageStatusText as formatWorkPackageStatusText,
+  workflowContext,
+  workflowNodeKey,
+  type WorkflowWorkPackage,
+} from '@/utils/task-workflow'
 import type {
   Subtask,
   Task,
@@ -1309,7 +1364,6 @@ const multiAgentStore = useMultiAgentChatStore()
 const themeStore = useThemeStore()
 const authStore = useAuthStore()
 const route = useRoute()
-const md = new MarkdownIt({ html: false, linkify: true, typographer: true })
 
 const createForm = reactive({
   title: '',
@@ -1385,24 +1439,6 @@ type AgentWorkbenchSummary = {
   outputCount: number
   statusNote: string
 }
-type WorkPackageStatus = SubtaskStatus | 'mixed'
-type WorkflowWorkPackage = {
-  key: string
-  phase: WorkflowPhase
-  agentId: string
-  title: string
-  summary: string
-  nodes: Subtask[]
-  progress: number
-  outputCount: number
-  readyCount: number
-  runningCount: number
-  blockedCount: number
-  completedCount: number
-  internalDependencyCount: number
-  externalDependencyCount: number
-  status: WorkPackageStatus
-}
 type TerminalLogEntry = {
   id: string
   timestamp: number
@@ -1424,7 +1460,7 @@ type MemberStoryStep = {
   count: number
   timestampMs: number
 }
-type WorkflowTarget = 'plan' | 'execution' | 'review'
+type WorkflowTarget = 'plan' | 'execution' | 'review' | 'failed-node'
 type FlowStepState = 'done' | 'current' | 'pending'
 type TaskFlowStep = {
   key: 'create' | 'plan' | 'execute' | 'review' | 'archive'
@@ -1438,6 +1474,14 @@ type TaskFlowCallout = {
   detail: string
   actionLabel: string | null
   target: WorkflowTarget | null
+}
+type TaskRecoveryAction = 'continue' | 'execution' | null
+type TaskRecoveryState = {
+  title: string
+  detail: string
+  tone: 'warning' | 'danger' | 'info' | 'success'
+  icon: string
+  action: TaskRecoveryAction
 }
 
 const tasks = computed(() => tasksStore.tasks)
@@ -1462,6 +1506,43 @@ const canCreateTask = computed(() => createForm.title.trim().length > 0 && creat
 const selectedTaskRuntimeLabel = computed(() => taskRuntimeLabel(selectedTask.value))
 const selectedTaskRuntimeSlug = computed(() => taskRuntimeSlug(selectedTask.value))
 const canFinalize = computed(() => selectedTaskSubtasks.value.length > 0 && selectedTaskSubtasks.value.every(subtask => ['completed', 'skipped'].includes(subtask.status)))
+const continuableFailedSubtask = computed(() => {
+  const ordered = sortSubtasksByExecutionOrder(selectedTaskSubtasks.value, selectedTask.value?.plan_json || null)
+  return ordered.find(subtask => subtask.status === 'failed') || null
+})
+const blockedSubtasks = computed(() => selectedTaskSubtasks.value.filter(subtask => subtask.status === 'blocked'))
+const taskRecoveryState = computed<TaskRecoveryState | null>(() => {
+  const task = selectedTask.value
+  if (!task || task.status === 'completed' || selectedTaskSubtasks.value.length === 0) return null
+  if (continuableFailedSubtask.value) {
+    return {
+      title: '可恢复异常',
+      detail: `${agentName(continuableFailedSubtask.value.assigned_agent_id)} · ${continuableFailedSubtask.value.title} 执行失败，可从当前节点继续，不需要重新拆解整个任务。`,
+      tone: 'warning',
+      icon: 'ri-restart-line',
+      action: 'continue',
+    }
+  }
+  if (blockedSubtasks.value.length) {
+    return {
+      title: '依赖阻塞',
+      detail: `${blockedSubtasks.value.length} 个节点正在等待前置节点完成；如果前置节点已完成但仍阻塞，可进入执行区检查依赖和日志。`,
+      tone: 'info',
+      icon: 'ri-git-merge-line',
+      action: 'execution',
+    }
+  }
+  if (task.status === 'failed') {
+    return {
+      title: '需要人工处理',
+      detail: '任务处于异常状态，但没有可直接继续的失败节点；建议检查事件流、拆解计划或重新拆解。',
+      tone: 'danger',
+      icon: 'ri-error-warning-line',
+      action: 'execution',
+    }
+  }
+  return null
+})
 const hasReviewSummary = computed(() => !!selectedTask.value?.summary?.trim())
 const summaryRequested = computed(() => selectedTaskEvents.value.some(event => event.type === 'summary.request.queued'))
 const hasSummaryOutput = computed(() => selectedTaskOutputs.value.some(output => isSummaryOutput(output)))
@@ -2309,74 +2390,21 @@ const planWorkflowNodes = computed<WorkflowNodePlan[]>(() => {
 })
 const orderedPlanWorkflowNodes = computed(() => sortPlanNodesByExecutionOrder(planWorkflowNodes.value))
 const planAcceptanceCriteria = computed(() => acceptedPlan.value?.acceptanceCriteria || [])
-const workflowPhaseOrder: WorkflowPhase[] = ['research', 'product', 'design', 'engineering', 'testing', 'review', 'summary']
 const workflowNodesByPhase = computed(() => {
   const groups = new Map<WorkflowPhase, WorkflowNodePlan[]>()
-  for (const phase of workflowPhaseOrder) groups.set(phase, [])
+  for (const phase of WORKFLOW_PHASE_ORDER) groups.set(phase, [])
   for (const node of orderedPlanWorkflowNodes.value) {
-    const phase = workflowPhaseOrder.includes(node.phase) ? node.phase : 'review'
+    const phase = WORKFLOW_PHASE_ORDER.includes(node.phase) ? node.phase : 'review'
     groups.get(phase)?.push(node)
   }
   return [...groups.entries()].filter(([, nodes]) => nodes.length)
 })
-const workflowWorkPackages = computed<WorkflowWorkPackage[]>(() => {
-  const task = selectedTask.value
-  if (!task) return []
-
-  const groups = new Map<string, Subtask[]>()
-  const executionIndex = new Map(orderedTaskSubtasks.value.map((subtask, index) => [subtask.id, index]))
-  for (const subtask of orderedTaskSubtasks.value) {
-    const phase = normalizedWorkflowPhase(workflowContext(subtask).phase)
-    const key = `${workflowPhaseOrder.indexOf(phase)}:${phase}:${subtask.assigned_agent_id}`
-    groups.set(key, [...(groups.get(key) || []), subtask])
-  }
-
-  return [...groups.entries()]
-    .sort(([, leftNodes], [, rightNodes]) => {
-      const leftIndex = Math.min(...leftNodes.map(node => executionIndex.get(node.id) ?? Number.MAX_SAFE_INTEGER))
-      const rightIndex = Math.min(...rightNodes.map(node => executionIndex.get(node.id) ?? Number.MAX_SAFE_INTEGER))
-      return leftIndex - rightIndex
-    })
-    .map(([key, nodes]) => {
-      const orderedNodes = [...nodes].sort((left, right) => (executionIndex.get(left.id) ?? 0) - (executionIndex.get(right.id) ?? 0))
-      const first = orderedNodes[0]
-      const phase = normalizedWorkflowPhase(workflowContext(first).phase)
-      const nodeKeys = new Set(orderedNodes.map(workflowNodeKey))
-      const dependsOn = orderedNodes.flatMap((node) => {
-        const deps = workflowContext(node).dependsOn
-        return Array.isArray(deps) ? deps.map(String) : []
-      })
-      const internalDependencyCount = dependsOn.filter(dep => nodeKeys.has(dep)).length
-      const externalDependencyCount = new Set(dependsOn.filter(dep => !nodeKeys.has(dep))).size
-      const outputCount = selectedTaskOutputs.value.filter(output => output.subtask_id && orderedNodes.some(node => node.id === output.subtask_id)).length
-      const progress = Math.round(orderedNodes.reduce((sum, node) => sum + Number(node.progress || 0), 0) / Math.max(orderedNodes.length, 1))
-      const readyCount = orderedNodes.filter(node => node.status === 'ready').length
-      const runningCount = orderedNodes.filter(node => ['queued', 'assigned', 'running'].includes(node.status)).length
-      const blockedCount = orderedNodes.filter(node => node.status === 'blocked').length
-      const completedCount = orderedNodes.filter(node => ['completed', 'skipped'].includes(node.status)).length
-      const status = workPackageStatus(orderedNodes)
-
-      return {
-        key,
-        phase,
-        agentId: first.assigned_agent_id,
-        title: `${agentName(first.assigned_agent_id)} · ${phaseLabel(phase)}工作包`,
-        summary: orderedNodes.length > 1
-          ? `同类${phaseLabel(phase)}工作汇总到 ${agentName(first.assigned_agent_id)}，内部 ${orderedNodes.length} 个节点按依赖并行推进。`
-          : `由 ${agentName(first.assigned_agent_id)} 负责该${phaseLabel(phase)}节点。`,
-        nodes: orderedNodes,
-        progress,
-        outputCount,
-        readyCount,
-        runningCount,
-        blockedCount,
-        completedCount,
-        internalDependencyCount,
-        externalDependencyCount,
-        status,
-      }
-    })
-})
+const workflowWorkPackages = computed<WorkflowWorkPackage[]>(() =>
+  buildWorkflowWorkPackages(orderedTaskSubtasks.value, selectedTaskOutputs.value, {
+    agentName,
+    phaseLabel,
+  })
+)
 
 function subtaskActivityTimestampMs(subtask: Subtask) {
   const latestEvent = [...selectedTaskEvents.value]
@@ -2506,6 +2534,14 @@ const taskFlowCallout = computed<TaskFlowCallout>(() => {
 
   if (taskFlowCurrentKey.value === 'execute') {
     const blockedCount = task.subtasks.filter(subtask => ['failed', 'blocked'].includes(subtask.status)).length
+    if (continuableFailedSubtask.value) {
+      return {
+        title: '当前有失败节点可继续',
+        detail: `${agentName(continuableFailedSubtask.value.assigned_agent_id)} · ${continuableFailedSubtask.value.title} 执行异常，可从任务顶部直接继续执行。`,
+        actionLabel: '继续执行失败节点',
+        target: 'failed-node',
+      }
+    }
     return {
       title: blockedCount > 0 ? '当前先处理执行异常' : '当前处于团队执行阶段',
       detail: blockedCount > 0
@@ -2940,6 +2976,14 @@ async function retrySubtask(subtaskId: string) {
   }
 }
 
+async function continueFailedNode() {
+  if (!continuableFailedSubtask.value) {
+    ElMessage.info('当前没有可继续执行的失败节点')
+    return
+  }
+  await retrySubtask(continuableFailedSubtask.value.id)
+}
+
 async function runSingleSubtask(subtaskId: string) {
   if (rerunningSubtaskIds.value.has(subtaskId)) return
   setSubtaskRerunning(subtaskId, true)
@@ -3074,12 +3118,11 @@ async function previewOutput(output: TaskOutput | null | undefined) {
   }
   previewLoading.value = true
   try {
-    const search = new URLSearchParams({
+    const data = await getFileContent({
       path: output.path,
       taskId: output.task_id || selectedTask.value?.id || '',
       outputId: String(output.id || ''),
     })
-    const data = await fetch(`/api/files/content?${search.toString()}`).then(res => res.json())
     if (!data.success) throw new Error(data.error || '读取失败')
     previewContent.value = data.content || ''
   } catch (err) {
@@ -3117,7 +3160,7 @@ async function openCurrentTaskWorkspace() {
 }
 
 function renderPreview() {
-  return md.render(previewContent.value)
+  return renderMarkdown(previewContent.value)
 }
 
 function outputTimestampMs(output: TaskOutput) {
@@ -3149,127 +3192,6 @@ function phaseLabel(phase?: string) {
   return workflowPhaseLabels[(phase || 'review') as WorkflowPhase] || phase || '复盘'
 }
 
-function nodeSequenceFromId(id: string) {
-  const match = String(id || '').match(/(?:^|[-_])(\d+)$/)
-  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER
-}
-
-function planExecutionOrderMap(plan: TaskPlan | null | undefined) {
-  const map = new Map<string, number>()
-  const nodes = Array.isArray(plan?.workflow) && plan.workflow.length
-    ? plan.workflow
-    : Array.isArray(plan?.subtasks)
-      ? plan.subtasks
-      : []
-  nodes.forEach((node, index) => {
-    if (node.id) map.set(String(node.id), index + 1)
-  })
-  return map
-}
-
-function stableTopologicalSort<T>(
-  items: T[],
-  keyOf: (item: T, index: number) => string,
-  dependsOnOf: (item: T) => string[],
-  rankOf: (item: T, index: number) => number,
-) {
-  const entries = items.map((item, index) => ({
-    item,
-    key: keyOf(item, index),
-    rank: rankOf(item, index),
-    originalIndex: index,
-  }))
-  const knownKeys = new Set(entries.map(entry => entry.key))
-  const indegree = new Map(entries.map(entry => [entry.key, 0]))
-  const dependents = new Map<string, string[]>()
-
-  for (const entry of entries) {
-    const deps = dependsOnOf(entry.item).filter(dep => knownKeys.has(dep))
-    indegree.set(entry.key, deps.length)
-    for (const dep of deps) {
-      dependents.set(dep, [...(dependents.get(dep) || []), entry.key])
-    }
-  }
-
-  const byKey = new Map(entries.map(entry => [entry.key, entry]))
-  const compare = (left: typeof entries[number], right: typeof entries[number]) =>
-    left.rank - right.rank || left.originalIndex - right.originalIndex || left.key.localeCompare(right.key, 'zh-CN')
-  const queue = entries.filter(entry => indegree.get(entry.key) === 0).sort(compare)
-  const ordered: typeof entries = []
-
-  while (queue.length) {
-    const current = queue.shift()
-    if (!current) break
-    ordered.push(current)
-    for (const dependentKey of dependents.get(current.key) || []) {
-      indegree.set(dependentKey, Math.max(0, (indegree.get(dependentKey) || 0) - 1))
-      if (indegree.get(dependentKey) === 0) {
-        const dependent = byKey.get(dependentKey)
-        if (dependent) {
-          queue.push(dependent)
-          queue.sort(compare)
-        }
-      }
-    }
-  }
-
-  if (ordered.length < entries.length) {
-    const emitted = new Set(ordered.map(entry => entry.key))
-    ordered.push(...entries.filter(entry => !emitted.has(entry.key)).sort(compare))
-  }
-
-  return ordered.map(entry => entry.item)
-}
-
-function sortPlanNodesByExecutionOrder(nodes: WorkflowNodePlan[]) {
-  return stableTopologicalSort(
-    nodes,
-    (node, index) => String(node.id || `node-${String(index + 1).padStart(2, '0')}`),
-    node => Array.isArray(node.dependsOn) ? node.dependsOn.map(String) : [],
-    (node, index) => {
-      const explicitOrder = Number((node as WorkflowNodePlan & { executionOrder?: number }).executionOrder)
-      if (Number.isFinite(explicitOrder) && explicitOrder > 0) return explicitOrder
-      return nodeSequenceFromId(String(node.id || '')) !== Number.MAX_SAFE_INTEGER ? nodeSequenceFromId(String(node.id)) : index + 1
-    },
-  )
-}
-
-function sortSubtasksByExecutionOrder(subtasks: Subtask[], plan: TaskPlan | null | undefined) {
-  const planOrder = planExecutionOrderMap(plan)
-  return stableTopologicalSort(
-    subtasks,
-    subtask => workflowNodeKey(subtask),
-    subtask => {
-      const dependsOn = workflowContext(subtask).dependsOn
-      return Array.isArray(dependsOn) ? dependsOn.map(String) : []
-    },
-    (subtask, index) => {
-      const context = workflowContext(subtask)
-      const explicitOrder = Number(context.executionOrder)
-      if (Number.isFinite(explicitOrder) && explicitOrder > 0) return explicitOrder
-      const nodeKey = workflowNodeKey(subtask)
-      if (planOrder.has(nodeKey)) return planOrder.get(nodeKey) || index + 1
-      const idRank = nodeSequenceFromId(nodeKey)
-      if (idRank !== Number.MAX_SAFE_INTEGER) return idRank
-      return Number(subtask.created_at || 0) || index + 1
-    },
-  )
-}
-
-function normalizedWorkflowPhase(value: unknown): WorkflowPhase {
-  const phase = String(value || 'review') as WorkflowPhase
-  return workflowPhaseOrder.includes(phase) ? phase : 'review'
-}
-
-function workflowContext(subtask: Subtask) {
-  return subtask.context_json || {}
-}
-
-function workflowNodeKey(subtask: Subtask) {
-  const context = workflowContext(subtask)
-  return typeof context.workflowNodeId === 'string' ? context.workflowNodeId : subtask.id
-}
-
 function dependencyLabels(subtask: Subtask) {
   const dependsOn = Array.isArray(workflowContext(subtask).dependsOn) ? workflowContext(subtask).dependsOn as string[] : []
   if (!dependsOn.length) return ['无前置依赖']
@@ -3290,38 +3212,8 @@ function executionModeLabel(subtask: Subtask) {
   return executionModeLabels[mode] || mode
 }
 
-function workPackageStatus(nodes: Subtask[]): WorkPackageStatus {
-  if (nodes.every(node => node.status === 'skipped')) return 'skipped'
-  if (nodes.every(node => ['completed', 'skipped'].includes(node.status))) return 'completed'
-  if (nodes.some(node => node.status === 'failed')) return 'failed'
-  if (nodes.some(node => ['assigned', 'running'].includes(node.status))) return 'running'
-  if (nodes.some(node => node.status === 'queued')) return 'queued'
-  if (nodes.some(node => node.status === 'ready')) return 'ready'
-  if (nodes.every(node => node.status === 'blocked')) return 'blocked'
-  return 'mixed'
-}
-
-function workPackageStatusClass(pack: WorkflowWorkPackage) {
-  return pack.status === 'mixed' ? 'running' : pack.status
-}
-
 function workPackageStatusText(pack: WorkflowWorkPackage) {
-  if (pack.status === 'mixed') return '推进中'
-  if (pack.status === 'completed') return `完成 ${pack.completedCount}/${pack.nodes.length}`
-  return subtaskStatusText(pack.status)
-}
-
-function workPackageParallelHint(pack: WorkflowWorkPackage) {
-  if (pack.nodes.length <= 1) {
-    return pack.externalDependencyCount
-      ? `等待 ${pack.externalDependencyCount} 个外部输入满足后执行。`
-      : '单节点工作包，可直接按节点状态执行。'
-  }
-  if (pack.internalDependencyCount === 0) {
-    return `内部 ${pack.nodes.length} 个节点互不依赖，可由同一 Agent 并行推进。`
-  }
-  const activeOrReady = pack.readyCount + pack.runningCount
-  return `内部含 ${pack.internalDependencyCount} 条依赖，当前 ${activeOrReady} 个节点可执行或正在执行。`
+  return formatWorkPackageStatusText(pack, subtaskStatusText)
 }
 
 function shortSessionKey(sessionKey = '') {
@@ -3388,8 +3280,12 @@ async function scrollTaskRowIntoView(taskId: string) {
 }
 
 async function scrollToWorkflowTarget(target: WorkflowTarget) {
+  if (target === 'failed-node') {
+    await continueFailedNode()
+    return
+  }
   await nextTick()
-  const targetMap: Record<WorkflowTarget, HTMLElement | null> = {
+  const targetMap: Record<Exclude<WorkflowTarget, 'failed-node'>, HTMLElement | null> = {
     plan: planSectionRef.value,
     execution: executionSectionRef.value,
     review: reviewPanelRef.value,
@@ -3584,7 +3480,7 @@ function ingestRuntimeStreamEvent(taskId: string, data: Record<string, unknown>)
 
 function openTaskEventStream(taskId: string) {
   closeTaskEventStream()
-  taskEventSource = new EventSource(`/api/tasks/${encodeURIComponent(taskId)}/events/stream`)
+  taskEventSource = new EventSource(taskApi.buildTaskEventStreamUrl(taskId))
   taskEventSource.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data) as Record<string, unknown>
@@ -3859,6 +3755,65 @@ watch(
 
 .surface-heading h2 {
   font-size: 16px;
+}
+
+.task-recovery {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card) 92%, var(--color-primary) 4%);
+}
+
+.task-recovery__icon {
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--text-primary);
+  background: rgba(var(--color-primary-rgb), 0.12);
+}
+
+.task-recovery__body {
+  min-width: 0;
+}
+
+.task-recovery__body strong,
+.task-recovery__body p {
+  display: block;
+  min-width: 0;
+}
+
+.task-recovery__body strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.task-recovery__body p {
+  margin: 3px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.task-recovery--warning {
+  border-color: color-mix(in srgb, var(--color-warning) 45%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 88%, var(--color-warning) 8%);
+}
+
+.task-recovery--danger {
+  border-color: color-mix(in srgb, var(--color-danger) 45%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 88%, var(--color-danger) 8%);
+}
+
+.task-recovery--info {
+  border-color: rgba(var(--color-primary-rgb), 0.28);
 }
 
 .eyebrow {

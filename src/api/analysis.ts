@@ -1,4 +1,4 @@
-import { request } from './base'
+import { request, requestJson, requestStream } from './base'
 
 export interface AnalysisSession {
   id: string
@@ -225,12 +225,17 @@ export interface ExportAnalysisReportPayload {
 }
 
 export async function exportAnalysisReport(payload: ExportAnalysisReportPayload) {
-  const response = await fetch('/api/analysis/export/report', {
+  return requestJson('/api/analysis/export/report', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
-  return response.json()
+}
+
+export async function testAnalysisConnection(payload: { api_base: string; api_key?: string }) {
+  return requestJson<{ ok?: boolean; ms?: number; status?: number; error?: string }>('/api/analysis/test-connection', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
 }
 
 export async function streamAnalysisChat(
@@ -238,22 +243,12 @@ export async function streamAnalysisChat(
   onChunk: (chunk: { content?: string; session_id?: string; files?: Array<{ name: string; url: string }>; done?: boolean }) => void,
   options?: { signal?: AbortSignal },
 ) {
-  const response = await fetch('/api/analysis/chat/completions', {
+  const stream = await requestStream('/api/analysis/chat/completions', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
     signal: options?.signal,
   })
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Request failed' }))
-    throw new Error(error.error || `HTTP ${response.status}`)
-  }
-
-  const reader = response.body?.getReader()
-  if (!reader) {
-    throw new Error('Streaming is not supported by the current browser')
-  }
+  const reader = stream.getReader()
 
   const decoder = new TextDecoder()
   let buffer = ''

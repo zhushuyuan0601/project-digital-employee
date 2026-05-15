@@ -1,48 +1,91 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || ''
 
+export interface ApiRequestOptions extends RequestInit {
+  auth?: boolean
+}
+
 function getAuthToken(): string {
   return import.meta.env.VITE_API_AUTH_TOKEN || ''
 }
 
-export async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
+function isJsonRequestBody(body: RequestInit['body']): boolean {
+  return !!body && !(body instanceof FormData) && !(body instanceof Blob) && !(body instanceof URLSearchParams)
+}
+
+function prepareHeaders(options?: ApiRequestOptions): Headers {
   const headers = new Headers(options?.headers || {})
-  if (!(options?.body instanceof FormData) && !headers.has('Content-Type')) {
+  if (isJsonRequestBody(options?.body) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
   const token = getAuthToken()
-  if (token && !headers.has('Authorization')) {
+  if (options?.auth !== false && token && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${token}`)
   }
-
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  })
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Request failed' }))
-    throw new Error(error.error || `HTTP ${response.status}`)
-  }
-
-  return response.json()
+  return headers
 }
 
-export async function requestBlob(endpoint: string, options?: RequestInit): Promise<Blob> {
-  const headers = new Headers(options?.headers || {})
-  const token = getAuthToken()
-  if (token && !headers.has('Authorization')) {
-    headers.set('Authorization', `Bearer ${token}`)
-  }
+export function buildApiUrl(endpoint: string): string {
+  if (/^https?:\/\//i.test(endpoint)) return endpoint
+  return `${API_BASE_URL}${endpoint}`
+}
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
+// EventSource cannot receive custom Authorization headers; this keeps URL resolution aligned with fetch helpers.
+export function buildEventSourceUrl(endpoint: string): string {
+  return buildApiUrl(endpoint)
+}
+
+async function parseErrorMessage(response: Response): Promise<string> {
+  const contentType = response.headers.get('Content-Type') || ''
+  if (contentType.includes('application/json')) {
+    const error = await response.json().catch(() => null) as { error?: string; message?: string } | null
+    return error?.error || error?.message || `HTTP ${response.status}`
+  }
+  const text = await response.text().catch(() => '')
+  return text || `HTTP ${response.status}`
+}
+
+export async function requestRaw(endpoint: string, options?: ApiRequestOptions): Promise<Response> {
+  const fetchOptions: ApiRequestOptions = { ...(options || {}) }
+  delete fetchOptions.auth
+  const response = await fetch(buildApiUrl(endpoint), {
+    ...fetchOptions,
+    headers: prepareHeaders(options),
   })
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Request failed' }))
-    throw new Error(error.error || `HTTP ${response.status}`)
+    throw new Error(await parseErrorMessage(response))
   }
 
+  return response
+}
+
+export async function requestJson<T>(endpoint: string, options?: ApiRequestOptions): Promise<T> {
+  const response = await requestRaw(endpoint, options)
+  if (response.status === 204) return undefined as T
+  const text = await response.text()
+  if (!text) return undefined as T
+  return JSON.parse(text) as T
+}
+
+export async function request<T>(endpoint: string, options?: ApiRequestOptions): Promise<T> {
+  return requestJson<T>(endpoint, options)
+}
+
+export async function requestBlob(endpoint: string, options?: ApiRequestOptions): Promise<Blob> {
+  const response = await requestRaw(endpoint, options)
   return response.blob()
+}
+
+export async function requestText(endpoint: string, options?: ApiRequestOptions): Promise<string> {
+  const response = await requestRaw(endpoint, options)
+  return response.text()
+}
+
+export async function requestStream(endpoint: string, options?: ApiRequestOptions): Promise<ReadableStream<Uint8Array>> {
+  const response = await requestRaw(endpoint, options)
+  const stream = response.body
+  if (!stream) {
+    throw new Error('Streaming is not supported by the current browser')
+  }
+  return stream
 }

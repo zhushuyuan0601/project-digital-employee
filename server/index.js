@@ -22,7 +22,7 @@ import { initializeTaskSchema } from './db/tasks.js'
 import { getTaskDetail, getTaskOutput, listTaskEvents, listTaskOutputs, listTasks } from './db/tasks.js'
 import { initializeAnalysisSchema } from './db/analysis.js'
 import { initializeMailSchema } from './db/mail.js'
-import { cleanupOrphanAgentRunsOnStartup } from './claude-runtime/index.js'
+import { cleanupOrphanAgentRunsOnStartup, claudeRuntimeQueue } from './claude-runtime/index.js'
 import { getClaudeRuntimeConfig } from './claude-runtime/config.js'
 import { startMailScanner } from './mail/mail-service.js'
 import { DEFAULT_SERVER_CONFIG, ensureDir, envString } from './config/defaults.js'
@@ -1202,6 +1202,7 @@ const runtimeRecovery = cleanupOrphanAgentRunsOnStartup()
 if (runtimeRecovery.cleaned > 0) {
   console.log(`[Claude Runtime] Startup recovery cleaned ${runtimeRecovery.cleaned} orphan queued/running runs`)
 }
+claudeRuntimeQueue.startScheduler()
 startMailScanner()
 app.use('/api', createAutomationRouter())
 app.use('/api', agentsRouter)
@@ -1248,6 +1249,7 @@ const server = app.listen(PORT, () => {
 
 function gracefulShutdown(signal) {
   console.log(`[Server] Received ${signal}, shutting down gracefully...`)
+  claudeRuntimeQueue.stopScheduler()
   server.close(() => {
     console.log('[Server] Closed.')
     process.exit(0)

@@ -964,7 +964,6 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref } from 'vue'
-import MarkdownIt from 'markdown-it'
 import {
   ArrowDown,
   ChatDotRound,
@@ -1034,12 +1033,7 @@ import {
   summarizePlainText,
   toStepType,
 } from '@/utils/analysis-workbench'
-
-const md = new MarkdownIt({
-  html: false,
-  linkify: true,
-  breaks: false,
-})
+import { renderMarkdown as renderMarkdownContent } from '@/utils/markdown'
 
 const notification = useNotification()
 
@@ -1466,7 +1460,10 @@ function normalizeMarkdownContent(content: string) {
 }
 
 function renderMarkdown(content: string) {
-  return md.render(normalizeMarkdownContent(content || ''))
+  return renderMarkdownContent(content || '', {
+    profile: 'analysis',
+    preprocess: normalizeMarkdownContent,
+  })
 }
 
 function getStepMeta(type: AnalysisDisplayStepType) {

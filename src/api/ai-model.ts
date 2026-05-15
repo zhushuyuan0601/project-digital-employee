@@ -1,5 +1,6 @@
 // OpenAI API 兼容的 AI 模型服务客户端
 // 本地 AI 模型服务
+import { requestJson } from './base'
 
 // 默认配置 - 使用 Vite 代理
 export const AI_MODEL_CONFIG = {
@@ -47,10 +48,9 @@ export interface ChatCompletionResponse {
 export async function chatCompletion(params: ChatCompletionParams): Promise<ChatCompletionResponse> {
   const { messages, model = AI_MODEL_CONFIG.model, temperature = 0.7, maxTokens = 4096 } = params
 
-  const response = await fetch(`${AI_MODEL_CONFIG.baseUrl}/chat/completions`, {
+  return requestJson<ChatCompletionResponse>(`${AI_MODEL_CONFIG.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
       'Authorization': `Bearer ${AI_MODEL_CONFIG.apiKey}`
     },
     body: JSON.stringify({
@@ -60,15 +60,9 @@ export async function chatCompletion(params: ChatCompletionParams): Promise<Chat
       max_tokens: maxTokens,
       stream: false
     }),
-    mode: 'cors'
+    mode: 'cors',
+    auth: false,
   })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`AI 模型服务请求失败：${response.status} ${response.statusText} - ${errorText}`)
-  }
-
-  return response.json()
 }
 
 /**

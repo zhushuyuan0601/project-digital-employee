@@ -22,7 +22,7 @@
         <span v-if="time" class="chat-message-bubble__time">{{ time }}</span>
       </div>
 
-      <div class="chat-message-bubble__content" v-html="contentHtml"></div>
+      <div class="chat-message-bubble__content" v-html="safeContentHtml"></div>
 
       <div v-if="mentions.length > 0" class="chat-message-bubble__mentions">
         <span
@@ -38,7 +38,10 @@
 </template>
 
 <script setup lang="ts">
-withDefaults(defineProps<{
+import { computed } from 'vue'
+import { sanitizeHtml } from '@/utils/sanitize'
+
+const props = withDefaults(defineProps<{
   variant: 'user' | 'assistant' | 'system'
   layout?: 'left' | 'right'
   senderName?: string
@@ -55,6 +58,8 @@ withDefaults(defineProps<{
   avatarImage: '',
   mentions: () => [],
 })
+
+const safeContentHtml = computed(() => sanitizeHtml(props.contentHtml || ''))
 </script>
 
 <style scoped>

@@ -58,12 +58,18 @@
           :key="agent.id"
           type="button"
           class="agent-choice"
-          :class="{ selected: selectedAgentId === agent.id, busy: agentBusy(agent.id) }"
+          :class="[
+            `agent-choice--${agentStatusTone(agent.id)}`,
+            { selected: selectedAgentId === agent.id, busy: agentBusy(agent.id) },
+          ]"
           @click="selectAgent(agent.id)"
         >
           <span class="agent-avatar">{{ agent.name.slice(0, 1) }}</span>
           <span>
-            <strong>{{ agent.name }}</strong>
+            <strong>
+              {{ agent.name }}
+              <i class="agent-status-dot" :class="`agent-status-dot--${agentStatusTone(agent.id)}`"></i>
+            </strong>
             <small>{{ taskAgentSubtitle(agent.id) }}</small>
           </span>
         </button>
@@ -193,10 +199,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import MarkdownIt from 'markdown-it'
 import { taskApi, type AgentDefinition, type AgentRun, type AgentRunLog } from '@/api/tasks'
 import type { Task } from '@/types/task'
-import { sanitizeHtml } from '@/utils/sanitize'
+import { renderMarkdown as renderMarkdownContent } from '@/utils/markdown'
 
 type ConsoleEntry = {
   id: string
@@ -235,13 +240,6 @@ const cancellingRunId = ref('')
 const terminalRef = ref<HTMLElement | null>(null)
 const chatRef = ref<HTMLElement | null>(null)
 let taskEventSource: EventSource | null = null
-
-const md = new MarkdownIt({
-  html: false,
-  linkify: true,
-  typographer: true,
-  breaks: true,
-})
 
 const activeTasks = computed(() => tasks.value.filter(task => !['completed', 'cancelled'].includes(task.status)))
 const executableAgents = computed(() => agents.value.filter(agent => agent.enabled))
@@ -376,7 +374,7 @@ function summarizeTaskDescription(description = '') {
 }
 
 function renderMarkdown(content = '') {
-  return sanitizeHtml(md.render(content || ''))
+  return renderMarkdownContent(content || '', { profile: 'chat' })
 }
 
 function entryToolName(entry: ConsoleEntry) {
@@ -506,6 +504,17 @@ function agentStatusText(agentId: string) {
   return latest?.status || '待命'
 }
 
+function agentStatusTone(agentId: string) {
+  const active = taskRuns.value.find(run => run.agent_id === agentId && ['queued', 'running'].includes(run.status))
+  if (active?.status === 'running') return 'running'
+  if (active?.status === 'queued') return 'queued'
+  const latest = taskRuns.value.find(run => run.agent_id === agentId)
+  if (latest?.status === 'completed') return 'completed'
+  if (latest?.status === 'failed') return 'failed'
+  if (latest?.status === 'cancelled') return 'cancelled'
+  return 'idle'
+}
+
 function taskAgentSubtitle(agentId: string) {
   const nodeCount = (selectedTask.value?.subtasks || []).filter(subtask => subtask.assigned_agent_id === agentId).length
   const runCount = taskRuns.value.filter(run => run.agent_id === agentId).length
@@ -606,7 +615,7 @@ async function cancelRun(runId: string) {
 }
 
 function openTaskStream(taskId: string) {
-  taskEventSource = new EventSource(`/api/tasks/${encodeURIComponent(taskId)}/events/stream`)
+  taskEventSource = new EventSource(taskApi.buildTaskEventStreamUrl(taskId))
   taskEventSource.onmessage = async (event) => {
     try {
       const data = JSON.parse(event.data) as Record<string, any>
@@ -857,26 +866,82 @@ h2 {
 }
 
 .agent-choice {
+  --agent-tone-rgb: 148, 163, 184;
+  --agent-tone-strong-rgb: 148, 163, 184;
+  position: relative;
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);
   gap: 10px;
   align-items: center;
   padding: 10px;
-  border: 1px solid var(--border-default);
+  border: 1px solid rgba(var(--agent-tone-rgb), 0.24);
   border-radius: 8px;
-  background: var(--bg-card);
+  background:
+    linear-gradient(90deg, rgba(var(--agent-tone-rgb), 0.24), rgba(var(--agent-tone-rgb), 0.06) 46%, transparent),
+    color-mix(in srgb, var(--bg-card) 88%, rgb(var(--agent-tone-rgb)) 12%);
   color: var(--text-primary);
   text-align: left;
   cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.agent-choice::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: rgb(var(--agent-tone-strong-rgb));
+  opacity: 0.86;
+}
+
+.agent-choice:hover {
+  border-color: rgba(var(--agent-tone-strong-rgb), 0.5);
+  transform: translateY(-1px);
+}
+
+.agent-choice--running {
+  --agent-tone-rgb: 56, 189, 248;
+  --agent-tone-strong-rgb: 96, 165, 250;
+}
+
+.agent-choice--queued {
+  --agent-tone-rgb: 251, 191, 36;
+  --agent-tone-strong-rgb: 245, 158, 11;
+}
+
+.agent-choice--completed {
+  --agent-tone-rgb: 52, 211, 153;
+  --agent-tone-strong-rgb: 16, 185, 129;
+}
+
+.agent-choice--failed {
+  --agent-tone-rgb: 248, 113, 113;
+  --agent-tone-strong-rgb: 239, 68, 68;
+}
+
+.agent-choice--cancelled {
+  --agent-tone-rgb: 148, 163, 184;
+  --agent-tone-strong-rgb: 100, 116, 139;
+}
+
+.agent-choice--idle {
+  --agent-tone-rgb: 125, 151, 178;
+  --agent-tone-strong-rgb: 148, 163, 184;
 }
 
 .agent-choice.selected {
-  border-color: rgba(var(--color-primary-rgb), 0.55);
-  box-shadow: inset 0 0 0 1px rgba(var(--color-primary-rgb), 0.24);
+  border-color: rgba(var(--agent-tone-strong-rgb), 0.8);
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--agent-tone-strong-rgb), 0.42),
+    0 0 0 1px rgba(var(--agent-tone-strong-rgb), 0.18),
+    0 10px 28px rgba(var(--agent-tone-rgb), 0.12);
 }
 
 .agent-choice.busy .agent-avatar {
-  box-shadow: 0 0 0 3px rgba(var(--color-primary-rgb), 0.16);
+  box-shadow:
+    0 0 0 3px rgba(var(--agent-tone-strong-rgb), 0.18),
+    0 0 18px rgba(var(--agent-tone-strong-rgb), 0.24);
 }
 
 .agent-avatar {
@@ -888,6 +953,37 @@ h2 {
   background: linear-gradient(135deg, var(--color-primary), var(--color-cyan));
   color: white;
   font-weight: 800;
+}
+
+.agent-choice strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.agent-status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: rgb(var(--agent-tone-strong-rgb));
+  box-shadow: 0 0 0 3px rgba(var(--agent-tone-strong-rgb), 0.15);
+}
+
+.agent-status-dot--running {
+  animation: agentPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes agentPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px rgba(var(--agent-tone-strong-rgb), 0.15);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(var(--agent-tone-strong-rgb), 0.26);
+  }
 }
 
 .agent-avatar--large {

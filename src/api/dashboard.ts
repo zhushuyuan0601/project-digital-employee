@@ -21,6 +21,8 @@ export interface ActivityItem {
   type: string
   actor?: string
   description?: string
+  date?: string
+  person?: string
   task?: string
   status?: string
   time?: string
@@ -40,4 +42,12 @@ export function getDashboard() {
 
 export function getActivities(limit = 5) {
   return request<ActivitiesResponse>(`/api/activities?limit=${limit}`)
+}
+
+export function getRecentActivities(params: { hours?: number; limit?: number } = {}) {
+  const search = new URLSearchParams()
+  if (params.hours) search.set('hours', String(params.hours))
+  if (params.limit) search.set('limit', String(params.limit))
+  const query = search.toString()
+  return request<ActivitiesResponse>(`/api/activities${query ? `?${query}` : ''}`)
 }
