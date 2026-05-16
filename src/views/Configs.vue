@@ -278,7 +278,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { taskApi, type AgentDefinition, type RuntimeConfig } from '@/api/tasks'
 
 type ConfigItem = {
@@ -419,6 +419,23 @@ function parseTools(value: string) {
 }
 
 async function updateAgent(agent: AgentDefinition, payload: Partial<Pick<AgentDefinition, 'enabled' | 'maxConcurrency' | 'allowedTools' | 'riskLevel' | 'sortOrder' | 'defaultModel'>>) {
+  const summary = Object.entries(payload)
+    .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(',') : value}`)
+    .join('\n')
+  try {
+    await ElMessageBox.confirm(
+      `确定要修改 ${agent.name} 的配置吗？\n\n${summary}`,
+      '确认 Agent 配置变更',
+      {
+        confirmButtonText: '保存',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+  } catch {
+    await refreshConfig()
+    return
+  }
   savingAgentId.value = agent.id
   try {
     const response = await taskApi.updateAgent(agent.id, payload)
@@ -436,6 +453,19 @@ async function updateAgent(agent: AgentDefinition, payload: Partial<Pick<AgentDe
 }
 
 async function saveRuntimeConfig() {
+  try {
+    await ElMessageBox.confirm(
+      `确定要保存 Runtime 配置吗？新入队任务将立即使用新配置。\n\n并发：${runtimeForm.maxConcurrency}\n最大轮次：${runtimeForm.maxTurns}\n工具：${runtimeForm.allowedTools.join(', ') || '--'}`,
+      '确认 Runtime 配置变更',
+      {
+        confirmButtonText: '保存配置',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
   saving.value = true
   try {
     const response = await taskApi.updateRuntimeConfig({

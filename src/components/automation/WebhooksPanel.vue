@@ -525,12 +525,19 @@ const refreshWebhooks = async () => {
 const copyUrl = async (url: string) => {
   try {
     await navigator.clipboard.writeText(url)
+    notification.success('Webhook URL 已复制')
   } catch (e) {
     console.error('复制失败', e)
+    notification.error('复制失败')
   }
 }
 
 const toggleWebhook = async (webhook: Webhook) => {
+  const confirmed = await notification.confirm(
+    `确定要${webhook.enabled ? '暂停' : '启用'} Webhook "${webhook.name}" 吗？该操作会影响外部事件投递。`,
+    webhook.enabled ? '暂停 Webhook' : '启用 Webhook',
+  )
+  if (!confirmed) return
   try {
     await webhooksStore.toggleWebhook(webhook.id)
   } catch (e: any) {

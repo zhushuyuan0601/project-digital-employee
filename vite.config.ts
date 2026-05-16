@@ -77,6 +77,11 @@ export default defineConfig({
         target: 'http://127.0.0.1:18888',
         changeOrigin: true
       },
+      '/api/terminal': {
+        target: 'http://127.0.0.1:18888',
+        changeOrigin: true,
+        ws: true
+      },
       '/ai-api': {
         target: process.env.VITE_AI_API_BASE_URL || 'http://127.0.0.1:9091',
         changeOrigin: true,

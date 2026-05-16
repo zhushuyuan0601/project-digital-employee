@@ -1,0 +1,316 @@
+import { WebSocketServer } from 'ws'
+import { existsSync, statSync } from 'fs'
+import { dirname, resolve } from 'path'
+import express from 'express'
+import { spawn, spawnSync } from 'child_process'
+import { fileURLToPath } from 'url'
+import { getClaudeRuntimeConfig } from './claude-runtime/config.js'
+import { PROJECT_ROOT, envString } from './config/defaults.js'
+import { asyncRoute, sendError } from './utils/http.js'
+
+const allowedEngines = new Set(['codex', 'claude'])
+const tuiSessions = new Map()
+const MAX_TUI_BUFFER = 200000
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+
+function resolveHomePath(value) {
+  const text = String(value || '').trim()
+  if (!text) return PROJECT_ROOT
+  if (text === '~') return process.env.HOME || PROJECT_ROOT
+  if (text.startsWith('~/')) return resolve(process.env.HOME || PROJECT_ROOT, text.slice(2))
+  return resolve(text)
+}
+
+function terminalAllowedRoots() {
+  const config = getClaudeRuntimeConfig()
+  const extras = envString('TERMINAL_ALLOWED_ROOTS', '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+  return [
+    PROJECT_ROOT,
+    config.cwd,
+    config.workspaceRoot,
+    config.outputRoot,
+    ...extras,
+  ]
+    .filter(Boolean)
+    .map((item) => resolveHomePath(item))
+}
+
+function isInsidePath(targetPath, rootPath) {
+  const target = resolve(targetPath)
+  const root = resolve(rootPath)
+  return target === root || target.startsWith(`${root}/`)
+}
+
+function assertAllowedCwd(cwd) {
+  const resolvedCwd = resolveHomePath(cwd || getClaudeRuntimeConfig().cwd || PROJECT_ROOT)
+  if (!existsSync(resolvedCwd) || !statSync(resolvedCwd).isDirectory()) {
+    throw new Error('Working directory does not exist or is not a directory')
+  }
+  const allowed = terminalAllowedRoots().some((root) => isInsidePath(resolvedCwd, root))
+  if (!allowed) throw new Error('Working directory is outside TERMINAL_ALLOWED_ROOTS')
+  return resolvedCwd
+}
+
+function normalizeEngine(engine) {
+  const value = String(engine || 'codex').trim().toLowerCase()
+  if (!allowedEngines.has(value)) throw new Error('Only codex and claude engines are allowed')
+  return value
+}
+
+function tuiArgsForEngine(engine, cwd) {
+  if (engine === 'claude') return []
+  return [
+    '--cd',
+    cwd,
+    '--sandbox',
+    'workspace-write',
+    '--ask-for-approval',
+    'never',
+  ]
+}
+
+function executableForEngine(engine) {
+  const envKey = engine === 'claude' ? 'TERMINAL_CLAUDE_BIN' : 'TERMINAL_CODEX_BIN'
+  const explicit = String(process.env[envKey] || '').trim()
+  if (explicit) return explicit
+  const resolved = spawnSync('command', ['-v', engine], {
+    shell: true,
+    encoding: 'utf8',
+    env: process.env,
+  })
+  return String(resolved.stdout || '').trim() || engine
+}
+
+function safeJsonParse(value) {
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
+}
+
+function sendJson(ws, payload) {
+  if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(payload))
+}
+
+function nowIso() {
+  return new Date().toISOString()
+}
+
+function closeWithHttpError(socket, code, message) {
+  socket.write(`HTTP/1.1 ${code} ${message}\r\nConnection: close\r\n\r\n`)
+  socket.destroy()
+}
+
+function isAuthorized(requestUrl) {
+  const token = process.env.API_AUTH_TOKEN || ''
+  if (!token) return true
+  return requestUrl.searchParams.get('token') === token
+}
+
+function serializeTuiSession(session) {
+  return {
+    id: session.id,
+    title: session.title,
+    engine: session.engine,
+    cwd: session.cwd,
+    status: session.status,
+    startedAt: session.startedAt,
+    lastEventAt: session.lastEventAt,
+    exitCode: session.exitCode,
+    signal: session.signal,
+    clients: session.clients.size,
+  }
+}
+
+function createTuiSession({ engine, cwd, title, cols = 120, rows = 36 }) {
+  const normalizedEngine = normalizeEngine(engine)
+  const resolvedCwd = assertAllowedCwd(cwd)
+  const safeCols = Math.max(40, Math.min(240, Number(cols) || 120))
+  const safeRows = Math.max(12, Math.min(80, Number(rows) || 36))
+  const id = `tui-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const executable = executableForEngine(normalizedEngine)
+  const bridgePath = resolve(__dirname, 'scripts/pty-bridge.py')
+  const pythonBin = process.env.PYTHON_BIN || 'python3'
+  const child = spawn(pythonBin, [
+    bridgePath,
+    '--cwd',
+    resolvedCwd,
+    '--cols',
+    String(safeCols),
+    '--rows',
+    String(safeRows),
+    executable,
+    ...tuiArgsForEngine(normalizedEngine, resolvedCwd),
+  ], {
+    cwd: resolvedCwd,
+    env: {
+      ...process.env,
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+      FORCE_COLOR: '1',
+      COLUMNS: String(safeCols),
+      LINES: String(safeRows),
+    },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  })
+  const session = {
+    id,
+    title: String(title || `${normalizedEngine}-${new Date().toLocaleTimeString('zh-CN', { hour12: false })}`).trim(),
+    engine: normalizedEngine,
+    cwd: resolvedCwd,
+    status: 'running',
+    startedAt: nowIso(),
+    lastEventAt: nowIso(),
+    exitCode: null,
+    signal: null,
+    term: child,
+    buffer: '',
+    clients: new Set(),
+  }
+  tuiSessions.set(id, session)
+
+  child.stdout.on('data', (chunk) => {
+    const data = chunk.toString()
+    session.buffer = `${session.buffer}${data}`
+    if (session.buffer.length > MAX_TUI_BUFFER) {
+      session.buffer = session.buffer.slice(session.buffer.length - MAX_TUI_BUFFER)
+    }
+    session.lastEventAt = nowIso()
+    for (const client of session.clients) {
+      sendJson(client, { type: 'data', data })
+    }
+  })
+
+  child.stderr.on('data', (chunk) => {
+    const data = chunk.toString()
+    session.buffer = `${session.buffer}${data}`
+    if (session.buffer.length > MAX_TUI_BUFFER) {
+      session.buffer = session.buffer.slice(session.buffer.length - MAX_TUI_BUFFER)
+    }
+    session.lastEventAt = nowIso()
+    for (const client of session.clients) {
+      sendJson(client, { type: 'data', data })
+    }
+  })
+
+  child.on('exit', (exitCode, signal) => {
+    session.status = 'exited'
+    session.exitCode = exitCode
+    session.signal = signal
+    session.lastEventAt = nowIso()
+    for (const client of session.clients) {
+      sendJson(client, { type: 'exit', sessionId: session.id, exitCode, signal })
+    }
+    tuiSessions.delete(session.id)
+  })
+
+  return session
+}
+
+function attachTuiSession(ws, session, { cols = 120, rows = 36 } = {}) {
+  session.clients.add(ws)
+  sendJson(ws, { type: 'ready', session: serializeTuiSession(session) })
+  if (session.buffer) sendJson(ws, { type: 'data', data: session.buffer })
+
+  ws.on('message', (raw) => {
+    const message = safeJsonParse(raw.toString())
+    if (!message) return
+    if (message.type === 'input') {
+      if (session.status === 'running') session.term.stdin.write(String(message.data || ''))
+      return
+    }
+    if (message.type === 'resize') {
+      return
+    }
+    if (message.type === 'kill') {
+      session.term.kill()
+    }
+  })
+
+  ws.on('close', () => {
+    session.clients.delete(ws)
+  })
+}
+
+function getOrCreateTuiSession(requestUrl) {
+  const sessionId = requestUrl.searchParams.get('sessionId')
+  if (sessionId) {
+    const session = tuiSessions.get(sessionId)
+    if (!session) throw new Error('TUI session not found')
+    return session
+  }
+  return createTuiSession({
+    engine: requestUrl.searchParams.get('engine'),
+    cwd: requestUrl.searchParams.get('cwd'),
+    cols: requestUrl.searchParams.get('cols'),
+    rows: requestUrl.searchParams.get('rows'),
+  })
+}
+
+export const terminalTuiRouter = express.Router()
+
+terminalTuiRouter.get('/terminal/tui/sessions', (_req, res) => {
+  res.json({
+    success: true,
+    sessions: [...tuiSessions.values()]
+      .map(serializeTuiSession)
+      .sort((a, b) => String(b.lastEventAt).localeCompare(String(a.lastEventAt))),
+  })
+})
+
+terminalTuiRouter.post('/terminal/tui/sessions', asyncRoute(async (req, res) => {
+  try {
+    const session = createTuiSession({
+      engine: req.body?.engine,
+      cwd: req.body?.cwd,
+      title: req.body?.title,
+      cols: req.body?.cols,
+      rows: req.body?.rows,
+    })
+    res.status(201).json({ success: true, session: serializeTuiSession(session) })
+  } catch (err) {
+    return sendError(res, err.status || 400, 'BAD_REQUEST', err.message || 'Failed to create TUI session')
+  }
+}))
+
+terminalTuiRouter.delete('/terminal/tui/sessions/:id', (req, res) => {
+  const session = tuiSessions.get(req.params.id)
+  if (!session) return sendError(res, 404, 'NOT_FOUND', 'TUI session not found')
+  session.term.kill()
+  tuiSessions.delete(session.id)
+  for (const client of session.clients) client.close()
+  res.json({ success: true })
+})
+
+export function attachTerminalTuiServer(server) {
+  const wss = new WebSocketServer({ noServer: true })
+
+  server.on('upgrade', (req, socket, head) => {
+    const requestUrl = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`)
+    if (requestUrl.pathname !== '/api/terminal/tui') return
+    if (!isAuthorized(requestUrl)) {
+      closeWithHttpError(socket, 401, 'Unauthorized')
+      return
+    }
+
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      try {
+        const session = getOrCreateTuiSession(requestUrl)
+        attachTuiSession(ws, session, {
+          cols: requestUrl.searchParams.get('cols'),
+          rows: requestUrl.searchParams.get('rows'),
+        })
+      } catch (err) {
+        sendJson(ws, { type: 'error', error: err instanceof Error ? err.message : String(err) })
+        ws.close()
+      }
+    })
+  })
+
+  return wss
+}

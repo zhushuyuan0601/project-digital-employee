@@ -139,6 +139,7 @@
             <div class="task-recovery__body">
               <strong>{{ taskRecoveryState.title }}</strong>
               <p>{{ taskRecoveryState.detail }}</p>
+              <small v-if="taskRecoveryState.reason">{{ taskRecoveryState.reason }}</small>
             </div>
             <button
               v-if="taskRecoveryState.action === 'continue' && continuableFailedSubtask"
@@ -1481,6 +1482,7 @@ type TaskRecoveryAction = 'continue' | 'execution' | null
 type TaskRecoveryState = {
   title: string
   detail: string
+  reason?: string
   tone: 'warning' | 'danger' | 'info' | 'success'
   icon: string
   action: TaskRecoveryAction
@@ -1517,9 +1519,11 @@ const taskRecoveryState = computed<TaskRecoveryState | null>(() => {
   const task = selectedTask.value
   if (!task || task.status === 'completed' || selectedTaskSubtasks.value.length === 0) return null
   if (continuableFailedSubtask.value) {
+    const latestError = latestSubtaskError(continuableFailedSubtask.value.id) || continuableFailedSubtask.value.error || ''
     return {
       title: '可恢复异常',
       detail: `${agentName(continuableFailedSubtask.value.assigned_agent_id)} · ${continuableFailedSubtask.value.title} 执行失败，可从当前节点继续，不需要重新拆解整个任务。`,
+      reason: latestError,
       tone: 'warning',
       icon: 'ri-restart-line',
       action: 'continue',
@@ -1537,13 +1541,23 @@ const taskRecoveryState = computed<TaskRecoveryState | null>(() => {
   if (task.status === 'failed') {
     return {
       title: '需要人工处理',
-      detail: '任务处于异常状态，但没有可直接继续的失败节点；建议检查事件流、拆解计划或重新拆解。',
+      detail: runtimeStatus.value?.healthy
+        ? '任务处于异常状态，但没有可直接继续的失败节点；建议检查事件流、拆解计划或重新拆解。'
+        : '任务处于异常状态，且 Runtime 当前未就绪；请先检查系统配置或稍后重试。',
+      reason: latestTaskError.value,
       tone: 'danger',
       icon: 'ri-error-warning-line',
       action: 'execution',
     }
   }
   return null
+})
+const latestTaskError = computed(() => {
+  const event = [...selectedTaskEvents.value].reverse().find(item =>
+    ['agent.error', 'plan.invalid', 'agent.orphaned', 'session.resume_failed'].includes(item.type) ||
+    String(item.payload_json?.error || '').trim(),
+  )
+  return event?.message || String(event?.payload_json?.error || '')
 })
 const hasReviewSummary = computed(() => !!selectedTask.value?.summary?.trim())
 const summaryRequested = computed(() => selectedTaskEvents.value.some(event => event.type === 'summary.request.queued'))
@@ -3194,6 +3208,17 @@ function subtaskStatusText(status: SubtaskStatus) {
   return subtaskStatusLabels[status] || status
 }
 
+function latestSubtaskError(subtaskId: string) {
+  const event = [...selectedTaskEvents.value].reverse().find(item =>
+    item.subtask_id === subtaskId &&
+    (
+      ['agent.error', 'agent.orphaned', 'session.resume_failed'].includes(item.type) ||
+      String(item.payload_json?.error || '').trim()
+    ),
+  )
+  return event?.message || String(event?.payload_json?.error || '')
+}
+
 function agentName(agentId: string) {
   return agentLabels[agentId] || agentId || '未归属'
 }
@@ -3802,7 +3827,8 @@ watch(
 }
 
 .task-recovery__body strong,
-.task-recovery__body p {
+.task-recovery__body p,
+.task-recovery__body small {
   display: block;
   min-width: 0;
 }
@@ -3817,6 +3843,16 @@ watch(
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.task-recovery__body small {
+  margin-top: 5px;
+  overflow: hidden;
+  color: var(--color-danger);
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .task-recovery--warning {

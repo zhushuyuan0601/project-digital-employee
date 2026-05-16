@@ -66,6 +66,12 @@ export const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] },
   },
   {
+    path: '/ai-terminal',
+    name: 'ai-terminal',
+    component: () => import('@/views/AiTerminal.vue'),
+    meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] },
+  },
+  {
     path: '/risk-management',
     name: 'risk-management',
     component: () => import('@/views/RiskManagement.vue'),

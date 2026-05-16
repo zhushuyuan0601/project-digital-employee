@@ -34,11 +34,26 @@ export function buildEventSourceUrl(endpoint: string): string {
   return buildApiUrl(endpoint)
 }
 
+export function buildWebSocketUrl(endpoint: string): string {
+  const apiUrl = buildApiUrl(endpoint)
+  const url = new URL(apiUrl, window.location.href)
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  return url.toString()
+}
+
 async function parseErrorMessage(response: Response): Promise<string> {
   const contentType = response.headers.get('Content-Type') || ''
   if (contentType.includes('application/json')) {
-    const error = await response.json().catch(() => null) as { error?: string; message?: string } | null
-    return error?.error || error?.message || `HTTP ${response.status}`
+    const error = await response.json().catch(() => null) as {
+      error?: string | { code?: string; message?: string; details?: Record<string, unknown> }
+      message?: string
+      traceId?: string
+    } | null
+    const message = typeof error?.error === 'string'
+      ? error.error
+      : error?.error?.message || error?.message || `HTTP ${response.status}`
+    const trace = error?.traceId || response.headers.get('x-trace-id')
+    return trace ? `${message}（Trace: ${trace}）` : message
   }
   const text = await response.text().catch(() => '')
   return text || `HTTP ${response.status}`

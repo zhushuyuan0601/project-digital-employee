@@ -48,6 +48,11 @@
       </div>
     </section>
 
+    <section v-if="runtimeStatus && !runtimeStatus.healthy" class="runtime-alert">
+      <strong>Runtime 未就绪</strong>
+      <span>任务状态可能无法实时推进，请检查系统配置或稍后刷新。</span>
+    </section>
+
     <section class="kanban-board" aria-label="任务阶段看板">
       <article
         v-for="column in taskBoardColumns"
@@ -94,6 +99,9 @@
             <div class="kanban-card__foot">
               <span>{{ taskBoardCardHint(task) }}</span>
               <small>{{ formatTime(task.updated_at) }}</small>
+            </div>
+            <div v-if="taskFailureSummary(task)" class="kanban-card__recovery">
+              {{ taskFailureSummary(task) }} · 进入指挥中心处理
             </div>
           </button>
         </div>
@@ -302,6 +310,17 @@ function taskBoardCardHint(task: Task) {
   return '点击进入指挥中心'
 }
 
+function taskFailureSummary(task: Task) {
+  if (!['failed', 'cancelled'].includes(task.status) && !task.subtasks?.some(subtask => ['failed', 'blocked'].includes(subtask.status))) return ''
+  const failedCount = task.subtasks?.filter(subtask => subtask.status === 'failed').length || 0
+  const blockedCount = task.subtasks?.filter(subtask => subtask.status === 'blocked').length || 0
+  const failedNode = task.subtasks?.find(subtask => subtask.status === 'failed')
+  if (failedNode?.error) return failedNode.error
+  if (failedCount) return `${failedCount} 个节点失败`
+  if (blockedCount) return `${blockedCount} 个节点阻塞`
+  return task.status === 'cancelled' ? '任务已取消' : '任务异常'
+}
+
 function formatTime(value?: number | null) {
   if (!value) return '--'
   return new Date(Number(value) * 1000).toLocaleString('zh-CN', {
@@ -456,6 +475,29 @@ onUnmounted(() => {
 
 .runtime-strip strong {
   font-size: 20px;
+}
+
+.runtime-alert {
+  min-height: 44px;
+  margin-bottom: 14px;
+  border: 1px solid rgba(220, 38, 38, 0.32);
+  border-radius: 8px;
+  background: rgba(220, 38, 38, 0.1);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+}
+
+.runtime-alert strong {
+  color: #dc2626;
+  font-size: 13px;
+}
+
+.runtime-alert span {
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .kanban-board {
@@ -698,6 +740,20 @@ onUnmounted(() => {
 .kanban-card__foot small {
   color: var(--text-tertiary);
   font-size: 11px;
+}
+
+.kanban-card__recovery {
+  border: 1px solid rgba(220, 38, 38, 0.18);
+  border-radius: 8px;
+  background: rgba(220, 38, 38, 0.08);
+  color: #dc2626;
+  display: -webkit-box;
+  overflow: hidden;
+  padding: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 @media (max-width: 1180px) {

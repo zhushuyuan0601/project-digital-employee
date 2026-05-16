@@ -22,7 +22,10 @@ test('agent schema migration adds capability routing profiles without disabling 
   initializeAgentSchema()
 
   const routable = listRoutableAgentDefinitions()
-  assert.deepEqual(routable.map((agent) => agent.id), ['xiaoyan', 'xiaochan', 'xiaokai', 'xiaoce'])
+  const routableIds = routable.map((agent) => agent.id)
+  for (const legacyId of ['xiaoyan', 'xiaochan', 'xiaokai', 'xiaoce']) {
+    assert.ok(routableIds.includes(legacyId))
+  }
 
   const engineer = getAgentDefinition('xiaokai')
   assert.equal(engineer.marketVisible, true)

@@ -15,12 +15,19 @@ import taskRouter from './routes/tasks.js'
 import analysisRouter from './routes/analysis.js'
 import mailRouter from './routes/mail.js'
 import { createAutomationRouter } from './routes/automation.js'
+import risksRouter from './routes/risks.js'
+import terminalRouter from './routes/terminal.js'
+import { attachTerminalTuiServer, terminalTuiRouter } from './terminal-tui.js'
 import { initializeSchema } from './db/index.js'
 import { initializeAgentSchema } from './db/agents.js'
 import { initializeTaskSchema } from './db/tasks.js'
 import { getTaskDetail, getTaskOutput, listTaskEvents, listTaskOutputs, listTasks } from './db/tasks.js'
 import { initializeAnalysisSchema } from './db/analysis.js'
 import { initializeMailSchema } from './db/mail.js'
+import { initializeAutomationSchema } from './db/automation.js'
+import { initializeRiskSchema } from './db/risks.js'
+import { auditMiddleware, initializeAuditSchema, listAuditLogs } from './db/audit.js'
+import { errorHandler, sendError, traceMiddleware } from './utils/http.js'
 import { cleanupOrphanAgentRunsOnStartup, claudeRuntimeQueue } from './claude-runtime/index.js'
 import { getClaudeRuntimeConfig } from './claude-runtime/config.js'
 import { startMailScanner } from './mail/mail-service.js'
@@ -36,6 +43,7 @@ const PORT = envString('PORT', String(DEFAULT_SERVER_CONFIG.port))
 const CORS_ORIGIN = envString('CORS_ORIGIN', DEFAULT_SERVER_CONFIG.corsOrigin)
 app.use(cors({ origin: CORS_ORIGIN.split(',').map(s => s.trim()) }))
 app.use(express.json())
+app.use(traceMiddleware)
 
 // 认证中间件：若设置 API_AUTH_TOKEN 则对 /api/* 路由启用 Bearer token 校验
 const API_AUTH_TOKEN = process.env.API_AUTH_TOKEN || ''
@@ -43,9 +51,10 @@ function requireAuth(req, res, next) {
   if (!API_AUTH_TOKEN) return next()
   const auth = req.headers.authorization || ''
   if (auth === `Bearer ${API_AUTH_TOKEN}`) return next()
-  return res.status(401).json({ error: 'Unauthorized: invalid or missing token' })
+  return sendError(res, 401, 'UNAUTHORIZED', 'Unauthorized: invalid or missing token')
 }
 app.use('/api', requireAuth)
+app.use('/api', auditMiddleware)
 
 // 用户主目录
 const HOME_DIR = process.env.HOME || process.env.USERPROFILE || ''
@@ -1197,6 +1206,9 @@ initializeAgentSchema()
 initializeTaskSchema()
 initializeAnalysisSchema()
 initializeMailSchema()
+initializeAutomationSchema()
+initializeRiskSchema()
+initializeAuditSchema()
 const runtimeRecovery = cleanupOrphanAgentRunsOnStartup()
 if (runtimeRecovery.cleaned > 0) {
   console.log(`[Claude Runtime] Startup recovery cleaned ${runtimeRecovery.cleaned} orphan queued/running runs`)
@@ -1207,7 +1219,21 @@ app.use('/api', createAutomationRouter())
 app.use('/api', agentsRouter)
 app.use('/api', taskRouter)
 app.use('/api', mailRouter)
+app.use('/api', risksRouter)
+app.use('/api', terminalRouter)
+app.use('/api', terminalTuiRouter)
 app.use('/api/analysis', analysisRouter)
+app.get('/api/audit/logs', (req, res) => {
+  res.json({
+    success: true,
+    logs: listAuditLogs({
+      resourceType: req.query.resourceType,
+      resourceId: req.query.resourceId,
+      limit: req.query.limit,
+    }),
+  })
+})
+app.use(errorHandler)
 
 // 启动服务器
 const server = app.listen(PORT, () => {
@@ -1244,6 +1270,7 @@ const server = app.listen(PORT, () => {
 ╚════════════════════════════════════════════════════════╝
   `)
 })
+attachTerminalTuiServer(server)
 
 function gracefulShutdown(signal) {
   console.log(`[Server] Received ${signal}, shutting down gracefully...`)

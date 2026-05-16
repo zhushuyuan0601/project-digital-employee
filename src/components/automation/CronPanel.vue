@@ -325,6 +325,11 @@ const filteredTasks = computed(() => {
 })
 
 const toggleTask = async (task: CronTask) => {
+  const confirmed = await notification.confirm(
+    `确定要${task.enabled ? '暂停' : '启用'}定时任务 "${task.name}" 吗？该操作会影响后续自动调度。`,
+    task.enabled ? '暂停定时任务' : '启用定时任务',
+  )
+  if (!confirmed) return
   try {
     await cronStore.toggleTask(task.id)
   } catch (e: any) {
