@@ -6,7 +6,7 @@
 unicom-ui-new/
 ├── src/                    # 前端源码
 │   ├── views/              # 页面组件
-│   │   ├── TaskCenter2.vue # 任务指挥中心 II（支持文件扫描和 Markdown 渲染）
+│   │   ├── TaskCenter2.vue # 任务运营中心 II（支持文件扫描和 Markdown 渲染）
 │   │   ├── GroupChat.vue   # 团队对话
 │   │   └── ...
 │   ├── stores/             # Pinia 状态管理
@@ -46,7 +46,7 @@ npm run dev
 
 ## 功能特性
 
-### TaskCenter2.vue - 任务指挥中心 II
+### TaskCenter2.vue - 任务运营中心 II
 
 #### 1. 产出文件扫描
 - 自动扫描 `~/.openclaw/shared-workspace/daily-intel/roles/{roleId}/{date}/` 目录

@@ -4,7 +4,7 @@
       <div class="header__logo">
         <i class="ri-command-fill"></i>
       </div>
-      <div class="header__title">任务指挥中心</div>
+      <div class="header__title">任务运营中心</div>
     </div>
     <div class="header__info">
       <div class="header__info-item">

@@ -101,7 +101,7 @@
               <small>{{ formatTime(task.updated_at) }}</small>
             </div>
             <div v-if="taskFailureSummary(task)" class="kanban-card__recovery">
-              {{ taskFailureSummary(task) }} · 进入指挥中心处理
+              {{ taskFailureSummary(task) }} · 进入运营中心处理
             </div>
           </button>
         </div>
@@ -307,7 +307,7 @@ function taskBoardCardHint(task: Task) {
   if (task.status === 'reviewing') return '等待验收归档'
   if (['planning', 'clarifying'].includes(task.status)) return '等待协作方案'
   if (task.status === 'dispatching') return '等待派发执行'
-  return '点击进入指挥中心'
+  return '点击进入运营中心'
 }
 
 function taskFailureSummary(task: Task) {

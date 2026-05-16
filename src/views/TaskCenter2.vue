@@ -3062,7 +3062,7 @@ async function cancelActiveMemberRun() {
 
 async function completeSubtask(subtaskId: string) {
   try {
-    const task = await tasksStore.completeSubtask(subtaskId, '由操作员在任务指挥中心确认完成')
+    const task = await tasksStore.completeSubtask(subtaskId, '由操作员在任务运营中心确认完成')
     await tasksStore.fetchTask(task.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
     ElMessage.success('子任务已标记完成')
   } catch (err) {

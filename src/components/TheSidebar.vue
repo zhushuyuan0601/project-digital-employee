@@ -5,7 +5,7 @@
         <div class="brand-mark__orb">U</div>
         <div class="brand-copy">
           <strong>Digital Employee</strong>
-          <span>多Agent 协作管理平台</span>
+          <span>数字员工运营平台</span>
         </div>
         <button
           type="button"
