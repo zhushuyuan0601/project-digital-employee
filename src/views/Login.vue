@@ -56,7 +56,7 @@ const handleLogin = async () => {
   try {
     await authStore.login(form.username, form.password)
     notification.success(`欢迎，${authStore.user?.displayName || form.username}`)
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard'
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/task-board'
     router.replace(redirect)
   } catch (error) {
     notification.error(error instanceof Error ? error.message : '登录失败')

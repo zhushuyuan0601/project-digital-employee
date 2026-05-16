@@ -10,18 +10,17 @@ export const routes: RouteRecordRaw[] = [
   },
   {
     path: '/',
-    redirect: '/dashboard',
+    redirect: '/task-board',
   },
   {
     path: '/dashboard',
     name: 'dashboard',
-    component: () => import('@/views/ObservabilityCenter.vue'),
-    meta: { requiresAuth: true },
+    redirect: '/task-board',
   },
   {
-    path: '/team-output',
-    name: 'team-output',
-    component: () => import('@/views/TeamOutputCenter.vue'),
+    path: '/task-board',
+    name: 'task-board',
+    component: () => import('@/views/TaskBoard.vue'),
     meta: { requiresAuth: true },
   },
   {
@@ -58,12 +57,6 @@ export const routes: RouteRecordRaw[] = [
     path: '/automation',
     name: 'automation',
     component: () => import('@/views/AutomationIntegrationCenter.vue'),
-    meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] },
-  },
-  {
-    path: '/group-chat',
-    name: 'group-chat',
-    component: () => import('@/views/GroupChat.vue'),
     meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] },
   },
   {

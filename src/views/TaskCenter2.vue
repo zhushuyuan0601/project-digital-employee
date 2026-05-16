@@ -38,9 +38,11 @@
               <p class="eyebrow">任务队列</p>
               <h2>活跃任务</h2>
             </div>
-            <button class="icon-btn" type="button" title="刷新任务" @click="handleRefresh">
-              <i class="ri-refresh-line"></i>
-            </button>
+            <div class="task-list__tools">
+              <button class="icon-btn" type="button" title="刷新任务" @click="handleRefresh">
+                <i class="ri-refresh-line"></i>
+              </button>
+            </div>
           </div>
 
           <div ref="taskListScrollRef" class="task-list__body">
@@ -3172,6 +3174,14 @@ function completedCount(task: Task) {
   return task.subtasks?.filter(subtask => ['completed', 'skipped'].includes(subtask.status)).length || 0
 }
 
+function taskSubtaskTotal(task: Task) {
+  return task.subtask_count || task.subtasks?.length || 0
+}
+
+function taskOutputCount(task: Task) {
+  return task.output_count || task.outputs?.length || 0
+}
+
 function needsPlan(task: Task) {
   return ['planning', 'clarifying', 'dispatching', 'failed'].includes(task.status) && !task.subtasks.length
 }
@@ -3711,6 +3721,13 @@ watch(
 
 .task-list .surface-heading {
   flex: 0 0 auto;
+}
+
+.task-list__tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .task-list__body {

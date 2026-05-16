@@ -13,7 +13,6 @@ import skillsRouter from './routes/skills.js'
 import agentsRouter from './routes/agents.js'
 import taskRouter from './routes/tasks.js'
 import analysisRouter from './routes/analysis.js'
-import groupChatRouter from './routes/group-chat.js'
 import mailRouter from './routes/mail.js'
 import { createAutomationRouter } from './routes/automation.js'
 import { initializeSchema } from './db/index.js'
@@ -1207,7 +1206,6 @@ startMailScanner()
 app.use('/api', createAutomationRouter())
 app.use('/api', agentsRouter)
 app.use('/api', taskRouter)
-app.use('/api', groupChatRouter)
 app.use('/api', mailRouter)
 app.use('/api/analysis', analysisRouter)
 

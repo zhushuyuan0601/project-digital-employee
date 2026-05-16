@@ -13,7 +13,7 @@ router.beforeEach((to) => {
 
   if (to.meta.public) {
     if (to.path === '/login' && authStore.isAuthenticated) {
-      return '/dashboard'
+      return '/task-board'
     }
     return true
   }
@@ -27,7 +27,7 @@ router.beforeEach((to) => {
 
   const roles = to.meta.roles as UserRole[] | undefined
   if (roles && !authStore.hasAnyRole(roles)) {
-    return '/dashboard'
+    return '/task-board'
   }
 
   return true
