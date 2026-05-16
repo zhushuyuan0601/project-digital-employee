@@ -1,301 +1,224 @@
 <template>
   <div class="configs-page">
-    <div class="page-header">
+    <header class="page-header">
       <div>
         <h1 class="page-title">系统配置</h1>
-        <span class="page-subtitle">Claude Runtime 运行参数和本机环境配置</span>
+        <span class="page-subtitle">维护平台级运行参数、目录存储和环境健康状态</span>
       </div>
-      <button class="btn btn-primary" :disabled="loading" @click="refreshConfig">
-        <i class="ri-refresh-line"></i>
-        {{ loading ? '刷新中' : '刷新' }}
+      <button class="btn btn-primary" type="button" :disabled="loading" @click="refreshConfig">
+        <el-icon><Refresh /></el-icon>
+        {{ loading ? '刷新中' : '刷新状态' }}
       </button>
-    </div>
+    </header>
 
-    <section class="runtime-panel">
-      <div class="runtime-panel__head">
-        <div>
-          <p class="eyebrow">Claude Runtime</p>
-          <h2>{{ runtimeStatus?.healthy ? '运行时就绪' : '运行时未就绪' }}</h2>
+    <main class="config-shell">
+      <section class="status-panel">
+        <div class="status-panel__main">
+          <div :class="['status-orb', runtimeStatus?.healthy ? 'is-ok' : 'is-warn']">
+            <el-icon>
+              <Check v-if="runtimeStatus?.healthy" />
+              <Warning v-else />
+            </el-icon>
+          </div>
+          <div>
+            <span class="eyebrow">System Runtime</span>
+            <h2>{{ runtimeStatus?.healthy ? '系统运行正常' : '系统需要检查' }}</h2>
+            <p>{{ statusSummary }}</p>
+          </div>
         </div>
-        <div class="runtime-panel__chips">
-          <span>运行 {{ runtimeStatus?.running ?? 0 }}</span>
-          <span>排队 {{ runtimeStatus?.queued ?? 0 }}</span>
-          <span>并发 {{ runtimeForm.maxConcurrency }}</span>
+        <div class="status-metrics">
+          <article>
+            <span>执行中</span>
+            <strong>{{ runtimeStatus?.running ?? 0 }}</strong>
+          </article>
+          <article>
+            <span>排队中</span>
+            <strong>{{ runtimeStatus?.queued ?? 0 }}</strong>
+          </article>
+          <article>
+            <span>并发上限</span>
+            <strong>{{ runtimeForm.maxConcurrency }}</strong>
+          </article>
+          <article>
+            <span>配置来源</span>
+            <strong>{{ runtimeStatus?.configSource || '默认配置' }}</strong>
+          </article>
         </div>
-      </div>
+      </section>
 
-      <div class="runtime-form">
-        <label>
-          <span>最大并发</span>
-          <input v-model.number="runtimeForm.maxConcurrency" type="number" min="1" class="field" />
-        </label>
-        <label>
-          <span>最大轮次</span>
-          <input v-model.number="runtimeForm.maxTurns" type="number" min="1" class="field" />
-        </label>
-        <label>
-          <span>允许工具</span>
-          <input v-model="allowedToolsText" class="field" placeholder="Read,Glob,Grep" />
-        </label>
-        <label>
-          <span>全局模型</span>
-          <input v-model="runtimeForm.model" class="field" placeholder="留空使用 Claude Code default" />
-        </label>
-        <label class="toggle-row">
-          <input v-model="runtimeForm.reportOnly" type="checkbox" />
-          <span>报告模式</span>
-        </label>
-        <label class="toggle-row">
-          <input v-model="runtimeForm.workspaceIsolation" type="checkbox" />
-          <span>任务工作空间隔离</span>
-        </label>
-        <label class="toggle-row">
-          <input v-model="runtimeForm.mock" type="checkbox" />
-          <span>Mock Runtime</span>
-        </label>
-      </div>
-
-      <div class="runtime-paths">
-        <div>
-          <span>配置来源</span>
-          <code>{{ runtimeStatus?.configSource || 'built-in defaults' }}</code>
-        </div>
-        <div>
-          <span>数据库</span>
-          <code>{{ runtimeStatus?.dbPath || '--' }}</code>
-        </div>
-        <div>
-          <span>执行目录</span>
-          <code>{{ runtimeConfig?.cwd || '--' }}</code>
-        </div>
-        <div>
-          <span>隔离根目录</span>
-          <code>{{ runtimeConfig?.workspaceRoot || '--' }}</code>
-        </div>
-        <div>
-          <span>报告目录</span>
-          <code>{{ runtimeConfig?.outputRoot || '--' }}</code>
-        </div>
-      </div>
-
-      <div class="runtime-checks">
-        <span :class="{ ok: runtimeStatus?.sdkAvailable, warn: !runtimeStatus?.sdkAvailable }">
-          SDK {{ runtimeStatus?.sdkAvailable ? '可用' : '不可用' }}
-        </span>
-        <span :class="{ ok: runtimeStatus?.dbWritable, warn: !runtimeStatus?.dbWritable }">
-          DB {{ runtimeStatus?.dbWritable ? '可写' : '不可写' }}
-        </span>
-        <span :class="{ ok: runtimeStatus?.cwdExists, warn: !runtimeStatus?.cwdExists }">
-          CWD {{ runtimeStatus?.cwdExists ? '存在' : '缺失' }}
-        </span>
-        <span :class="{ ok: runtimeStatus?.workspaceRootWritable, warn: !runtimeStatus?.workspaceRootWritable }">
-          工作区 {{ runtimeStatus?.workspaceRootWritable ? '可写' : '不可写' }}
-        </span>
-        <span :class="{ ok: runtimeStatus?.outputRootWritable, warn: !runtimeStatus?.outputRootWritable }">
-          报告目录 {{ runtimeStatus?.outputRootWritable ? '可写' : '不可写' }}
-        </span>
-      </div>
-
-      <div class="runtime-actions">
-        <button class="btn" :disabled="saving || loading" @click="saveRuntimeConfig">
-          <i class="ri-save-3-line"></i>
-          {{ saving ? '保存中' : '保存配置' }}
-        </button>
-        <span class="runtime-note">配置写入当前 Node 进程环境，新入队任务即时生效。</span>
-      </div>
-    </section>
-
-    <section class="claude-env-panel">
-      <div class="runtime-panel__head">
-        <div>
-          <p class="eyebrow">Claude Environment</p>
-          <h2>环境检测与模型路由</h2>
-        </div>
-        <span class="env-health" :class="{ ok: runtimeStatus?.sdkAvailable }">
-          {{ runtimeStatus?.runtimeDriver || 'unavailable' }}
-        </span>
-      </div>
-      <div class="claude-call-overview">
-        <div class="claude-primary-card">
-          <span>当前任务调用方式</span>
-          <strong>{{ runtimeStatus?.sdkAvailable ? 'Claude Agent SDK' : '不可用' }}</strong>
-          <small>{{ runtimeStatus?.sdkPath || '未检测到 SDK 包路径' }}</small>
-        </div>
-        <div class="claude-primary-card">
-          <span>默认模型</span>
-          <strong>{{ runtimeStatus?.modelRouting?.defaultModel || 'Claude Code default' }}</strong>
-          <small>Agent 默认模型会覆盖全局模型</small>
-        </div>
-      </div>
-      <div class="claude-call-grid">
-        <div>
-          <span>SDK 内置 Claude Code</span>
-          <code>{{ runtimeStatus?.claudeBundledPath || '--' }}</code>
-        </div>
-        <div>
-          <span>全局 Claude CLI</span>
-          <code>{{ runtimeStatus?.claudeCliPath || '--' }}</code>
-        </div>
-        <div>
-          <span>SDK 版本</span>
-          <code>{{ runtimeStatus?.claudeSdkVersion || '--' }}</code>
-        </div>
-        <div>
-          <span>Claude Code 版本</span>
-          <code>{{ runtimeStatus?.claudeCodeVersion || '--' }}</code>
-        </div>
-        <div>
-          <span>Node 进程</span>
-          <code>{{ runtimeStatus?.nodePath || '--' }}</code>
-        </div>
-        <div>
-          <span>允许工具</span>
-          <code>{{ runtimeConfig?.allowedTools.join(', ') || '--' }}</code>
-        </div>
-      </div>
-      <div class="recent-run-models">
-        <div class="recent-run-row recent-run-row--head">
-          <span>最近 Run</span>
-          <span>Agent</span>
-          <span>状态</span>
-          <span>模型</span>
-        </div>
-        <div v-for="run in recentModelRuns" :key="run.id" class="recent-run-row">
-          <code>{{ run.id }}</code>
-          <span>{{ run.role_name || run.agent_id }}</span>
-          <span :class="`run-status-${run.status}`">{{ run.status }}</span>
-          <strong>{{ run.model || 'Claude Code default' }}</strong>
-        </div>
-        <p v-if="!recentModelRuns.length">暂无 Run 记录。</p>
-      </div>
-    </section>
-
-    <section class="agent-panel">
-      <div class="runtime-panel__head">
-        <div>
-          <p class="eyebrow">Agent Registry</p>
-          <h2>内置 Agent 能力目录</h2>
-        </div>
-        <div class="runtime-panel__chips">
-          <span>启用 {{ enabledAgentCount }}</span>
-          <span>总数 {{ agentDefinitions.length }}</span>
-        </div>
-      </div>
-
-      <div class="agent-grid">
-        <article v-for="agent in agentDefinitions" :key="agent.id" class="agent-config">
-          <div class="agent-config__head">
+      <section class="config-grid">
+        <article class="config-panel config-panel--wide">
+          <div class="panel-head">
             <div>
-              <strong>{{ agent.name }}</strong>
-              <span>{{ agent.roleName }} · {{ agent.id }}</span>
+              <span class="eyebrow">Execution Policy</span>
+              <h2>执行策略</h2>
             </div>
-            <label class="agent-switch">
-              <input
-                type="checkbox"
-                :checked="agent.enabled"
-                :disabled="agent.coordinator || savingAgentId === agent.id"
-                @change="updateAgent(agent, { enabled: ($event.target as HTMLInputElement).checked })"
-              />
-              <span>{{ agent.enabled ? '启用' : '停用' }}</span>
-            </label>
+            <button class="btn" type="button" :disabled="saving || loading" @click="saveRuntimeConfig">
+              <el-icon><Check /></el-icon>
+              {{ saving ? '保存中' : '保存配置' }}
+            </button>
           </div>
-          <p>{{ agent.description }}</p>
-          <div class="agent-tags">
-            <span v-for="capability in agent.capabilities" :key="capability">{{ capability }}</span>
-          </div>
-          <div class="agent-form">
-            <label>
-              <span>Agent 并发</span>
-              <input
-                class="field"
-                type="number"
-                min="1"
-                :value="agent.maxConcurrency"
-                :disabled="savingAgentId === agent.id"
-                @change="updateAgent(agent, { maxConcurrency: Number(($event.target as HTMLInputElement).value) || 1 })"
-              />
+
+          <div class="form-grid">
+            <label class="form-field">
+              <span>最大并发数</span>
+              <input v-model.number="runtimeForm.maxConcurrency" type="number" min="1" class="field" />
             </label>
-            <label>
-              <span>风险等级</span>
-              <select
-                class="field"
-                :value="agent.riskLevel"
-                :disabled="savingAgentId === agent.id"
-                @change="updateAgent(agent, { riskLevel: ($event.target as HTMLSelectElement).value })"
-              >
-                <option value="low">low</option>
-                <option value="medium">medium</option>
-                <option value="high">high</option>
-              </select>
+            <label class="form-field">
+              <span>单次最大轮次</span>
+              <input v-model.number="runtimeForm.maxTurns" type="number" min="1" class="field" />
             </label>
-            <label class="agent-form__tools">
-              <span>允许工具</span>
-              <input
-                class="field"
-                :value="agent.allowedTools.join(',')"
-                :disabled="savingAgentId === agent.id"
-                @change="updateAgent(agent, { allowedTools: parseTools(($event.target as HTMLInputElement).value) })"
-              />
-            </label>
-            <label class="agent-form__model">
+            <label class="form-field">
               <span>默认模型</span>
-              <input
-                class="field"
-                :value="agent.defaultModel || ''"
-                placeholder="继承全局模型"
-                :disabled="savingAgentId === agent.id"
-                @change="updateAgent(agent, { defaultModel: ($event.target as HTMLInputElement).value.trim() })"
-              />
+              <input v-model="runtimeForm.model" class="field" placeholder="留空使用系统默认模型" />
+            </label>
+            <label class="form-field form-field--full">
+              <span>允许调用的工具</span>
+              <input v-model="allowedToolsText" class="field" placeholder="Read, Glob, Grep" />
             </label>
           </div>
-          <div class="agent-contracts">
-            <span>输入 {{ agent.inputContract.join(' / ') || '未配置' }}</span>
-            <span>输出 {{ agent.outputContract.join(' / ') || '未配置' }}</span>
+
+          <div class="switch-grid">
+            <label class="switch-card">
+              <input v-model="runtimeForm.reportOnly" type="checkbox" />
+              <span>
+                <strong>报告模式</strong>
+                <small>只生成过程报告，不执行高风险写入动作</small>
+              </span>
+            </label>
+            <label class="switch-card">
+              <input v-model="runtimeForm.workspaceIsolation" type="checkbox" />
+              <span>
+                <strong>工作空间隔离</strong>
+                <small>每次执行使用独立目录，降低文件互相影响</small>
+              </span>
+            </label>
+            <label class="switch-card">
+              <input v-model="runtimeForm.mock" type="checkbox" />
+              <span>
+                <strong>模拟运行</strong>
+                <small>用于联调和演示，不调用真实执行链路</small>
+              </span>
+            </label>
           </div>
         </article>
-      </div>
-    </section>
 
-    <div class="config-tree">
-      <div
-        v-for="config in configs"
-        :key="config.id"
-        :class="['config-item', { expanded: config.expanded }]"
-      >
-        <div class="config-header" @click="toggleConfig(config)">
-          <i :class="config.icon"></i>
-          <span class="config-name">{{ config.name }}</span>
-          <span class="config-path">{{ config.path }}</span>
-          <i class="ri-arrow-down-s-line config-toggle"></i>
-        </div>
-        <div v-if="config.expanded" class="config-content">
-          <pre class="config-code">{{ config.content }}</pre>
-        </div>
-      </div>
-    </div>
+        <article class="config-panel">
+          <div class="panel-head">
+            <div>
+              <span class="eyebrow">Storage</span>
+              <h2>目录与存储</h2>
+            </div>
+            <el-icon class="panel-icon"><FolderOpened /></el-icon>
+          </div>
+          <div class="path-list">
+            <div>
+              <span>数据库</span>
+              <code>{{ runtimeStatus?.dbPath || '--' }}</code>
+            </div>
+            <div>
+              <span>执行目录</span>
+              <code>{{ runtimeConfig?.cwd || '--' }}</code>
+            </div>
+            <div>
+              <span>隔离目录</span>
+              <code>{{ runtimeConfig?.workspaceRoot || '--' }}</code>
+            </div>
+            <div>
+              <span>输出目录</span>
+              <code>{{ runtimeConfig?.outputRoot || '--' }}</code>
+            </div>
+          </div>
+        </article>
+
+        <article class="config-panel">
+          <div class="panel-head">
+            <div>
+              <span class="eyebrow">Health Checks</span>
+              <h2>健康检查</h2>
+            </div>
+            <el-icon class="panel-icon"><Cpu /></el-icon>
+          </div>
+          <div class="check-list">
+            <span :class="checkClass(runtimeStatus?.dbWritable)">数据库可写</span>
+            <span :class="checkClass(runtimeStatus?.cwdExists)">执行目录存在</span>
+            <span :class="checkClass(runtimeStatus?.workspaceRootWritable)">隔离目录可写</span>
+            <span :class="checkClass(runtimeStatus?.outputRootWritable)">输出目录可写</span>
+            <span :class="checkClass(runtimeStatus?.sdkAvailable)">运行 SDK 可用</span>
+          </div>
+        </article>
+
+        <article class="config-panel config-panel--wide">
+          <div class="panel-head">
+            <div>
+              <span class="eyebrow">Environment</span>
+              <h2>环境诊断</h2>
+            </div>
+            <span :class="['driver-badge', runtimeStatus?.healthy ? 'is-ok' : 'is-warn']">
+              {{ displayRuntimeDriver }}
+            </span>
+          </div>
+
+          <div class="environment-grid">
+            <div>
+              <span>Node 进程</span>
+              <code>{{ runtimeStatus?.nodePath || '--' }}</code>
+            </div>
+            <div>
+              <span>Claude CLI</span>
+              <code>{{ runtimeStatus?.claudeCliPath || runtimeStatus?.claudePath || '--' }}</code>
+            </div>
+            <div>
+              <span>Codex CLI</span>
+              <code>{{ runtimeStatus?.codexCliPath || '--' }}</code>
+            </div>
+            <div>
+              <span>SDK 版本</span>
+              <code>{{ runtimeStatus?.claudeSdkVersion || '--' }}</code>
+            </div>
+            <div>
+              <span>Claude Code 版本</span>
+              <code>{{ runtimeStatus?.claudeCodeVersion || '--' }}</code>
+            </div>
+            <div>
+              <span>环境文件</span>
+              <code>{{ runtimeStatus?.hasEnvFile ? '已加载' : '未检测到' }}</code>
+            </div>
+          </div>
+
+          <div class="config-snapshot">
+            <div class="snapshot-head">
+              <strong>当前参数快照</strong>
+              <span>{{ overrideSummary }}</span>
+            </div>
+            <div class="snapshot-grid">
+              <span>运行模式</span>
+              <code>{{ runtimeConfig?.runtime || '--' }}</code>
+              <span>并发上限</span>
+              <code>{{ runtimeConfig?.maxConcurrency ?? '--' }}</code>
+              <span>最大轮次</span>
+              <code>{{ runtimeConfig?.maxTurns ?? '--' }}</code>
+              <span>报告模式</span>
+              <code>{{ runtimeConfig?.reportOnly ? '开启' : '关闭' }}</code>
+              <span>目录隔离</span>
+              <code>{{ runtimeConfig?.workspaceIsolation ? '开启' : '关闭' }}</code>
+              <span>模拟运行</span>
+              <code>{{ runtimeConfig?.mock ? '开启' : '关闭' }}</code>
+            </div>
+          </div>
+        </article>
+      </section>
+    </main>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { taskApi, type AgentDefinition, type RuntimeConfig } from '@/api/tasks'
+import { Check, Cpu, FolderOpened, Refresh, Warning } from '@element-plus/icons-vue'
+import { taskApi, type RuntimeConfig } from '@/api/tasks'
 
-type ConfigItem = {
-  id: string
-  name: string
-  path: string
-  icon: string
-  expanded: boolean
-  content: string
-}
-
-const loading = ref(false)
-const saving = ref(false)
-const runtimeConfig = ref<RuntimeConfig | null>(null)
-const agentDefinitions = ref<AgentDefinition[]>([])
-const savingAgentId = ref('')
-const runtimeStatus = ref<{
+type RuntimeStatus = {
   healthy: boolean
   running: number
   queued: number
@@ -306,29 +229,22 @@ const runtimeStatus = ref<{
   outputRootWritable?: boolean
   workspaceRootWritable?: boolean
   sdkAvailable?: boolean
-  configSource?: string
-  sdkPath?: string | null
   claudePath?: string | null
   claudeCliPath?: string | null
-  claudeBundledPath?: string | null
+  codexCliPath?: string | null
   runtimeDriver?: string
   claudeSdkVersion?: string | null
   claudeCodeVersion?: string | null
   nodePath?: string
-  modelRouting?: {
-    globalModel?: string
-    defaultModel?: string
-    agentDefaults?: Record<string, string>
-    precedence?: string[]
-  }
-  recentRuns?: Array<{
-    id: string
-    agent_id: string
-    role_name?: string | null
-    status: string
-    model?: string | null
-  }>
-} | null>(null)
+  hasEnvFile?: boolean
+  configSource?: string
+  envOverrides?: Record<string, boolean>
+}
+
+const loading = ref(false)
+const saving = ref(false)
+const runtimeConfig = ref<RuntimeConfig | null>(null)
+const runtimeStatus = ref<RuntimeStatus | null>(null)
 
 const runtimeForm = reactive({
   maxConcurrency: 3,
@@ -341,7 +257,7 @@ const runtimeForm = reactive({
 })
 
 const allowedToolsText = computed({
-  get: () => runtimeForm.allowedTools.join(','),
+  get: () => runtimeForm.allowedTools.join(', '),
   set: (value: string) => {
     runtimeForm.allowedTools = value
       .split(',')
@@ -350,21 +266,32 @@ const allowedToolsText = computed({
   },
 })
 
-const enabledAgentCount = computed(() => agentDefinitions.value.filter(agent => agent.enabled).length)
-const recentModelRuns = computed(() => (runtimeStatus.value?.recentRuns || []).slice(0, 8))
+const statusSummary = computed(() => {
+  if (!runtimeStatus.value) return '正在读取系统状态。'
+  if (runtimeStatus.value.healthy) return '核心依赖、目录权限和运行队列处于可用状态。'
+  return '部分依赖或目录权限不可用，请根据健康检查项处理。'
+})
 
-const configs = ref<ConfigItem[]>([
-  {
-    id: 'claude-runtime',
-    name: 'Claude Runtime',
-    path: '.env / server runtime',
-    icon: 'ri-settings-3-line',
-    expanded: true,
-    content: '',
-  },
-])
+const displayRuntimeDriver = computed(() => {
+  const driver = String(runtimeStatus.value?.runtimeDriver || '').trim()
+  if (!driver) return '未检测'
+  if (/sdk/i.test(driver)) return 'SDK 驱动'
+  if (/cli/i.test(driver)) return 'CLI 驱动'
+  return driver.replace(/agent/gi, '').replace(/--+/g, '-').replace(/^-|-$/g, '') || '运行驱动'
+})
 
-function applyRuntimeConfig(config: RuntimeConfig, status?: typeof runtimeStatus.value) {
+const overrideSummary = computed(() => {
+  const overrides = runtimeStatus.value?.envOverrides
+  if (!overrides) return '使用默认值'
+  const count = Object.values(overrides).filter(Boolean).length
+  return count ? `${count} 项环境覆盖已生效` : '使用默认值'
+})
+
+function checkClass(value?: boolean) {
+  return ['check-pill', value ? 'is-ok' : 'is-warn']
+}
+
+function applyRuntimeConfig(config: RuntimeConfig, status?: RuntimeStatus | null) {
   runtimeConfig.value = config
   runtimeStatus.value = status || runtimeStatus.value
   runtimeForm.maxConcurrency = config.maxConcurrency
@@ -374,89 +301,28 @@ function applyRuntimeConfig(config: RuntimeConfig, status?: typeof runtimeStatus
   runtimeForm.mock = config.mock
   runtimeForm.model = config.model || ''
   runtimeForm.allowedTools = [...config.allowedTools]
-  const runtimeItem = configs.value.find(item => item.id === 'claude-runtime')
-  if (runtimeItem) {
-    runtimeItem.content = `AGENT_RUNTIME=${config.runtime}
-CLAUDE_AGENT_MAX_CONCURRENCY=${config.maxConcurrency}
-CLAUDE_AGENT_MAX_TURNS=${config.maxTurns}
-CLAUDE_REPORT_ONLY=${config.reportOnly}
-CLAUDE_RUNTIME_CWD=${config.cwd}
-CLAUDE_WORKSPACE_ISOLATION=${config.workspaceIsolation}
-CLAUDE_WORKSPACE_ROOT=${config.workspaceRoot}
-CLAUDE_ALLOWED_TOOLS=${config.allowedTools.join(',')}
-CLAUDE_OUTPUT_ROOT=${config.outputRoot}
-CLAUDE_AGENT_MODEL=${config.model || ''}
-CLAUDE_RUNTIME_MOCK=${config.mock}`
-  }
-}
-
-const toggleConfig = (config: ConfigItem) => {
-  config.expanded = !config.expanded
 }
 
 async function refreshConfig() {
   loading.value = true
   try {
-    const [configResponse, statusResponse, agentsResponse] = await Promise.all([
+    const [configResponse, statusResponse] = await Promise.all([
       taskApi.runtimeConfig(),
       taskApi.runtimeStatus(),
-      taskApi.listAgents(),
     ])
     applyRuntimeConfig(configResponse.config, statusResponse.status)
-    agentDefinitions.value = agentsResponse.agents
   } catch (err) {
-    ElMessage.error(err instanceof Error ? err.message : '读取 Runtime 配置失败')
+    ElMessage.error(err instanceof Error ? err.message : '读取系统配置失败')
   } finally {
     loading.value = false
-  }
-}
-
-function parseTools(value: string) {
-  return value
-    .split(',')
-    .map(item => item.trim())
-    .filter(Boolean)
-}
-
-async function updateAgent(agent: AgentDefinition, payload: Partial<Pick<AgentDefinition, 'enabled' | 'maxConcurrency' | 'allowedTools' | 'riskLevel' | 'sortOrder' | 'defaultModel'>>) {
-  const summary = Object.entries(payload)
-    .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(',') : value}`)
-    .join('\n')
-  try {
-    await ElMessageBox.confirm(
-      `确定要修改 ${agent.name} 的配置吗？\n\n${summary}`,
-      '确认 Agent 配置变更',
-      {
-        confirmButtonText: '保存',
-        cancelButtonText: '取消',
-        type: 'warning',
-      },
-    )
-  } catch {
-    await refreshConfig()
-    return
-  }
-  savingAgentId.value = agent.id
-  try {
-    const response = await taskApi.updateAgent(agent.id, payload)
-    if (response.agents) {
-      agentDefinitions.value = response.agents
-    } else {
-      agentDefinitions.value = agentDefinitions.value.map(item => item.id === agent.id ? response.agent : item)
-    }
-    ElMessage.success(`${agent.name} 配置已更新`)
-  } catch (err) {
-    ElMessage.error(err instanceof Error ? err.message : '保存 Agent 配置失败')
-  } finally {
-    savingAgentId.value = ''
   }
 }
 
 async function saveRuntimeConfig() {
   try {
     await ElMessageBox.confirm(
-      `确定要保存 Runtime 配置吗？新入队任务将立即使用新配置。\n\n并发：${runtimeForm.maxConcurrency}\n最大轮次：${runtimeForm.maxTurns}\n工具：${runtimeForm.allowedTools.join(', ') || '--'}`,
-      '确认 Runtime 配置变更',
+      `确定要保存系统配置吗？新进入队列的执行任务将使用新参数。\n\n并发：${runtimeForm.maxConcurrency}\n最大轮次：${runtimeForm.maxTurns}\n工具：${runtimeForm.allowedTools.join(', ') || '--'}`,
+      '确认系统配置变更',
       {
         confirmButtonText: '保存配置',
         cancelButtonText: '取消',
@@ -466,6 +332,7 @@ async function saveRuntimeConfig() {
   } catch {
     return
   }
+
   saving.value = true
   try {
     const response = await taskApi.updateRuntimeConfig({
@@ -478,9 +345,9 @@ async function saveRuntimeConfig() {
       allowedTools: runtimeForm.allowedTools,
     })
     applyRuntimeConfig(response.config, response.status)
-    ElMessage.success('Claude Runtime 配置已更新')
+    ElMessage.success('系统配置已更新')
   } catch (err) {
-    ElMessage.error(err instanceof Error ? err.message : '保存 Runtime 配置失败')
+    ElMessage.error(err instanceof Error ? err.message : '保存系统配置失败')
   } finally {
     saving.value = false
   }
@@ -498,321 +365,273 @@ onMounted(() => {
   height: 100%;
   min-height: 0;
   overflow: auto;
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--bg-base) 86%, var(--color-primary) 5%), var(--bg-base));
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16px;
   padding: 24px 32px 0;
   flex-shrink: 0;
 }
 
 .page-title {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: 24px;
+  font-weight: 750;
   color: var(--text-primary);
   margin: 0;
 }
 
 .page-subtitle {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin: 6px 0 0;
   display: block;
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
-.runtime-panel,
-.claude-env-panel {
-  margin: 16px 32px 0;
-  padding: 16px;
+.config-shell {
+  display: grid;
+  gap: 16px;
+  padding: 18px 32px 32px;
+}
+
+.status-panel,
+.config-panel {
   border: 1px solid var(--border-default);
   border-radius: 8px;
-  background: var(--bg-panel);
+  background: color-mix(in oklab, var(--bg-panel) 92%, transparent);
+  box-shadow: var(--shadow-sm);
 }
 
-.agent-panel {
-  margin: 16px 32px 0;
-  padding: 16px;
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
-  background: var(--bg-panel);
+.status-panel {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.1fr) minmax(420px, 1fr);
+  gap: 18px;
+  padding: 18px;
 }
 
-.runtime-panel__head,
-.runtime-actions {
+.status-panel__main {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
+  min-width: 0;
 }
 
-.runtime-panel__head h2 {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 18px;
+.status-orb {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  border: 1px solid var(--border-default);
+  background: var(--bg-card);
+  font-size: 24px;
+}
+
+.status-orb.is-ok,
+.check-pill.is-ok,
+.driver-badge.is-ok {
+  color: var(--color-success);
+  border-color: color-mix(in oklab, var(--color-success) 42%, var(--border-default));
+  background: color-mix(in oklab, var(--color-success) 10%, var(--bg-card));
+}
+
+.status-orb.is-warn,
+.check-pill.is-warn,
+.driver-badge.is-warn {
+  color: var(--color-warning);
+  border-color: color-mix(in oklab, var(--color-warning) 48%, var(--border-default));
+  background: color-mix(in oklab, var(--color-warning) 10%, var(--bg-card));
 }
 
 .eyebrow {
-  margin: 0 0 4px;
+  display: block;
+  margin-bottom: 5px;
   color: var(--text-tertiary);
+  font-family: var(--font-mono);
   font-size: 11px;
-  letter-spacing: 0.12em;
+  font-weight: 600;
   text-transform: uppercase;
 }
 
-.runtime-panel__chips {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+.status-panel h2,
+.panel-head h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 750;
 }
 
-.runtime-panel__chips span,
-.runtime-note {
+.status-panel p {
+  margin: 6px 0 0;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 13px;
 }
 
-.runtime-panel__chips span {
-  padding: 4px 9px;
-  border: 1px solid var(--border-default);
-  border-radius: 999px;
-  background: var(--bg-card);
-}
-
-.runtime-form {
+.status-metrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
 }
 
-.agent-grid {
+.status-metrics article {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.agent-config {
-  padding: 14px;
-  border: 1px solid var(--border-default);
+  gap: 7px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
   background: var(--bg-card);
 }
 
-.agent-config__head {
+.status-metrics span,
+.path-list span,
+.environment-grid span,
+.snapshot-grid span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.status-metrics strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.config-panel {
+  min-width: 0;
+  padding: 16px;
+}
+
+.config-panel--wide {
+  grid-column: 1 / -1;
+}
+
+.panel-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  margin-bottom: 16px;
 }
 
-.agent-config__head strong {
-  display: block;
-  color: var(--text-primary);
-  font-size: 15px;
+.panel-icon {
+  color: var(--color-primary);
+  font-size: 22px;
 }
 
-.agent-config__head span,
-.agent-config p,
-.agent-contracts {
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.form-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
   color: var(--text-secondary);
   font-size: 12px;
 }
 
-.agent-config p {
-  min-height: 34px;
-  margin: 10px 0;
-  line-height: 1.45;
-}
-
-.agent-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.agent-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  min-height: 25px;
-}
-
-.agent-tags span {
-  padding: 4px 7px;
-  border-radius: 999px;
-  border: 1px solid var(--border-default);
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-
-.agent-form {
-  display: grid;
-  grid-template-columns: 0.8fr 0.8fr 1.4fr 1.2fr;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.agent-form label {
-  display: grid;
-  gap: 6px;
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.agent-contracts {
-  display: grid;
-  gap: 4px;
-  margin-top: 10px;
-}
-
-.runtime-form label {
-  display: grid;
-  gap: 6px;
-  color: var(--text-secondary);
-  font-size: 12px;
+.form-field--full {
+  grid-column: 1 / -1;
 }
 
 .field {
-  min-height: 36px;
-  border: 1px solid var(--border-default);
-  border-radius: 6px;
-  background: var(--bg-card);
-  color: var(--text-primary);
-  padding: 0 10px;
-  outline: none;
-}
-
-.toggle-row {
-  display: flex !important;
-  align-items: center;
-  grid-template-columns: none !important;
-  gap: 8px !important;
-  padding: 9px 10px;
-  border: 1px solid var(--border-default);
-  border-radius: 6px;
-  background: var(--bg-card);
-}
-
-.runtime-paths {
-  display: grid;
-  gap: 8px;
-  margin: 14px 0;
-}
-
-.runtime-paths div {
-  display: grid;
-  grid-template-columns: 90px minmax(0, 1fr);
-  gap: 10px;
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.runtime-paths code {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-}
-
-.runtime-checks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 0 0 14px;
-}
-
-.runtime-checks span {
-  padding: 5px 8px;
+  width: 100%;
+  min-height: 38px;
   border: 1px solid var(--border-default);
   border-radius: 7px;
-  color: var(--text-secondary);
-  font-size: 12px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  padding: 0 11px;
+  outline: none;
+  font: inherit;
 }
 
-.runtime-checks span.ok {
-  border-color: color-mix(in oklab, var(--color-success) 42%, transparent);
-  color: var(--color-success);
+.field:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-glow);
 }
 
-.runtime-checks span.warn {
-  border-color: color-mix(in oklab, var(--color-danger) 42%, transparent);
-  color: var(--color-danger);
-}
-
-.env-health {
-  padding: 5px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border-default);
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.env-health.ok {
-  border-color: color-mix(in oklab, var(--color-success) 42%, transparent);
-  color: var(--color-success);
-}
-
-.claude-call-overview {
+.switch-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
-.claude-primary-card {
+.switch-card {
   display: grid;
-  gap: 6px;
-  padding: 14px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: flex-start;
+  padding: 12px;
   border: 1px solid var(--border-default);
   border-radius: 8px;
   background: var(--bg-card);
 }
 
-.claude-primary-card span,
-.claude-primary-card small,
-.claude-call-grid span,
-.recent-run-models p {
+.switch-card input {
+  margin-top: 3px;
+}
+
+.switch-card strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.switch-card small {
+  display: block;
+  margin-top: 4px;
   color: var(--text-secondary);
   font-size: 12px;
+  line-height: 1.45;
 }
 
-.claude-primary-card strong {
-  color: var(--text-primary);
-  font-size: 18px;
-}
-
-.claude-primary-card small {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.claude-call-grid {
+.path-list,
+.environment-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 14px;
-  margin-top: 14px;
+  gap: 9px;
 }
 
-.claude-call-grid div {
+.path-list div,
+.environment-grid div {
   display: grid;
-  grid-template-columns: 128px minmax(0, 1fr);
+  grid-template-columns: 92px minmax(0, 1fr);
   gap: 10px;
   align-items: center;
   min-width: 0;
 }
 
-.claude-call-grid code,
-.recent-run-row code {
+.environment-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+}
+
+.environment-grid div {
+  grid-template-columns: 112px minmax(0, 1fr);
+}
+
+code {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -822,90 +641,80 @@ onMounted(() => {
   font-size: 12px;
 }
 
-.recent-run-models {
-  display: grid;
-  gap: 6px;
-  margin-top: 14px;
+.check-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.recent-run-row {
-  display: grid;
-  grid-template-columns: minmax(160px, 1fr) 120px 90px minmax(140px, 1fr);
-  gap: 10px;
+.check-pill,
+.driver-badge {
+  display: inline-flex;
   align-items: center;
-  padding: 8px 10px;
+  min-height: 30px;
+  padding: 0 10px;
   border: 1px solid var(--border-default);
-  border-radius: 6px;
-  background: var(--bg-card);
+  border-radius: 8px;
   color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.config-snapshot {
+  margin-top: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-card);
+  overflow: hidden;
+}
+
+.snapshot-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.snapshot-head strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.snapshot-head span {
+  color: var(--text-tertiary);
   font-size: 12px;
 }
 
-.recent-run-row--head {
-  background: transparent;
-  color: var(--text-tertiary);
-  font-weight: 700;
-}
-
-.recent-run-row strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-primary);
-}
-
-.run-status-completed {
-  color: var(--color-success);
-}
-
-.run-status-failed,
-.run-status-cancelled {
-  color: var(--color-danger);
-}
-
-.run-status-running,
-.run-status-queued {
-  color: var(--color-warning);
-}
-
-.btn-danger:hover {
-  background: var(--color-danger);
-  border-color: var(--color-danger);
-  color: var(--text-inverse);
-}
-
-.config-tree {
-  padding: 16px 32px 32px;
-  overflow: visible;
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.snapshot-grid {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) 112px minmax(0, 1fr);
+  gap: 10px 14px;
+  padding: 12px;
 }
 
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-height: 34px;
+  gap: 7px;
+  min-height: 36px;
   padding: 0 14px;
-  border-radius: 6px;
   border: 1px solid var(--border-default);
+  border-radius: 7px;
   background: var(--bg-card);
   color: var(--text-primary);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .btn-primary,
 .btn:hover {
-  background: var(--color-primary);
   border-color: var(--color-primary);
-  color: var(--text-inverse);
+  background: var(--color-primary);
+  color: var(--text-on-primary);
 }
 
 .btn:disabled {
@@ -913,97 +722,42 @@ onMounted(() => {
   opacity: 0.58;
 }
 
-.config-item {
-  background: var(--bg-panel);
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
-  overflow: hidden;
-  transition: all 0.15s ease;
-}
-
-.config-item:hover,
-.config-item.expanded {
-  border-color: var(--color-primary-dim);
-}
-
-.config-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.15s ease;
-}
-
-.config-header:hover {
-  background: var(--bg-panel-hover);
-}
-
-.config-header i {
-  color: var(--text-tertiary);
-  font-size: 16px;
-  width: 18px;
-  text-align: center;
-}
-
-.config-name {
-  flex: 1;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.config-path {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-.config-toggle {
-  font-size: 16px;
-  color: var(--text-tertiary);
-  transition: transform 0.15s ease;
-}
-
-.config-item.expanded .config-toggle {
-  transform: rotate(180deg);
-  color: var(--color-primary);
-}
-
-.config-content {
-  border-top: 1px solid var(--border-subtle);
-  background: var(--bg-base);
-}
-
-.config-code {
-  padding: 16px;
-  margin: 0;
-  overflow-x: auto;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--text-secondary);
-  white-space: pre;
-}
-
-@media (max-width: 900px) {
-  .runtime-form {
+@media (max-width: 1180px) {
+  .status-panel,
+  .config-grid,
+  .environment-grid,
+  .snapshot-grid {
     grid-template-columns: 1fr;
   }
 
-  .agent-grid,
-  .agent-form,
-  .claude-call-overview,
-  .claude-call-grid,
-  .recent-run-row {
-    grid-template-columns: 1fr;
+  .status-metrics,
+  .form-grid,
+  .switch-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
 
-  .runtime-panel__head,
-  .runtime-actions {
+@media (max-width: 760px) {
+  .page-header {
     align-items: flex-start;
     flex-direction: column;
+    padding: 20px 18px 0;
+  }
+
+  .config-shell {
+    padding: 16px 18px 24px;
+  }
+
+  .status-panel__main {
+    align-items: flex-start;
+  }
+
+  .status-metrics,
+  .form-grid,
+  .switch-grid,
+  .path-list div,
+  .environment-grid div {
+    grid-template-columns: 1fr;
   }
 }
 </style>

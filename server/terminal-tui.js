@@ -247,6 +247,11 @@ function attachTuiSession(ws, session, { cols = 120, rows = 36 } = {}) {
       return
     }
     if (message.type === 'resize') {
+      if (session.status === 'running') {
+        const nextCols = Math.max(40, Math.min(240, Number(message.cols) || cols))
+        const nextRows = Math.max(12, Math.min(120, Number(message.rows) || rows))
+        session.term.stdin.write(`\u001b]1337;Resize=${nextCols}x${nextRows}\u0007`)
+      }
       return
     }
     if (message.type === 'kill') {

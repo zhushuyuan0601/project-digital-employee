@@ -478,6 +478,8 @@ async function connectTui() {
   terminal.loadAddon(fitAddon)
   terminal.open(tuiRef.value)
   fitAddon.fit()
+  await nextTick()
+  fitAddon.fit()
   tuiTerminal = terminal
   tuiFitAddon = fitAddon
 
@@ -510,6 +512,7 @@ async function connectTui() {
     tuiConnected.value = true
     fitAddon.fit()
     socket.send(JSON.stringify({ type: 'resize', cols: terminal.cols, rows: terminal.rows }))
+    window.setTimeout(resizeTui, 120)
   })
 
   socket.addEventListener('message', (event) => {

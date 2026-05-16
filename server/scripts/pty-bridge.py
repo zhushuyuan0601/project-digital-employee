@@ -10,6 +10,8 @@ import subprocess
 import sys
 import termios
 
+RESIZE_PREFIX = b"\x1b]1337;Resize="
+
 
 def set_winsize(fd, cols, rows):
     try:
@@ -17,6 +19,19 @@ def set_winsize(fd, cols, rows):
         fcntl.ioctl(fd, termios.TIOCSWINSZ, size)
     except OSError:
         pass
+
+
+def parse_resize_frame(data):
+    if not data.startswith(RESIZE_PREFIX) or not data.endswith(b"\x07"):
+        return None
+    try:
+        payload = data[len(RESIZE_PREFIX):-1].decode("ascii")
+        cols_text, rows_text = payload.split("x", 1)
+        cols = max(40, min(240, int(cols_text)))
+        rows = max(12, min(120, int(rows_text)))
+        return cols, rows
+    except Exception:
+        return None
 
 
 def main():
@@ -80,6 +95,15 @@ def main():
                     data = os.read(0, 4096)
                     if not data:
                         stdin_open = False
+                        continue
+                    resize = parse_resize_frame(data)
+                    if resize:
+                        cols, rows = resize
+                        set_winsize(master_fd, cols, rows)
+                        try:
+                            os.killpg(process.pid, signal.SIGWINCH)
+                        except OSError:
+                            pass
                         continue
                     os.write(master_fd, data)
     except KeyboardInterrupt:
