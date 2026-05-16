@@ -160,7 +160,6 @@ const levelBars = computed(() => {
 })
 
 const categoryBars = computed(() => {
-  const total = props.stats?.total ?? 0
   const entries = Object.entries(CATEGORY_LABELS)
   const maxCount = Math.max(...entries.map(([key]) => props.stats?.byCategory[key as keyof typeof props.stats.byCategory] ?? 0), 1)
   return entries.map(([key, label]) => ({
@@ -172,7 +171,6 @@ const categoryBars = computed(() => {
 })
 
 const statusBars = computed(() => {
-  const total = props.stats?.total ?? 0
   const entries = Object.entries(STATUS_LABELS)
   const maxCount = Math.max(...entries.map(([key]) => props.stats?.byStatus[key as keyof typeof props.stats.byStatus] ?? 0), 1)
   return entries.map(([key, label]) => ({

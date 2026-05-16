@@ -1,4 +1,5 @@
 import { WebSocketServer } from 'ws'
+import { randomUUID } from 'crypto'
 import { existsSync, statSync } from 'fs'
 import { dirname, resolve } from 'path'
 import express from 'express'
@@ -10,7 +11,9 @@ import { asyncRoute, sendError } from './utils/http.js'
 
 const allowedEngines = new Set(['codex', 'claude'])
 const tuiSessions = new Map()
+const tuiTickets = new Map()
 const MAX_TUI_BUFFER = 200000
+const TUI_TICKET_TTL_MS = 60_000
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
@@ -106,10 +109,29 @@ function closeWithHttpError(socket, code, message) {
   socket.destroy()
 }
 
+function issueTuiTicket(sessionId) {
+  const ticket = randomUUID()
+  tuiTickets.set(ticket, {
+    sessionId,
+    expiresAt: Date.now() + TUI_TICKET_TTL_MS,
+  })
+  return ticket
+}
+
+function consumeTuiTicket(requestUrl) {
+  const ticket = requestUrl.searchParams.get('ticket')
+  if (!ticket) return false
+  const entry = tuiTickets.get(ticket)
+  tuiTickets.delete(ticket)
+  if (!entry || entry.expiresAt < Date.now()) return false
+  const sessionId = requestUrl.searchParams.get('sessionId')
+  return !!sessionId && entry.sessionId === sessionId
+}
+
 function isAuthorized(requestUrl) {
   const token = process.env.API_AUTH_TOKEN || ''
   if (!token) return true
-  return requestUrl.searchParams.get('token') === token
+  return consumeTuiTicket(requestUrl)
 }
 
 function serializeTuiSession(session) {
@@ -280,11 +302,24 @@ terminalTuiRouter.post('/terminal/tui/sessions', asyncRoute(async (req, res) => 
 
 terminalTuiRouter.delete('/terminal/tui/sessions/:id', (req, res) => {
   const session = tuiSessions.get(req.params.id)
-  if (!session) return sendError(res, 404, 'NOT_FOUND', 'TUI session not found')
+  if (!session) return sendError(res, 404, 'TUI_SESSION_NOT_FOUND', 'TUI session not found')
   session.term.kill()
   tuiSessions.delete(session.id)
   for (const client of session.clients) client.close()
   res.json({ success: true })
+})
+
+terminalTuiRouter.post('/terminal/tui/tickets', (req, res) => {
+  const sessionId = String(req.body?.sessionId || '')
+  if (!sessionId || !tuiSessions.has(sessionId)) {
+    return sendError(res, 404, 'TUI_SESSION_NOT_FOUND', 'TUI session not found')
+  }
+  const ticket = issueTuiTicket(sessionId)
+  res.json({
+    success: true,
+    ticket,
+    expiresAt: new Date(Date.now() + TUI_TICKET_TTL_MS).toISOString(),
+  })
 })
 
 export function attachTerminalTuiServer(server) {

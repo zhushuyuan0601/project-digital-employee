@@ -10,7 +10,9 @@
     "dev:server": "PORT=18888 node server/index.js",
     "server": "node server/index.js",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "typecheck": "vue-tsc --noEmit",
+    "verify": "npm run typecheck && npm run build"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.126",

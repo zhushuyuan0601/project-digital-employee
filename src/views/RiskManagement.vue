@@ -71,7 +71,7 @@
     <RiskDetailDrawer
       v-model:visible="detailVisible"
       :risk="viewingRisk"
-      @edit="openEditDialog(editingRisk)"
+      @edit="viewingRisk && openEditDialog(viewingRisk)"
       @close-risk="handleCloseRisk"
       @delete="handleDeleteRiskFromDetail"
     />

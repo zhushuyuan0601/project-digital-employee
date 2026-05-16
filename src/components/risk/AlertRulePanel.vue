@@ -15,7 +15,7 @@
         <template #default="{ row }">
           <div class="condition-list">
             <span v-if="row.triggerCondition.levelThreshold" class="condition-item">
-              等级 ≥ {{ levelLabels[row.triggerCondition.levelThreshold] }}
+              等级 ≥ {{ levelLabel(row.triggerCondition.levelThreshold) }}
             </span>
             <span v-if="row.triggerCondition.daysBeforeDue !== null" class="condition-item">
               <template v-if="row.triggerCondition.daysBeforeDue === 0">
@@ -26,7 +26,7 @@
               </template>
             </span>
             <span class="condition-item condition-sub">
-              状态: {{ row.triggerCondition.statusFilter.map(s => statusLabels[s]).join('、') }}
+              状态: {{ formatStatusFilter(row.triggerCondition.statusFilter) }}
             </span>
           </div>
         </template>
@@ -163,12 +163,19 @@ const statusOptions = Object.entries(STATUS_LABELS).map(([value, label]) => ({
   value: value as RiskStatus,
   label,
 }))
-
 const levelLabels: Record<RiskLevel, string> = {
   critical: '紧急',
   high: '高',
   medium: '中',
   low: '低',
+}
+
+function levelLabel(level: RiskLevel): string {
+  return levelLabels[level]
+}
+
+function formatStatusFilter(statuses: RiskStatus[]): string {
+  return statuses.map(status => STATUS_LABELS[status]).join('、')
 }
 
 function formatCooldown(minutes: number): string {

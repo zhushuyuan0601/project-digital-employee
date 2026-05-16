@@ -320,6 +320,7 @@ export const useRisksStore = defineStore('risks', () => {
     currentPage,
     pageSize,
     alertNotifications,
+    acknowledgedAlertIds,
     unacknowledgedAlertCount,
     filterLevel,
     filterStatus,

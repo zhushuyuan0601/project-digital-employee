@@ -10,7 +10,7 @@
       @row-click="handleRowClick"
     >
       <el-table-column prop="title" label="标题" min-width="220" show-overflow-tooltip>
-        <template #default="{ row }">
+        <template #default="{ row }: { row: RiskItem }">
           <span class="risk-title" @click.stop="$emit('view', row.id)">
             {{ row.title }}
           </span>
@@ -18,19 +18,19 @@
       </el-table-column>
 
       <el-table-column label="类别" width="110">
-        <template #default="{ row }">
+        <template #default="{ row }: { row: RiskItem }">
           <span>{{ categoryLabels[row.category] }}</span>
         </template>
       </el-table-column>
 
       <el-table-column label="等级" width="90" align="center">
-        <template #default="{ row }">
+        <template #default="{ row }: { row: RiskItem }">
           <RiskLevelBadge :level="row.level" />
         </template>
       </el-table-column>
 
       <el-table-column label="状态" width="100" align="center">
-        <template #default="{ row }">
+        <template #default="{ row }: { row: RiskItem }">
           <el-tag size="small" :type="statusTagType(row.status)">
             {{ statusLabels[row.status] }}
           </el-tag>
@@ -38,13 +38,13 @@
       </el-table-column>
 
       <el-table-column label="概率" width="70" align="center">
-        <template #default="{ row }">
+        <template #default="{ row }: { row: RiskItem }">
           {{ row.probability }}/5
         </template>
       </el-table-column>
 
       <el-table-column label="影响" width="70" align="center">
-        <template #default="{ row }">
+        <template #default="{ row }: { row: RiskItem }">
           {{ row.impact }}/5
         </template>
       </el-table-column>
@@ -52,7 +52,7 @@
       <el-table-column prop="owner" label="责任人" width="100" />
 
       <el-table-column label="截止日期" width="130">
-        <template #default="{ row }">
+        <template #default="{ row }: { row: RiskItem }">
           <span v-if="row.dueDate" :class="{ 'date-overdue': isOverdue(row) }">
             {{ formatDate(row.dueDate) }}
           </span>
@@ -61,7 +61,7 @@
       </el-table-column>
 
       <el-table-column label="预警" width="80" align="center">
-        <template #default="{ row }">
+        <template #default="{ row }: { row: RiskItem }">
           <el-tag v-if="row.alertStatus === 'triggered'" size="small" type="danger" effect="dark">
             预警
           </el-tag>
@@ -149,7 +149,7 @@ function isOverdue(row: RiskItem): boolean {
   return new Date(row.dueDate) < new Date()
 }
 
-function handleRowClick(row: RiskItem) {
+function handleRowClick(_row: RiskItem) {
   // handled by @click.stop on title cell
 }
 </script>

@@ -862,12 +862,31 @@ router.get('/tasks/:id/trace', (req, res) => {
 
 router.get('/tasks/:id/events/stream', (req, res) => {
   const taskId = req.params.id
+  const afterEventId = req.query.afterEventId != null ? parsePositiveInt(req.query.afterEventId, null) : null
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
   res.setHeader('Connection', 'keep-alive')
   res.flushHeaders?.()
 
   res.write(`data: ${JSON.stringify({ type: 'connected', taskId, timestamp: Date.now() })}\n\n`)
+  if (afterEventId != null) {
+    const missedEvents = listTaskEvents(taskId, { limit: 500 })
+      .filter(event => Number(event.id) > afterEventId)
+      .sort((a, b) => Number(a.id) - Number(b.id))
+    for (const event of missedEvents) {
+      res.write(`data: ${JSON.stringify({
+        type: event.type,
+        taskId,
+        subtaskId: event.subtask_id,
+        agentId: event.agent_id,
+        message: event.message,
+        payload: event.payload_json,
+        created_at: event.created_at,
+        eventId: event.id,
+        replay: true,
+      })}\n\n`)
+    }
+  }
 
   const handler = (event) => {
     if (event.taskId !== taskId) return

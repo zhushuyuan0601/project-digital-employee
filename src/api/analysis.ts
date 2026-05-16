@@ -1,5 +1,11 @@
 import { request, requestJson, requestStream } from './base'
 
+export const ANALYSIS_UPLOAD_LIMITS = {
+  maxFiles: 10,
+  maxFileSize: 50 * 1024 * 1024,
+  maxTotalSize: 200 * 1024 * 1024,
+} as const
+
 export interface AnalysisSession {
   id: string
   title: string
@@ -224,8 +230,27 @@ export interface ExportAnalysisReportPayload {
   include_samples?: boolean
 }
 
+export interface ExportAnalysisReportResponse {
+  success: boolean
+  format?: 'md' | 'pdf'
+  file?: {
+    name: string
+    path: string
+    download_url?: string
+  }
+  fallback?: {
+    format: 'md'
+    file: {
+      name: string
+      path: string
+      download_url?: string
+    }
+  }
+  error?: string
+}
+
 export async function exportAnalysisReport(payload: ExportAnalysisReportPayload) {
-  return requestJson('/api/analysis/export/report', {
+  return requestJson<ExportAnalysisReportResponse>('/api/analysis/export/report', {
     method: 'POST',
     body: JSON.stringify(payload),
   })

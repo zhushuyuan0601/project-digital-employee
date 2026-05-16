@@ -32,7 +32,7 @@ export function traceMiddleware(req, res, next) {
       return originalJson({
         success: false,
         error: {
-          code: current.code || STATUS_CODES[res.statusCode] || 'REQUEST_FAILED',
+          code: current.code || current.error?.code || STATUS_CODES[res.statusCode] || 'REQUEST_FAILED',
           message,
           details,
         },

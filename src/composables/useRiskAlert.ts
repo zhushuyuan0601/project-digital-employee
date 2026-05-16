@@ -1,4 +1,4 @@
-import { onMounted, onUnmounted, watch } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import type { Ref } from 'vue'
 import { useRisksStore } from '@/stores/risks'
 

@@ -1420,6 +1420,8 @@ let clockTimer: ReturnType<typeof setInterval> | null = null
 let refreshTimer: ReturnType<typeof setInterval> | null = null
 let taskEventSource: EventSource | null = null
 let taskSyncTimer: ReturnType<typeof setTimeout> | null = null
+let taskStreamReconnectTimer: ReturnType<typeof setTimeout> | null = null
+let taskStreamRetryCount = 0
 let taskSyncInFlight = false
 let pendingTaskSyncId: string | null = null
 let pendingTaskSyncNeedsEvents = false
@@ -1592,6 +1594,7 @@ const summaryNodeEvents = computed(() =>
 const reviewNode = computed<Subtask | null>(() => {
   const task = selectedTask.value
   if (!selectedTaskSubtasks.value.length || !canFinalize.value) return null
+  if (!task) return null
   return {
     id: REVIEW_NODE_ID,
     task_id: task.id,
@@ -3084,21 +3087,6 @@ async function scanOutputs() {
   }
 }
 
-async function finalizeTask() {
-  if (!selectedTask.value || selectedTask.value.status === 'completed') return
-  finalizingSummary.value = true
-  try {
-    await tasksStore.finalizeTask(selectedTask.value.id)
-    await tasksStore.fetchTask(selectedTask.value.id, { refreshEvents: true, eventLimit: TASK_EVENT_LIMIT })
-    ElMessage.success(`最终汇总已进入 ${runtimeLabelForSelectedTask()} Runtime 队列`)
-    await refreshRuntimeStatus()
-  } catch (err) {
-    ElMessage.error(err instanceof Error ? err.message : '汇总请求失败')
-  } finally {
-    finalizingSummary.value = false
-  }
-}
-
 async function completeTask() {
   if (!selectedTask.value || !canArchiveTask.value) return
   const confirmed = await ElMessageBox.confirm('确认将该任务标记为验收完成并归档？', '验收归档', {
@@ -3186,14 +3174,6 @@ function outputTimestampMs(output: TaskOutput) {
 
 function completedCount(task: Task) {
   return task.subtasks?.filter(subtask => ['completed', 'skipped'].includes(subtask.status)).length || 0
-}
-
-function taskSubtaskTotal(task: Task) {
-  return task.subtask_count || task.subtasks?.length || 0
-}
-
-function taskOutputCount(task: Task) {
-  return task.output_count || task.outputs?.length || 0
 }
 
 function needsPlan(task: Task) {
@@ -3408,6 +3388,16 @@ function handleDisconnectAll() {
 }
 
 function closeTaskEventStream() {
+  if (taskStreamReconnectTimer) {
+    clearTimeout(taskStreamReconnectTimer)
+    taskStreamReconnectTimer = null
+  }
+  taskEventSource?.close()
+  taskEventSource = null
+  runtimeStreamConnected.value = false
+}
+
+function closeCurrentTaskEventSource() {
   taskEventSource?.close()
   taskEventSource = null
   runtimeStreamConnected.value = false
@@ -3515,12 +3505,26 @@ function ingestRuntimeStreamEvent(taskId: string, data: Record<string, unknown>)
 
 function openTaskEventStream(taskId: string) {
   closeTaskEventStream()
-  taskEventSource = new EventSource(taskApi.buildTaskEventStreamUrl(taskId))
+  taskStreamRetryCount = 0
+  connectTaskEventStream(taskId)
+}
+
+function connectTaskEventStream(taskId: string) {
+  closeCurrentTaskEventSource()
+  const latestDbEventId = selectedTaskEvents.value.reduce<number | null>((latest, event) => {
+    const id = Number(event.id)
+    if (!Number.isFinite(id)) return latest
+    return latest == null || id > latest ? id : latest
+  }, null)
+  taskEventSource = new EventSource(taskApi.buildTaskEventStreamUrl(taskId, {
+    afterEventId: latestDbEventId,
+  }))
   taskEventSource.onmessage = (event) => {
     try {
       const data = JSON.parse(event.data) as Record<string, unknown>
       if (data.type === 'connected') {
         runtimeStreamConnected.value = true
+        taskStreamRetryCount = 0
         return
       }
       if (data.type === 'ping') return
@@ -3537,7 +3541,17 @@ function openTaskEventStream(taskId: string) {
     }
   }
   taskEventSource.onerror = () => {
-    closeTaskEventStream()
+    closeCurrentTaskEventSource()
+    if (tasksStore.selectedTaskId !== taskId) return
+    taskStreamRetryCount += 1
+    const delay = Math.min(30000, 1000 * 2 ** Math.min(taskStreamRetryCount - 1, 5))
+    if (taskStreamReconnectTimer) clearTimeout(taskStreamReconnectTimer)
+    taskStreamReconnectTimer = setTimeout(() => {
+      taskStreamReconnectTimer = null
+      if (tasksStore.selectedTaskId !== taskId) return
+      syncTaskDetail(taskId, { refreshEvents: true }).catch(() => {})
+      connectTaskEventStream(taskId)
+    }, delay)
   }
 }
 
@@ -3555,7 +3569,7 @@ onMounted(async () => {
   refreshTimer = setInterval(() => {
     if (!runtimeStreamConnected.value && tasksStore.selectedTaskId) {
       tasksStore.fetchTask(tasksStore.selectedTaskId, {
-        refreshEvents: false,
+        refreshEvents: true,
         eventLimit: TASK_EVENT_LIMIT,
       }).catch(() => {})
     }

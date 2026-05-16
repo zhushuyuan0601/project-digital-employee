@@ -242,7 +242,6 @@ const chatRef = ref<HTMLElement | null>(null)
 let taskEventSource: EventSource | null = null
 
 const activeTasks = computed(() => tasks.value.filter(task => !['completed', 'cancelled'].includes(task.status)))
-const executableAgents = computed(() => agents.value.filter(agent => agent.enabled))
 const taskRuns = computed(() => runs.value.filter(run => run.task_id === selectedTaskId.value))
 const taskScopedAgentIds = computed(() => {
   const ids = new Set<string>()

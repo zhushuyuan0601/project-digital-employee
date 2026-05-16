@@ -32,6 +32,9 @@ TABLE_EXTENSIONS = {".csv", ".tsv", ".xlsx", ".xls"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
 SQLITE_EXTENSIONS = {".sqlite", ".db"}
 BLOCKED_UPLOAD_EXTENSIONS = {".py"}
+MAX_UPLOAD_FILES = int(os.getenv("ANALYSIS_MAX_UPLOAD_FILES", "10"))
+MAX_UPLOAD_FILE_SIZE = int(os.getenv("ANALYSIS_MAX_UPLOAD_FILE_SIZE", str(50 * 1024 * 1024)))
+MAX_UPLOAD_TOTAL_SIZE = int(os.getenv("ANALYSIS_MAX_UPLOAD_TOTAL_SIZE", str(200 * 1024 * 1024)))
 PROFILE_SAMPLE_SIZE = 1000
 PROFILE_FIELD_LIMIT = 40
 PROFILE_SAMPLE_VALUE_LIMIT = 5
@@ -136,9 +139,12 @@ def build_tree(session_id: str) -> dict[str, Any]:
 
 
 async def upload_files(session_id: str, files: list[UploadFile], directory: str = "") -> list[dict[str, Any]]:
+    if len(files) > MAX_UPLOAD_FILES:
+        raise HTTPException(status_code=413, detail=f"Too many files. Maximum is {MAX_UPLOAD_FILES}")
     target_dir = resolve_session_path(session_id, directory) if directory else workspace_dir(session_id)
     target_dir.mkdir(parents=True, exist_ok=True)
     uploaded: list[dict[str, Any]] = []
+    total_size = 0
     for upload in files:
         filename = Path(upload.filename or "upload.bin").name
         if Path(filename).suffix.lower() in BLOCKED_UPLOAD_EXTENSIONS:
@@ -148,8 +154,21 @@ async def upload_files(session_id: str, files: list[UploadFile], directory: str 
         while target.exists():
             target = target_dir / f"{target.stem}_{counter}{target.suffix}"
             counter += 1
-        content = await upload.read()
-        target.write_bytes(content)
+        size = 0
+        with target.open("wb") as handle:
+            while True:
+                chunk = await upload.read(1024 * 1024)
+                if not chunk:
+                    break
+                size += len(chunk)
+                total_size += len(chunk)
+                if size > MAX_UPLOAD_FILE_SIZE:
+                    target.unlink(missing_ok=True)
+                    raise HTTPException(status_code=413, detail=f"File too large: {filename}")
+                if total_size > MAX_UPLOAD_TOTAL_SIZE:
+                    target.unlink(missing_ok=True)
+                    raise HTTPException(status_code=413, detail="Upload total size exceeded")
+                handle.write(chunk)
         uploaded.append({
             "name": target.name,
             "path": target.relative_to(workspace_dir(session_id)).as_posix(),

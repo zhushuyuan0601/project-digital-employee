@@ -9,7 +9,7 @@ from uuid import uuid4
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 
 from .chat_runtime import run_analysis
 from .exporter import export_markdown, export_pdf
@@ -224,21 +224,19 @@ def create_app() -> FastAPI:
                 },
             }
         except Exception as exc:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "success": False,
-                    "error": str(exc),
-                    "fallback": {
-                        "format": "md",
-                        "file": {
-                            "name": markdown_path.name,
-                            "path": markdown_path.relative_to(workspace_dir(session_id)).as_posix(),
-                            "download_url": f"/workspace/download?session_id={session_id}&path={markdown_path.relative_to(workspace_dir(session_id)).as_posix()}",
-                        },
+            return {
+                "success": False,
+                "format": "md",
+                "error": str(exc),
+                "fallback": {
+                    "format": "md",
+                    "file": {
+                        "name": markdown_path.name,
+                        "path": markdown_path.relative_to(workspace_dir(session_id)).as_posix(),
+                        "download_url": f"/workspace/download?session_id={session_id}&path={markdown_path.relative_to(workspace_dir(session_id)).as_posix()}",
                     },
                 },
-            )
+            }
 
     return app
 

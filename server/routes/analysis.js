@@ -13,7 +13,16 @@ import {
 import { DEFAULT_SERVER_CONFIG, envBoolean } from '../config/defaults.js'
 
 const router = express.Router()
-const upload = multer({ storage: multer.memoryStorage() })
+const MAX_UPLOAD_FILES = Number(process.env.ANALYSIS_MAX_UPLOAD_FILES || 10)
+const MAX_UPLOAD_FILE_SIZE = Number(process.env.ANALYSIS_MAX_UPLOAD_FILE_SIZE || 50 * 1024 * 1024)
+const MAX_UPLOAD_TOTAL_SIZE = Number(process.env.ANALYSIS_MAX_UPLOAD_TOTAL_SIZE || 200 * 1024 * 1024)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    files: MAX_UPLOAD_FILES,
+    fileSize: MAX_UPLOAD_FILE_SIZE,
+  },
+})
 
 const ANALYSIS_SERVICE_BASE_URL = (process.env.ANALYSIS_SERVICE_BASE_URL || 'http://127.0.0.1:18900').replace(/\/$/, '')
 const ALLOW_PRIVATE_URLS = envBoolean('ALLOW_PRIVATE_URLS', DEFAULT_SERVER_CONFIG.allowPrivateUrls)
@@ -333,6 +342,10 @@ router.post('/workspace/upload', upload.array('files'), async (req, res) => {
     if (!files.length) {
       return res.status(400).json({ error: 'At least one file is required' })
     }
+    const totalSize = files.reduce((sum, file) => sum + file.size, 0)
+    if (totalSize > MAX_UPLOAD_TOTAL_SIZE) {
+      return res.status(413).json({ error: `Upload total size exceeds ${MAX_UPLOAD_TOTAL_SIZE} bytes` })
+    }
     const form = new FormData()
     for (const file of files) {
       form.append('files', new File([file.buffer], file.originalname, { type: file.mimetype || 'application/octet-stream' }))
@@ -345,6 +358,9 @@ router.post('/workspace/upload', upload.array('files'), async (req, res) => {
     res.status(response.status).json(payload)
   } catch (err) {
     console.error('[Analysis API] Workspace upload error:', err)
+    if (err instanceof multer.MulterError) {
+      return res.status(413).json({ error: err.message })
+    }
     res.status(500).json({ error: err.message })
   }
 })
@@ -377,8 +393,9 @@ router.post('/export/report', async (req, res) => {
       body: JSON.stringify(req.body || {}),
     })
     const sessionId = req.body?.session_id
-    if (sessionId && payload?.file?.path) {
-      patchAnalysisSession(sessionId, { last_report_path: payload.file.path })
+    const reportPath = payload?.file?.path || payload?.fallback?.file?.path
+    if (sessionId && reportPath) {
+      patchAnalysisSession(sessionId, { last_report_path: reportPath })
     }
     res.json(payload)
   } catch (err) {

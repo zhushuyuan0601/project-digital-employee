@@ -11,7 +11,7 @@
         </button>
       </div>
 
-      <button type="button" class="sidebar-new-btn" @click="createNewTuiSession">
+      <button type="button" class="sidebar-new-btn" @click="() => createNewTuiSession()">
         <el-icon><Plus /></el-icon>
         <span>新建会话</span>
       </button>
@@ -81,7 +81,7 @@
             重连 TUI
           </button>
           <span :class="['status-badge', statusText]">{{ statusText }}</span>
-          <button type="button" class="new-inline-btn" @click="createNewTuiSession">
+          <button type="button" class="new-inline-btn" @click="() => createNewTuiSession()">
             <el-icon><Plus /></el-icon>
             新建会话
           </button>
@@ -123,20 +123,20 @@
               <span class="tool-event__icon">
                 <el-icon><Tools /></el-icon>
               </span>
-              <span>{{ toolCategoryText(item.toolName) }}</span>
-              <strong>{{ item.toolName }}</strong>
-              <em v-if="item.count > 1">x{{ item.count }}</em>
-              <small>{{ formatEventTime(item.timestamp) }}</small>
+              <span>{{ toolCategoryText(displayToolName(item)) }}</span>
+              <strong>{{ displayToolName(item) }}</strong>
+              <em v-if="displayToolCount(item) > 1">x{{ displayToolCount(item) }}</em>
+              <small>{{ formatEventTime(displayTimestamp(item)) }}</small>
             </article>
 
             <article
               v-else
               class="message"
-              :class="messageClass(item.event)"
+              :class="messageClass(displayEvent(item))"
             >
-              <div class="message-avatar">{{ avatarText(item.event) }}</div>
+              <div class="message-avatar">{{ avatarText(displayEvent(item)) }}</div>
               <div class="message-content">
-                <pre>{{ item.event.text }}</pre>
+                <pre>{{ displayEvent(item).text }}</pre>
               </div>
             </article>
           </template>
@@ -392,6 +392,29 @@ function formatSessionTime(value?: string) {
   return new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
+function displayToolName(item: TerminalDisplayItem) {
+  return item.kind === 'tool' ? item.toolName : ''
+}
+
+function displayToolCount(item: TerminalDisplayItem) {
+  return item.kind === 'tool' ? item.count : 0
+}
+
+function displayTimestamp(item: TerminalDisplayItem) {
+  return item.kind === 'tool' ? item.timestamp : item.event.timestamp
+}
+
+function displayEvent(item: TerminalDisplayItem) {
+  if (item.kind === 'event') return item.event
+  return {
+    sessionId: activeSession.value?.id || '',
+    type: 'system',
+    stream: 'system',
+    text: '',
+    timestamp: item.timestamp,
+  } satisfies TerminalEvent
+}
+
 function closeStream() {
   eventSource?.close()
   eventSource = null
@@ -404,6 +427,29 @@ function closeTui() {
   tuiTerminal?.dispose()
   tuiTerminal = null
   tuiFitAddon = null
+}
+
+function isMissingTuiSessionError(err: unknown) {
+  return err instanceof Error && /TUI session not found/i.test(err.message)
+}
+
+async function createTuiAttachTicket(): Promise<{ sessionId: string; ticket: string }> {
+  const activeSession = activeTuiSession.value
+  if (!activeSession) throw new Error('TUI 会话不存在')
+  let sessionId = activeSession.id
+  try {
+    const ticket = await terminalApi.createTuiTicket(sessionId)
+    return { sessionId, ticket: ticket.ticket }
+  } catch (err) {
+    if (!isMissingTuiSessionError(err)) throw err
+    tuiSessions.value = tuiSessions.value.filter((session) => session.id !== sessionId)
+    activeTuiSession.value = null
+    const replacementSession = await createNewTuiSession(false)
+    if (!replacementSession) throw err
+    sessionId = replacementSession.id
+    const ticket = await terminalApi.createTuiTicket(sessionId)
+    return { sessionId, ticket: ticket.ticket }
+  }
 }
 
 async function connectTui() {
@@ -439,8 +485,16 @@ async function connectTui() {
   const dims = terminal.cols && terminal.rows
     ? { cols: terminal.cols, rows: terminal.rows }
     : { cols: 120, rows: 36 }
+  let attachTicket: Awaited<ReturnType<typeof createTuiAttachTicket>>
+  try {
+    attachTicket = await createTuiAttachTicket()
+  } catch (err) {
+    closeTui()
+    throw err
+  }
   const socket = new WebSocket(terminalApi.buildTuiAttachWebSocketUrl({
-    sessionId: activeTuiSession.value.id,
+    sessionId: attachTicket.sessionId,
+    ticket: attachTicket.ticket,
     cols: dims.cols,
     rows: dims.rows,
   }))
@@ -504,19 +558,6 @@ function restartTui() {
   })
 }
 
-function handleModeChange() {
-  if (terminalMode.value === 'tui') {
-    closeStream()
-    connectTui().catch((err) => {
-      ElMessage.error(err instanceof Error ? err.message : 'TUI 连接失败')
-    })
-  } else {
-    closeTui()
-    if (activeSession.value) subscribeSession(activeSession.value.id)
-    nextTick(() => inputRef.value?.focus())
-  }
-}
-
 async function scrollToBottom() {
   await nextTick()
   if (!screenRef.value) return
@@ -557,11 +598,6 @@ async function loadCapabilities() {
   sessions.value = response.activeSessions
 }
 
-async function loadSlashCommands() {
-  const response = await terminalApi.listCommands()
-  slashCommands.value = response.commands
-}
-
 async function loadSessions() {
   const response = await terminalApi.listSessions()
   sessions.value = response.sessions
@@ -580,7 +616,7 @@ async function loadTuiSessions() {
   }
 }
 
-async function createNewTuiSession(attach = true) {
+async function createNewTuiSession(attach = true): Promise<TerminalTuiSession | null> {
   try {
     const response = await terminalApi.createTuiSession({
       engine: engineDraft.value,
@@ -594,8 +630,10 @@ async function createNewTuiSession(attach = true) {
     cwdDraft.value = response.session.cwd
     tuiSessions.value = [response.session, ...tuiSessions.value.filter((session) => session.id !== response.session.id)]
     if (attach) await connectTui()
+    return response.session
   } catch (err) {
     ElMessage.error(err instanceof Error ? err.message : '创建 TUI 会话失败')
+    return null
   }
 }
 
@@ -648,30 +686,6 @@ async function ensureSession() {
   await createNewSession()
   if (!activeSession.value) throw new Error('会话创建失败')
   return activeSession.value
-}
-
-async function selectSession(sessionId: string) {
-  if (!sessionId) {
-    activeSession.value = null
-    events.value = []
-    closeStream()
-    await nextTick()
-    inputRef.value?.focus()
-    return
-  }
-  const response = await terminalApi.getSession(sessionId)
-  activeSession.value = response.session
-  engineDraft.value = response.session.engine
-  cwdDraft.value = response.session.cwd
-  events.value = response.events || []
-  subscribeSession(sessionId)
-  scrollToBottom()
-}
-
-function handleSessionSelect(sessionId: string) {
-  selectSession(sessionId).catch((err) => {
-    ElMessage.error(err instanceof Error ? err.message : '切换会话失败')
-  })
 }
 
 function handleEngineChange() {

@@ -992,6 +992,7 @@ import {
 } from '@element-plus/icons-vue'
 import {
   clearAnalysisWorkspace,
+  ANALYSIS_UPLOAD_LIMITS,
   createAnalysisSession,
   deleteAnalysisFile,
   deleteAnalysisSession,
@@ -1803,6 +1804,23 @@ async function handleUpload(event: Event) {
   const input = event.target as HTMLInputElement
   const files = Array.from(input.files || [])
   if (!files.length || !currentSessionId.value) return
+  const totalSize = files.reduce((sum, file) => sum + file.size, 0)
+  if (files.length > ANALYSIS_UPLOAD_LIMITS.maxFiles) {
+    notification.error(`单次最多上传 ${ANALYSIS_UPLOAD_LIMITS.maxFiles} 个文件`)
+    input.value = ''
+    return
+  }
+  const oversized = files.find((file) => file.size > ANALYSIS_UPLOAD_LIMITS.maxFileSize)
+  if (oversized) {
+    notification.error(`${oversized.name} 超过单文件 50MB 限制`)
+    input.value = ''
+    return
+  }
+  if (totalSize > ANALYSIS_UPLOAD_LIMITS.maxTotalSize) {
+    notification.error('单次上传总大小不能超过 200MB')
+    input.value = ''
+    return
+  }
   try {
     const response = await uploadAnalysisFiles(currentSessionId.value, files)
     await refreshWorkspace()

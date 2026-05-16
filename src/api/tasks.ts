@@ -449,7 +449,10 @@ export const taskApi = {
     })
   },
 
-  buildTaskEventStreamUrl(taskId: string) {
-    return buildEventSourceUrl(`/api/tasks/${encodeURIComponent(taskId)}/events/stream`)
+  buildTaskEventStreamUrl(taskId: string, options?: { afterEventId?: number | string | null }) {
+    const query = new URLSearchParams()
+    if (options?.afterEventId != null) query.set('afterEventId', String(options.afterEventId))
+    const suffix = query.toString() ? `?${query.toString()}` : ''
+    return buildEventSourceUrl(`/api/tasks/${encodeURIComponent(taskId)}/events/stream${suffix}`)
   },
 }

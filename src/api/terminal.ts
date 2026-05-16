@@ -85,6 +85,12 @@ interface TerminalTuiSessionResponse {
   session: TerminalTuiSession
 }
 
+interface TerminalTuiTicketResponse {
+  success: boolean
+  ticket: string
+  expiresAt: string
+}
+
 export interface CreateTerminalSessionPayload {
   engine: TerminalEngine
   args?: string[]
@@ -176,14 +182,20 @@ export const terminalApi = {
     })
   },
 
-  buildTuiAttachWebSocketUrl(params: { sessionId: string; cols?: number; rows?: number }) {
+  createTuiTicket(sessionId: string) {
+    return request<TerminalTuiTicketResponse>('/api/terminal/tui/tickets', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId }),
+    })
+  },
+
+  buildTuiAttachWebSocketUrl(params: { sessionId: string; ticket: string; cols?: number; rows?: number }) {
     const query = new URLSearchParams({
       sessionId: params.sessionId,
+      ticket: params.ticket,
       cols: String(params.cols || 120),
       rows: String(params.rows || 36),
     })
-    const token = import.meta.env.VITE_API_AUTH_TOKEN || ''
-    if (token) query.set('token', token)
     return buildWebSocketUrl(`/api/terminal/tui?${query.toString()}`)
   },
 }
