@@ -100,6 +100,9 @@
               <em>{{ currentPhaseLabel }}</em>
             </div>
             <h2>{{ currentSession?.title || '未选择会话' }}</h2>
+            <p v-if="serviceUnavailableMessage" class="analysis-service-alert">
+              {{ serviceUnavailableMessage }}
+            </p>
           </div>
           <section class="analysis-pipeline" aria-label="分析流程">
             <div
@@ -346,6 +349,7 @@
           <div>
             <p class="panel-label">Workspace Assets</p>
             <h2>文件与产物</h2>
+            <p v-if="workspaceError" class="assetrail__error">{{ workspaceError }}</p>
           </div>
           <div class="assetrail__stats">
             <span>{{ sourceFiles.length }} 源文件</span>
@@ -1043,6 +1047,8 @@ const currentSessionId = ref('')
 const workspaceFiles = ref<WorkspaceFile[]>([])
 const selectedFile = ref<WorkspaceFile | null>(null)
 const workspaceOverview = ref<WorkspaceOverview | null>(null)
+const workspaceError = ref('')
+const stateError = ref('')
 const preview = ref<PreviewPayload>({ kind: '', content: '' })
 const profile = ref<FileProfile | null>(null)
 const previewLoading = ref(false)
@@ -1058,6 +1064,7 @@ const sessionMessageCache = ref<Record<string, UIMessage[]>>({})
 const runningSessionIds = ref<Record<string, boolean>>({})
 const activeChatControllers = ref<Record<string, AbortController>>({})
 const sending = computed(() => Boolean(currentSessionId.value && runningSessionIds.value[currentSessionId.value]))
+const serviceUnavailableMessage = computed(() => stateError.value || workspaceError.value)
 const exporting = ref<'md' | 'pdf' | null>(null)
 const messageStreamRef = ref<HTMLElement | null>(null)
 const showSessionModal = ref(false)
@@ -1664,6 +1671,7 @@ async function refreshWorkspace() {
   try {
     const response = await listAnalysisFiles(currentSessionId.value)
     workspaceFiles.value = response.files
+    workspaceError.value = ''
     if (selectedFile.value) {
       const latest = workspaceFiles.value.find((item) => item.path === selectedFile.value?.path)
       if (!latest) {
@@ -1673,13 +1681,17 @@ async function refreshWorkspace() {
         previewError.value = ''
       }
     }
-  } catch {
+  } catch (error) {
     workspaceFiles.value = []
+    workspaceError.value = analysisServiceErrorMessage(error, '分析工作区暂不可用，文件列表和预览无法加载。')
   }
   try {
     workspaceOverview.value = await getAnalysisOverview(currentSessionId.value)
-  } catch {
+  } catch (error) {
     workspaceOverview.value = null
+    if (!workspaceError.value) {
+      workspaceError.value = analysisServiceErrorMessage(error, '分析工作区概览暂不可用。')
+    }
   }
 }
 
@@ -1692,6 +1704,7 @@ async function refreshState() {
   }
   try {
     const state = await getAnalysisState(sessionId)
+    stateError.value = ''
     const nextMessages = (state.messages || []).map((message, index) => ({
       id: `${sessionId}-${index}`,
       role: message.role,
@@ -1706,7 +1719,8 @@ async function refreshState() {
     if (currentSessionId.value === sessionId) {
       messages.value = nextMessages
     }
-  } catch {
+  } catch (error) {
+    stateError.value = analysisServiceErrorMessage(error, '分析会话状态暂不可用。')
     if (!runningSessionIds.value[sessionId]) {
       sessionMessageCache.value = {
         ...sessionMessageCache.value,
@@ -1717,6 +1731,14 @@ async function refreshState() {
       }
     }
   }
+}
+
+function analysisServiceErrorMessage(error: unknown, fallback: string) {
+  const message = error instanceof Error ? error.message : String(error || '')
+  if (/Analysis service unavailable|fetch failed|Bad Gateway|502/i.test(message)) {
+    return '分析执行服务暂不可用，请启动 analysis_service 后重试。'
+  }
+  return message || fallback
 }
 
 async function selectSession(sessionId: string) {
@@ -2704,6 +2726,18 @@ onMounted(async () => {
   text-overflow: ellipsis;
 }
 
+.analysis-service-alert {
+  max-width: 620px;
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--analysis-amber) 38%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--analysis-amber) 12%, transparent);
+  color: #fde68a;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .analysis-pipeline {
   display: flex;
   align-items: center;
@@ -3642,6 +3676,14 @@ onMounted(async () => {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+}
+
+.assetrail__error {
+  max-width: 280px;
+  margin: 8px 0 0;
+  color: #fca5a5;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .assetrail__segments {
