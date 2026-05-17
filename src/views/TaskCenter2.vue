@@ -81,12 +81,12 @@
                   </div>
                 </div>
                 <div class="task-row__meta">
-                  <span>{{ taskProgress(task) }}%</span>
+                  <span>{{ task.progress || 0 }}%</span>
                   <span>{{ task.completed_subtask_count || completedCount(task) }}/{{ task.subtask_count || task.subtasks?.length || 0 }} 子任务</span>
                   <span>{{ formatTime(task.updated_at) }}</span>
                 </div>
                 <div class="mini-progress">
-                  <span :style="{ width: `${taskProgress(task)}%` }"></span>
+                  <span :style="{ width: `${task.progress || 0}%` }"></span>
                 </div>
               </button>
             </template>
@@ -193,7 +193,7 @@
           <div class="mission-hero__metrics">
             <div>
               <span>进度</span>
-              <strong>{{ taskProgress(selectedTask) }}%</strong>
+              <strong>{{ selectedTask.progress || 0 }}%</strong>
             </div>
             <div>
               <span>子任务</span>
@@ -279,7 +279,7 @@
               </div>
 
               <div class="subtask-progress work-package__progress">
-                <span :style="{ width: `${normalizedProgress(pack.progress)}%` }"></span>
+                <span :style="{ width: `${pack.progress}%` }"></span>
               </div>
               <div class="work-package__hint">
                 <i class="ri-git-branch-line"></i>
@@ -301,7 +301,7 @@
                   <p>{{ subtask.description }}</p>
                   <div class="workflow-node-meta work-node-row__meta">
                     <span>{{ executionModeLabel(subtask) }}</span>
-                    <span>{{ normalizedProgress(subtask.progress) }}%</span>
+                    <span>{{ subtask.progress || 0 }}%</span>
                     <span>{{ shortSessionKey(subtask.session_key) }}</span>
                   </div>
                   <div class="work-node-row__details">
@@ -403,7 +403,7 @@
               </div>
               <div class="member-card__activity">
                 <span class="status-chip" :class="`status-chip--${subtask.status}`">{{ subtaskStatusText(subtask.status) }}</span>
-                <span>{{ normalizedProgress(subtask.progress) }}%</span>
+                <span>{{ subtask.progress || 0 }}%</span>
               </div>
               <div class="member-card__focus">
                 <span class="member-card__label">当前在做</span>
@@ -1013,7 +1013,7 @@
         <div class="member-story">
           <div class="member-story__toolbar">
             <div class="member-story__chips">
-              <span>progress {{ normalizedProgress(activeMemberSubtask.progress) }}%</span>
+              <span>progress {{ activeMemberSubtask.progress || 0 }}%</span>
               <span>logs {{ activeMemberTerminalLogs.length }}</span>
               <span>outputs {{ activeMemberStoryOutputs.length }}</span>
               <span>run {{ activeMemberRunId ? shortRunId(activeMemberRunId) : '--' }}</span>
@@ -1186,7 +1186,7 @@
         <div class="member-terminal__bar">
           <span class="member-terminal__pill">{{ selectedTaskRuntimeSlug }}</span>
           <span>status={{ subtaskStatusText(activeMemberSubtask.status) }}</span>
-          <span>progress={{ normalizedProgress(activeMemberSubtask.progress) }}%</span>
+          <span>progress={{ activeMemberSubtask.progress || 0 }}%</span>
           <span>run={{ activeMemberRunId || '--' }}</span>
           <span>session={{ activeMemberSessionId || '--' }}</span>
           <span>logs={{ activeMemberTerminalLogs.length }}</span>
@@ -3174,16 +3174,6 @@ function outputTimestampMs(output: TaskOutput) {
 
 function completedCount(task: Task) {
   return task.subtasks?.filter(subtask => ['completed', 'skipped'].includes(subtask.status)).length || 0
-}
-
-function normalizedProgress(value: unknown) {
-  const raw = Number(value ?? 0)
-  if (!Number.isFinite(raw)) return 0
-  return Math.min(100, Math.max(0, Math.round(raw)))
-}
-
-function taskProgress(task?: Task | null) {
-  return normalizedProgress(task?.progress)
 }
 
 function needsPlan(task: Task) {

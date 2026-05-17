@@ -36,12 +36,6 @@ export const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[] },
   },
   {
-    path: '/agent-workbench',
-    name: 'agent-workbench',
-    component: () => import('@/views/AgentWorkbench.vue'),
-    meta: { requiresAuth: true, roles: ['admin', 'operator'] as UserRole[], layout: 'blank' },
-  },
-  {
     path: '/agent-market',
     name: 'agent-market',
     component: () => import('@/views/AgentMarket.vue'),

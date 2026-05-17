@@ -88,13 +88,13 @@
             </div>
             <p>{{ task.description || '暂无任务描述' }}</p>
             <div class="kanban-card__meta">
-              <span>{{ taskProgress(task) }}%</span>
+              <span>{{ task.progress || 0 }}%</span>
               <span>{{ completedCount(task) }}/{{ taskSubtaskTotal(task) }} 节点</span>
               <span>{{ taskOutputCount(task) }} 成果</span>
               <span>{{ taskRuntimeLabel(task) }}</span>
             </div>
             <div class="mini-progress">
-              <i :style="{ width: `${taskProgress(task)}%` }"></i>
+              <i :style="{ width: `${task.progress || 0}%` }"></i>
             </div>
             <div class="kanban-card__foot">
               <span>{{ taskBoardCardHint(task) }}</span>
@@ -284,12 +284,6 @@ function completedCount(task: Task) {
 
 function taskSubtaskTotal(task: Task) {
   return task.subtask_count || task.subtasks?.length || 0
-}
-
-function taskProgress(task: Task) {
-  const raw = Number(task.progress ?? 0)
-  if (!Number.isFinite(raw)) return 0
-  return Math.min(100, Math.max(0, Math.round(raw)))
 }
 
 function taskOutputCount(task: Task) {

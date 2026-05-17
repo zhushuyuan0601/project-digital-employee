@@ -1,7 +1,6 @@
 import { markRaw } from 'vue'
 import {
   DataLine,
-  Cpu,
   Connection,
   DataBoard,
   Goods,
@@ -34,7 +33,6 @@ export const navigationSections: NavigationSection[] = [
       { to: '/task-board', label: '任务看板', meta: '整体观测与运行态', icon: markRaw(DataBoard), roles: ['admin', 'operator'] },
       { to: '/task-center-2', label: '任务运营中心', meta: '派发与执行流', icon: markRaw(Operation), roles: ['admin', 'operator'] },
       { to: '/agent-console', label: 'Agent 实时控制台', meta: '流式日志与旁路追问', icon: markRaw(Connection), roles: ['admin', 'operator'] },
-      { to: '/agent-workbench', label: 'AI 编码工作台', meta: '多会话、工具流与配置', icon: markRaw(Cpu), roles: ['admin', 'operator'] },
       { to: '/agent-market', label: 'Agent 市场', meta: '能力卡、路由预览与调度权限', icon: markRaw(Goods), roles: ['admin', 'operator'] },
       { to: '/ai-terminal', label: 'AI 命令终端', meta: 'Codex / Claude 会话命令台', icon: markRaw(Monitor), roles: ['admin', 'operator'] },
     ],

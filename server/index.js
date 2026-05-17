@@ -18,7 +18,6 @@ import { createAutomationRouter } from './routes/automation.js'
 import risksRouter from './routes/risks.js'
 import terminalRouter from './routes/terminal.js'
 import { attachTerminalTuiServer, terminalTuiRouter } from './terminal-tui.js'
-import agentWorkbenchRouter from './agent-workbench/index.js'
 import { initializeSchema } from './db/index.js'
 import { initializeAgentSchema } from './db/agents.js'
 import { initializeTaskSchema } from './db/tasks.js'
@@ -28,7 +27,6 @@ import { initializeMailSchema } from './db/mail.js'
 import { initializeAutomationSchema } from './db/automation.js'
 import { initializeRiskSchema } from './db/risks.js'
 import { auditMiddleware, initializeAuditSchema, listAuditLogs } from './db/audit.js'
-import { initializeWorkbenchSchema } from './agent-workbench/db.js'
 import { errorHandler, sendError, traceMiddleware } from './utils/http.js'
 import { cleanupOrphanAgentRunsOnStartup, claudeRuntimeQueue } from './claude-runtime/index.js'
 import { getClaudeRuntimeConfig } from './claude-runtime/config.js'
@@ -1211,7 +1209,6 @@ initializeMailSchema()
 initializeAutomationSchema()
 initializeRiskSchema()
 initializeAuditSchema()
-initializeWorkbenchSchema()
 const runtimeRecovery = cleanupOrphanAgentRunsOnStartup()
 if (runtimeRecovery.cleaned > 0) {
   console.log(`[Claude Runtime] Startup recovery cleaned ${runtimeRecovery.cleaned} orphan queued/running runs`)
@@ -1225,7 +1222,6 @@ app.use('/api', mailRouter)
 app.use('/api', risksRouter)
 app.use('/api', terminalRouter)
 app.use('/api', terminalTuiRouter)
-app.use('/api', agentWorkbenchRouter)
 app.use('/api/analysis', analysisRouter)
 app.get('/api/audit/logs', (req, res) => {
   res.json({

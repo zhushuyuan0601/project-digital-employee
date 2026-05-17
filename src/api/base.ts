@@ -79,10 +79,6 @@ export async function requestJson<T>(endpoint: string, options?: ApiRequestOptio
   if (response.status === 204) return undefined as T
   const text = await response.text()
   if (!text) return undefined as T
-  const contentType = response.headers.get('Content-Type') || ''
-  if (!contentType.includes('application/json')) {
-    throw new Error(`Expected JSON response from ${endpoint}, received ${contentType || 'unknown content type'}`)
-  }
   return JSON.parse(text) as T
 }
 
