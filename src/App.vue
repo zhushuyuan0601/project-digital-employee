@@ -77,6 +77,7 @@ const visibleActiveTasks = computed(() =>
 const primaryActiveTask = computed(() => visibleActiveTasks.value[0] || null)
 const showTaskActivity = computed(() =>
   !isBlankLayout.value &&
+  route.name !== 'agent-workbench' &&
   route.name !== 'task-center-2' &&
   visibleActiveTasks.value.length > 0
 )

@@ -53,6 +53,10 @@ export default defineConfig({
         target: 'http://127.0.0.1:18888',
         changeOrigin: true
       },
+      '/api/workbench': {
+        target: 'http://127.0.0.1:18888',
+        changeOrigin: true
+      },
       '/api/subtasks': {
         target: 'http://127.0.0.1:18888',
         changeOrigin: true
