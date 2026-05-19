@@ -15,21 +15,38 @@ from .storage import load_session_state, save_session_state, workspace_dir
 from .workspace import IMAGE_EXTENSIONS, build_download_url, classify_artifact, classify_file, collect_file_info, workspace_data_overview
 
 
-SYSTEM_PROMPT = """You are a structured data analysis assistant.
+SYSTEM_PROMPT = """You are a data analysis agent connected to a server-side Python sandbox.
 You must work in explicit tags and only use these tags:
 <Analyze>, <Understand>, <Code>, <Execute>, <Ask>, <Answer>, <File>.
 
-Rules:
-1. Prefer this flow: Analyze -> Understand -> Code -> Execute -> Answer.
-2. If key business definitions are ambiguous, use <Ask>.
-3. When you output <Code>, make it the actionable next step.
-4. After receiving <Execute>, continue reasoning from real execution output only.
-5. Every final result must be wrapped in <Answer>.
+Operating model:
+- The user must never copy, paste, or run code manually.
+- When analysis needs computation, profiling, transformation, charts, or report artifacts, output executable Python in <Code>. The platform will run it automatically in the sandbox.
+- Do not fabricate <Execute> or <File>. Those are produced from the real sandbox output and generated artifacts.
+- Do not output a final <Answer> before the needed code has executed.
+
+Data analysis workflow:
+1. <Analyze>: identify the business question, selected file, available datasets, required metrics, and ambiguity.
+2. <Understand>: state the usable schema/profile, key fields, likely joins, quality risks, and assumptions.
+3. <Ask>: use only when a blocking business definition or missing data prevents a defensible run.
+4. <Code>: write one self-contained Python script as the next action. It runs in the session workspace, reads files by relative path, creates a generated/ directory, saves charts/tables/reports there, and prints concise execution logs and key metrics.
+5. Sandbox execution: the platform runs <Code> and returns real <Execute> logs plus generated artifacts.
+6. After <Execute>: reason only from actual output. If code failed and the fix is clear, output corrected <Code>. If it succeeded, produce <Answer>.
+7. <Answer>: summarize findings, evidence, caveats, generated artifacts, and recommended follow-up questions.
+
+Sandbox code rules:
+- Use Python only. Prefer pandas/openpyxl/sqlite3/matplotlib from the existing environment.
+- Use relative workspace paths only. Do not use network calls, interactive input, subprocess, destructive file deletion, or absolute system paths.
+- Always create generated/ before writing artifacts. Save charts, CSV summaries, and Markdown reports under generated/ so they appear in Workspace Assets.
+- Print enough diagnostics for the next reasoning step: loaded files, row/column counts, chosen fields, aggregation results, and artifact paths.
 """
 
 
 CODE_RE = re.compile(r"<Code>([\s\S]*?)</Code>", re.DOTALL)
+OPEN_CODE_RE = re.compile(r"<Code>([\s\S]*?)(?=</Code>|<Execute>|<Ask>|<Answer>|<File>|$)", re.DOTALL)
+PYTHON_FENCE_RE = re.compile(r"```(?:python|py)\s*([\s\S]*?)```", re.IGNORECASE)
 SECTION_RE = re.compile(r"<(Analyze|Understand|Code|Execute|Ask|Answer|File)>([\s\S]*?)</\1>", re.DOTALL)
+SYNTHETIC_TAG_RE = re.compile(r"\s*<(Execute|File)>[\s\S]*?</\1>\s*|\s*<Answer>[\s\S]*?</Answer>\s*", re.DOTALL)
 
 
 def normalize_content(raw: Any) -> str:
@@ -173,11 +190,67 @@ def final_chunk(session_id: str, files: list[dict[str, str]], summary: dict[str,
 
 def extract_code(content: str) -> str | None:
     matches = CODE_RE.findall(content)
-    if not matches:
+    if not matches and "<Code>" in content:
+        matches = OPEN_CODE_RE.findall(content)
+    if matches:
+        return normalize_extracted_code(matches[-1])
+
+    # Compatibility fallback for models that ignore the tag protocol and return a
+    # plain Python code fence. The platform still treats it as sandbox work so
+    # the user is not asked to copy/paste code.
+    fenced_matches = PYTHON_FENCE_RE.findall(content)
+    if not fenced_matches:
         return None
-    code = matches[-1].strip()
-    fenced = re.search(r"```(?:python)?([\s\S]*?)```", code, re.DOTALL)
-    return fenced.group(1).strip() if fenced else code
+    code = fenced_matches[-1].strip()
+    if not looks_like_python_analysis_code(code):
+        return None
+    return code
+
+
+def normalize_extracted_code(raw_code: str) -> str:
+    code = raw_code.strip()
+    fenced = re.search(r"```(?:python|py)?\s*([\s\S]*?)(?:```|$)", code, re.IGNORECASE)
+    if fenced:
+        return fenced.group(1).strip()
+    code = re.sub(r"</?(?:Code|Execute|Ask|Answer|File)>", "", code).strip()
+    return code
+
+
+def looks_like_python_analysis_code(code: str) -> bool:
+    lowered = code.lower()
+    signals = (
+        "import ",
+        "from ",
+        "pd.",
+        "read_csv",
+        "read_excel",
+        "sqlite3",
+        "matplotlib",
+        "plt.",
+        "to_csv",
+        "to_excel",
+        "print(",
+        "open(",
+    )
+    return "\n" in code and any(signal in lowered for signal in signals)
+
+
+def ensure_code_tag_for_display(segment: str, code: str) -> str:
+    if CODE_RE.search(segment):
+        return strip_synthetic_runtime_sections(segment)
+    if "<Code>" in segment:
+        prefix = segment[:segment.index("<Code>")].rstrip()
+        return f"{prefix}\n<Code>\n```python\n{code.strip()}\n```\n</Code>\n"
+    return f"{strip_synthetic_runtime_sections(segment).rstrip()}\n\n<Code>\n```python\n{code.strip()}\n```\n</Code>\n"
+
+
+def strip_synthetic_runtime_sections(segment: str) -> str:
+    cleaned = SYNTHETIC_TAG_RE.sub("\n", segment)
+    for marker in ("<Execute>", "<File>", "<Answer>"):
+        marker_index = cleaned.find(marker)
+        if marker_index >= 0:
+            cleaned = cleaned[:marker_index]
+    return cleaned.strip()
 
 
 def build_inline_image_url(session_id: str, rel_path: str) -> str:
@@ -376,6 +449,16 @@ async def run_analysis(messages: list[dict[str, Any]], runtime: dict[str, Any], 
             break
         if not code:
             break
+        sanitized_segment = strip_synthetic_runtime_sections(segment)
+        if sanitized_segment != segment:
+            segment = sanitized_segment
+        normalized_segment = ensure_code_tag_for_display(segment, code)
+        if normalized_segment != segment:
+            normalized_delta = normalized_segment[len(segment):] if normalized_segment.startswith(segment) else (
+                "\n<Code>\n```python\n" + code.strip() + "\n```\n</Code>\n"
+            )
+            accumulated += normalized_delta
+            yield chunk_payload(normalized_delta)
 
         before = snapshot_workspace(workspace)
         executing_hint = "\n<Execute>\n⏳ 正在执行代码，请稍候...\n"
@@ -387,7 +470,7 @@ async def run_analysis(messages: list[dict[str, Any]], runtime: dict[str, Any], 
         artifact_metadata = render_artifact_metadata(artifacts, workspace)
         execute_result = f"```\n{execution_output}\n```\n</Execute>\n"
         file_block = render_file_block(session_id, artifacts, workspace, generated_files)
-        prepared.append({"role": "assistant", "content": segment})
+        prepared.append({"role": "assistant", "content": normalized_segment})
         execute_feedback = f"# Execute Result\n{execution_output}"
         if artifact_metadata:
             execute_feedback += "\n\n# Generated Artifacts\n" + json.dumps(artifact_metadata, ensure_ascii=False, indent=2)

@@ -6,11 +6,20 @@ import type {
 } from '@/types/analysis-workbench'
 
 export function parseSections(content: string): ParsedSection[] {
-  const pattern = /<(Analyze|Understand|Code|Execute|Ask|Answer|File)>([\s\S]*?)<\/\1>/g
+  const tagPattern = /<(Analyze|Understand|Code|Execute|Ask|Answer|File)>/g
   const sections: ParsedSection[] = []
   let match: RegExpExecArray | null
-  while ((match = pattern.exec(content)) !== null) {
-    sections.push({ type: match[1], content: (match[2] || '').trim() })
+  while ((match = tagPattern.exec(content)) !== null) {
+    const type = match[1]
+    const bodyStart = tagPattern.lastIndex
+    const closePattern = new RegExp(`</${type}>`, 'g')
+    closePattern.lastIndex = bodyStart
+    const closeMatch = closePattern.exec(content)
+    tagPattern.lastIndex = closeMatch ? closePattern.lastIndex : bodyStart
+    const nextMatch = tagPattern.exec(content)
+    const bodyEnd = closeMatch?.index ?? nextMatch?.index ?? content.length
+    tagPattern.lastIndex = closeMatch ? closePattern.lastIndex : nextMatch?.index ?? content.length
+    sections.push({ type, content: content.slice(bodyStart, bodyEnd).trim() })
   }
   return sections
 }

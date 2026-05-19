@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -15,6 +16,18 @@ SAFE_ENV_KEYS = {"PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "MPLBACKEND", "QT_Q
 
 _MAX_MEMORY_BYTES = 512 * 1024 * 1024  # 512 MB
 _MAX_OPEN_FILES = 256
+_FORBIDDEN_CODE_PATTERNS = [
+    (re.compile(r"\bsubprocess\b"), "subprocess is not allowed in the analysis sandbox"),
+    (re.compile(r"\bos\.system\s*\("), "os.system is not allowed in the analysis sandbox"),
+    (re.compile(r"\brequests\s*\."), "network requests are not allowed in the analysis sandbox"),
+    (re.compile(r"\burllib\b"), "network requests are not allowed in the analysis sandbox"),
+    (re.compile(r"\bhttpx\b"), "network requests are not allowed in the analysis sandbox"),
+    (re.compile(r"\bsocket\b"), "network access is not allowed in the analysis sandbox"),
+    (re.compile(r"\bshutil\.rmtree\s*\("), "recursive deletion is not allowed in the analysis sandbox"),
+    (re.compile(r"\bos\.remove\s*\("), "file deletion is not allowed in the analysis sandbox"),
+    (re.compile(r"\bos\.unlink\s*\("), "file deletion is not allowed in the analysis sandbox"),
+    (re.compile(r"\bPath\s*\([^)]*['\"]/(?:Users|private|tmp|etc|var|System|Applications)\b"), "absolute system paths are not allowed"),
+]
 
 
 def _preexec_sandbox(timeout: int) -> None:
@@ -44,12 +57,14 @@ def snapshot_workspace(root: Path) -> dict[Path, tuple[int, int]]:
 def collect_artifacts(before: dict[Path, tuple[int, int]], after: dict[Path, tuple[int, int]], workspace: Path) -> list[Path]:
     generated_root = workspace / "generated"
     generated_root.mkdir(parents=True, exist_ok=True)
+    generated_root_resolved = generated_root.resolve()
     artifacts: list[Path] = []
     added = [path for path in after if path not in before]
     modified = [path for path in after if path in before and after[path] != before[path]]
     for path in added:
-        if generated_root in path.parents:
-            artifacts.append(path)
+        resolved_path = path.resolve()
+        if generated_root_resolved == resolved_path.parent or generated_root_resolved in resolved_path.parents:
+            artifacts.append(resolved_path)
             continue
         target = generated_root / path.name
         counter = 1
@@ -75,9 +90,19 @@ def collect_artifacts(before: dict[Path, tuple[int, int]], after: dict[Path, tup
     return artifacts
 
 
+def validate_python_code(code: str) -> str | None:
+    for pattern, message in _FORBIDDEN_CODE_PATTERNS:
+        if pattern.search(code):
+            return f"[SandboxPolicyError]: {message}"
+    return None
+
+
 async def execute_python(code: str, workspace: Path, timeout_sec: int | None = None) -> str:
     # NOTE: This provides process-level sandboxing only.
     # Production deployments MUST run this service in a container with --network=none and --read-only.
+    policy_error = validate_python_code(code)
+    if policy_error:
+        return policy_error
     timeout = timeout_sec or settings.execution_timeout_sec
     workspace.mkdir(parents=True, exist_ok=True)
     fd, tmp_path = tempfile.mkstemp(suffix=".py", dir=str(workspace))

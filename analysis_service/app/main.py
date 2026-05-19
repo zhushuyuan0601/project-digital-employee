@@ -113,8 +113,20 @@ def create_app() -> FastAPI:
         return {"chunks": chunks, "session_id": session_id}
 
     @app.get("/workspace/state")
-    async def workspace_state(session_id: str = Query(...)):
-        return load_session_state(session_id)
+    async def workspace_state(session_id: str = Query(...), compact: bool = Query(False)):
+        state = load_session_state(session_id)
+        if not compact:
+            return state
+        limit = 20000
+        compact_messages = []
+        for message in state.get("messages") or []:
+            item = dict(message)
+            content = str(item.get("content") or "")
+            if len(content) > limit:
+                item["content"] = f"{content[:limit]}\n\n...（历史消息较长，已截断展示）"
+                item["truncated"] = True
+            compact_messages.append(item)
+        return {**state, "messages": compact_messages}
 
     @app.get("/workspace/files")
     async def workspace_files(session_id: str = Query(...)):

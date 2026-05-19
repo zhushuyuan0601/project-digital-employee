@@ -256,7 +256,7 @@
                 v-else
                 class="stream-card__body"
                 :class="{ 'analysis-step__markdown analysis-step__markdown--answer': message.role === 'assistant' }"
-                v-html="renderMarkdown(message.content)"
+                v-html="renderMarkdown(getMessageDisplayContent(message))"
               ></div>
             </article>
           </div>
@@ -439,6 +439,9 @@
             <div v-if="previewLoading" class="preview-state">加载预览中…</div>
             <div v-else-if="previewError" class="preview-state preview-state--error">{{ previewError }}</div>
             <div v-else-if="preview.kind === 'table' || preview.kind === 'database'" class="preview-summary">
+              <div v-if="selectedFileIsLarge" class="preview-truncated-note">
+                大文件按分页加载，已避免一次性渲染全量内容。
+              </div>
               <div v-if="profileLoading" class="profile-loading">正在计算全量数据画像…</div>
               <div v-if="dataProfile" class="data-profile">
                 <div class="data-profile__metrics">
@@ -482,7 +485,22 @@
                 <span>查看大图</span>
               </button>
             </div>
+            <div v-else-if="preview.kind === 'html'" class="preview-html-summary">
+              <iframe
+                class="preview-html-frame preview-html-frame--compact"
+                :srcdoc="preview.content || ''"
+                title="HTML 预览"
+                sandbox=""
+              ></iframe>
+              <button class="preview-open" type="button" @click="showPreviewModal = true">
+                <FullScreen />
+                <span>打开 HTML 在线预览</span>
+              </button>
+            </div>
             <div v-else-if="preview.kind === 'text'" class="preview-summary">
+              <div v-if="preview.truncated" class="preview-truncated-note">
+                文件较大，当前仅展示前 200KB。完整内容请下载查看。
+              </div>
               <div class="preview-rich preview-rich--compact" v-html="renderMarkdown(preview.content || '')"></div>
               <button class="preview-open" type="button" @click="showPreviewModal = true">
                 <FullScreen />
@@ -655,11 +673,11 @@
               <!-- Overview -->
               <section :id="helpSections[0].id" class="help-section">
                 <h3>{{ helpSections[0].title }}</h3>
-                <p>数据分析工作台是一个<strong>对话式数据分析环境</strong>。上传数据文件，用自然语言描述需求，AI 自动完成数据理解、代码编写、执行、图表生成和报告导出。</p>
+                <p>数据分析工作台是一个<strong>自动沙盒数据分析环境</strong>。上传数据文件，用自然语言描述需求，AI 负责规划和编写 Python，平台负责在服务端沙盒运行代码、生成图表和沉淀报告。</p>
                 <div class="help-overview-grid">
                   <div class="help-overview-card"><span class="help-overview-card__icon">📂</span><strong>上传数据</strong><p>CSV、Excel、JSON、SQLite 等</p></div>
                   <div class="help-overview-card"><span class="help-overview-card__icon">💬</span><strong>自然语言对话</strong><p>像和分析师聊天一样描述需求</p></div>
-                  <div class="help-overview-card"><span class="help-overview-card__icon">⚙️</span><strong>自动执行</strong><p>AI 编写 Python 代码并运行</p></div>
+                  <div class="help-overview-card"><span class="help-overview-card__icon">⚙️</span><strong>沙盒执行</strong><p>平台自动运行 Python 代码</p></div>
                   <div class="help-overview-card"><span class="help-overview-card__icon">📊</span><strong>产出报告</strong><p>图表、表格、Markdown / PDF</p></div>
                 </div>
               </section>
@@ -669,8 +687,8 @@
                 <h3>{{ helpSections[1].title }}</h3>
                 <div class="help-step"><div class="help-step__num">1</div><div class="help-step__body"><strong>配置模型连接</strong><p>点击底部输入区左侧的 <code>配置</code> 按钮，新增一个模型配置：</p><div class="help-code-block"><div><span class="help-k">配置名称：</span>DashScope</div><div><span class="help-k">API Base URL：</span>https://coding.dashscope.aliyuncs.com/v1</div><div><span class="help-k">API Key：</span>你的密钥</div><div><span class="help-k">Model：</span>qwen3.6-plus</div></div><p>点击 <code>连接测试</code> 确认可达后，点击 <code>保存</code>。</p></div></div>
                 <div class="help-step"><div class="help-step__num">2</div><div class="help-step__body"><strong>新建会话并上传文件</strong><p>点击左侧面板的 <code>＋ 新建会话</code>，然后点击底部工具栏的 <code>上传文件</code>，选择你的数据文件（支持 CSV、XLSX、JSON、Parquet、SQLite 等）。<span class="help-tip-inline">可一次选择多个文件。</span></p></div></div>
-                <div class="help-step"><div class="help-step__num">3</div><div class="help-step__body"><strong>输入分析需求</strong><p>在底部文本框中用自然语言描述你想做什么，按 Enter 发送。AI 自动理解数据结构、编写代码并执行。</p></div></div>
-                <div class="help-step"><div class="help-step__num">4</div><div class="help-step__body"><strong>查看结果</strong><p>分析结果以结构化卡片展示（理解 → 代码 → 执行 → 结论）。右侧文件面板实时显示生成的图表和报告，点击可预览。</p></div></div>
+                <div class="help-step"><div class="help-step__num">3</div><div class="help-step__body"><strong>输入分析需求</strong><p>在底部文本框中用自然语言描述你想做什么，按 Enter 发送。系统会按采集、理解、代码、执行、洞察、报告、追问的链路自动推进。</p></div></div>
+                <div class="help-step"><div class="help-step__num">4</div><div class="help-step__body"><strong>查看结果</strong><p>分析结果以结构化卡片展示。代码卡片只是过程记录，执行由服务端沙盒自动完成；右侧文件面板实时显示生成的图表和报告，点击可预览。</p></div></div>
                 <div class="help-step"><div class="help-step__num">5</div><div class="help-step__body"><strong>导出报告</strong><p>点击 <code>导出 MD</code> 或 <code>导出 PDF</code>，基于当前对话上下文生成完整分析报告。</p></div></div>
               </section>
 
@@ -707,7 +725,7 @@
                   <div class="help-faq__item"><strong>Q: 连接测试失败怎么办？</strong><p>确认 API Base URL 是否正确（需包含 <code>/v1</code>），API Key 是否有效。如果是自建服务，确认服务是否已启动。</p></div>
                   <div class="help-faq__item"><strong>Q: 分析过程中出现错误？</strong><p>AI 会自动尝试修复代码错误。如果反复失败，用更具体的描述重新提问，或检查数据文件格式。</p></div>
                   <div class="help-faq__item"><strong>Q: 支持哪些文件格式？</strong><p>CSV、TSV、Excel（.xlsx/.xls）、JSON、Parquet、SQLite。建议单文件不超过 50MB。</p></div>
-                  <div class="help-faq__item"><strong>Q: 对话中的代码安全吗？</strong><p>代码在服务器本地 Python 环境中执行。请注意不要上传包含敏感信息的数据。</p></div>
+                  <div class="help-faq__item"><strong>Q: 对话中的代码安全吗？</strong><p>代码在服务端 Python 沙盒中自动执行，并拦截网络、子进程、删除文件等高风险操作。生产环境仍建议把分析服务放入无网络容器中运行。</p></div>
                   <div class="help-faq__item"><strong>Q: 如何切换模型？</strong><p>在底部配置下拉框中选择已保存的其他配置即可。</p></div>
                   <div class="help-faq__item"><strong>Q: PDF 导出失败？</strong><p>PDF 导出依赖服务器上的 <code>pandoc</code> 和 <code>xelatex</code>。缺失时系统自动回退为 Markdown。</p></div>
                 </div>
@@ -828,6 +846,9 @@
             <div v-if="previewLoading" class="preview-state">加载预览中…</div>
             <div v-else-if="previewError" class="preview-state preview-state--error">{{ previewError }}</div>
             <div v-else-if="preview.kind === 'table' || preview.kind === 'database'" class="preview-table-stack preview-table-stack--modal">
+              <div v-if="selectedFileIsLarge" class="preview-truncated-note">
+                大文件按分页加载，已避免一次性渲染全量内容。
+              </div>
               <div v-if="profileLoading" class="profile-loading">正在计算全量数据画像…</div>
               <div v-if="dataProfile" class="data-profile data-profile--modal">
                 <div class="data-profile__metrics">
@@ -877,7 +898,20 @@
             <div v-else-if="preview.kind === 'image'" class="preview-figure preview-figure--modal">
               <img :src="analysisDownloadUrl(selectedFile.path)" :alt="selectedFile.name" />
             </div>
-            <div v-else-if="preview.kind === 'text'" class="preview-rich preview-rich--modal" v-html="renderMarkdown(preview.content || '')"></div>
+            <div v-else-if="preview.kind === 'html'" class="preview-html-modal">
+              <iframe
+                class="preview-html-frame preview-html-frame--modal"
+                :srcdoc="preview.content || ''"
+                title="HTML 预览"
+                sandbox=""
+              ></iframe>
+            </div>
+            <div v-else-if="preview.kind === 'text'" class="preview-rich preview-rich--modal">
+              <div v-if="preview.truncated" class="preview-truncated-note">
+                文件较大，当前仅展示前 200KB。完整内容请下载查看。
+              </div>
+              <div v-html="renderMarkdown(preview.content || '')"></div>
+            </div>
             <div v-else class="preview-state">{{ preview.content || '该文件暂无结构化预览。' }}</div>
           </div>
         </div>
@@ -1050,6 +1084,8 @@ const previewError = ref('')
 const profileLoading = ref(false)
 const previewPage = ref(1)
 const previewPageSize = 50
+const LARGE_FILE_PREVIEW_THRESHOLD = 8 * 1024 * 1024
+const LARGE_FILE_PROFILE_THRESHOLD = 8 * 1024 * 1024
 const selectedSheetName = ref('')
 const selectedTableName = ref('')
 const messages = ref<UIMessage[]>([])
@@ -1130,6 +1166,7 @@ const generatedFiles = computed(() => workspaceFiles.value.filter((item) => item
 const tableFiles = computed(() => workspaceFiles.value.filter((item) => item.category === 'table'))
 const imageFiles = computed(() => workspaceFiles.value.filter((item) => item.category === 'image'))
 const reportFiles = computed(() => workspaceFiles.value.filter((item) => isReportFile(item)))
+const selectedFileIsLarge = computed(() => Boolean(selectedFile.value && selectedFile.value.size >= LARGE_FILE_PREVIEW_THRESHOLD))
 const dataProfile = computed(() => {
   if (profile.value?.fields) {
     const missingRate = Number(profile.value.missing_rate || 0)
@@ -1394,9 +1431,21 @@ function formatTimestamp(timestamp: number) {
 }
 
 function formatFileMeta(file: WorkspaceFile) {
-  const sizeKb = `${(file.size / 1024).toFixed(1)} KB`
+  const sizeKb = file.size >= 1024 * 1024 ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : `${(file.size / 1024).toFixed(1)} KB`
   const category = file.category === 'table' ? '表格' : file.category === 'image' ? '图片' : '文档'
   return `${category} · ${sizeKb}`
+}
+
+function isLargeAnalysisFile(file: WorkspaceFile | null | undefined) {
+  return Boolean(file && file.size >= LARGE_FILE_PREVIEW_THRESHOLD)
+}
+
+function shouldAutoPreviewFile(file: WorkspaceFile | null | undefined) {
+  return Boolean(file && !isLargeAnalysisFile(file))
+}
+
+function shouldLoadProfileForFile(file: WorkspaceFile | null | undefined) {
+  return Boolean(file && file.category === 'table' && file.size < LARGE_FILE_PROFILE_THRESHOLD)
 }
 
 function formatCount(value: number) {
@@ -1465,6 +1514,14 @@ function renderMarkdown(content: string) {
     profile: 'analysis',
     preprocess: normalizeMarkdownContent,
   })
+}
+
+const MESSAGE_RENDER_LIMIT = 12000
+
+function getMessageDisplayContent(message: UIMessage) {
+  const content = message.content || ''
+  if (message.role !== 'user' || content.length <= MESSAGE_RENDER_LIMIT) return content
+  return `${content.slice(0, MESSAGE_RENDER_LIMIT)}\n\n...（消息内容较长，已截断展示，完整内容仍保留在会话上下文中）`
 }
 
 function getStepMeta(type: AnalysisDisplayStepType) {
@@ -1831,7 +1888,15 @@ async function handleUpload(event: Event) {
       workspaceFiles.value.find((file) => file.category === 'table') ||
       workspaceFiles.value[0]
     if (preferredFile) {
-      await handlePreview(preferredFile)
+      if (shouldAutoPreviewFile(preferredFile)) {
+        await handlePreview(preferredFile)
+      } else {
+        selectedFile.value = preferredFile
+        preview.value = { kind: '', content: '' }
+        profile.value = null
+        previewError.value = ''
+        notification.warning(`${preferredFile.name} 文件较大，已加入 Workspace Assets，点击文件后将按分页加载预览。`)
+      }
     }
     notification.success(`已上传 ${files.length} 个文件`)
   } catch (error) {
@@ -1846,8 +1911,11 @@ async function handlePreview(file: WorkspaceFile) {
   previewPage.value = 1
   selectedSheetName.value = ''
   selectedTableName.value = ''
+  profile.value = null
   await loadPreview(file)
-  await loadProfile(file)
+  if (shouldLoadProfileForFile(file)) {
+    await loadProfile(file)
+  }
 }
 
 async function loadPreview(file = selectedFile.value) {
@@ -1872,7 +1940,7 @@ async function loadPreview(file = selectedFile.value) {
 }
 
 async function loadProfile(file = selectedFile.value) {
-  if (!file || !currentSessionId.value || file.category !== 'table') {
+  if (!file || !currentSessionId.value || !shouldLoadProfileForFile(file)) {
     profile.value = null
     return
   }
@@ -1895,7 +1963,9 @@ async function handleDataObjectChange() {
   if (!selectedFile.value) return
   previewPage.value = 1
   await loadPreview(selectedFile.value)
-  await loadProfile(selectedFile.value)
+  if (shouldLoadProfileForFile(selectedFile.value)) {
+    await loadProfile(selectedFile.value)
+  }
 }
 
 async function changePreviewPage(page: number) {
@@ -3998,7 +4068,9 @@ onMounted(async () => {
 .preview-state,
 .preview-rich,
 .preview-grid,
-.preview-figure {
+.preview-figure,
+.preview-html-summary,
+.preview-html-modal {
   min-height: 0;
   overflow: auto;
   padding: 14px;
@@ -4012,6 +4084,16 @@ onMounted(async () => {
   color: #fecdd3;
 }
 
+.preview-truncated-note {
+  margin: 0 14px 10px;
+  padding: 9px 11px;
+  border: 1px solid rgba(245, 158, 11, 0.24);
+  border-radius: 10px;
+  background: rgba(245, 158, 11, 0.08);
+  color: #fde68a;
+  font-size: 12px;
+}
+
 .profile-loading {
   padding: 10px 14px 0;
   color: var(--analysis-soft);
@@ -4023,6 +4105,33 @@ onMounted(async () => {
   gap: 10px;
   min-height: 0;
   overflow: auto;
+}
+
+.preview-html-summary {
+  display: grid;
+  gap: 10px;
+}
+
+.preview-html-modal {
+  height: 100%;
+  overflow: hidden;
+}
+
+.preview-html-frame {
+  display: block;
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.preview-html-frame--compact {
+  height: 220px;
+}
+
+.preview-html-frame--modal {
+  height: 100%;
+  min-height: 70vh;
 }
 
 .preview-open {

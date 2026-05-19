@@ -151,7 +151,7 @@ export async function getAnalysisState(sessionId: string) {
     generated_files: Array<{ name: string; url: string }>
     last_analysis_summary?: AnalysisSessionSummary | null
     updated_at: number
-  }>(`/api/analysis/workspace/state?session_id=${encodeURIComponent(sessionId)}`)
+  }>(`/api/analysis/workspace/state?session_id=${encodeURIComponent(sessionId)}&compact=true`)
 }
 
 export async function listAnalysisFiles(sessionId: string) {

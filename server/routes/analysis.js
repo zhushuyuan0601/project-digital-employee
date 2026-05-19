@@ -3,6 +3,8 @@ import multer from 'multer'
 import { Readable } from 'stream'
 import { randomUUID } from 'crypto'
 import dns from 'dns/promises'
+import fs from 'fs'
+import path from 'path'
 import {
   deleteAnalysisSession,
   getAnalysisSession,
@@ -10,7 +12,7 @@ import {
   patchAnalysisSession,
   upsertAnalysisSession,
 } from '../db/analysis.js'
-import { DEFAULT_SERVER_CONFIG, envBoolean } from '../config/defaults.js'
+import { DEFAULT_SERVER_CONFIG, PROJECT_ROOT, envBoolean } from '../config/defaults.js'
 
 const router = express.Router()
 const MAX_UPLOAD_FILES = Number(process.env.ANALYSIS_MAX_UPLOAD_FILES || 10)
@@ -26,6 +28,7 @@ const upload = multer({
 
 const ANALYSIS_SERVICE_BASE_URL = (process.env.ANALYSIS_SERVICE_BASE_URL || 'http://127.0.0.1:18900').replace(/\/$/, '')
 const ALLOW_PRIVATE_URLS = envBoolean('ALLOW_PRIVATE_URLS', DEFAULT_SERVER_CONFIG.allowPrivateUrls)
+const ANALYSIS_WORKSPACE_ROOT = process.env.ANALYSIS_WORKSPACE_ROOT || path.join(PROJECT_ROOT, 'analysis_service/workspace')
 
 function isPrivateIP(ip) {
   if (ip === '127.0.0.1' || ip === '::1' || ip === 'localhost') return true
@@ -112,9 +115,47 @@ function deriveSessionTitle(text = '') {
   return text.trim().slice(0, 48) || '未命名分析会话'
 }
 
+function compactText(text = '', limit = 48) {
+  const plain = String(text || '').replace(/\s+/g, ' ').trim()
+  return plain.slice(0, limit) || '未命名分析会话'
+}
+
+function fallbackSessionsFromWorkspace(existingSessions = []) {
+  const seen = new Set(existingSessions.map(session => session.id))
+  if (!fs.existsSync(ANALYSIS_WORKSPACE_ROOT)) return []
+  return fs.readdirSync(ANALYSIS_WORKSPACE_ROOT, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && entry.name.startsWith('analysis-') && !seen.has(entry.name))
+    .map(entry => {
+      const sessionId = entry.name
+      const statePath = path.join(ANALYSIS_WORKSPACE_ROOT, sessionId, '.session.json')
+      let state = {}
+      try {
+        state = JSON.parse(fs.readFileSync(statePath, 'utf-8'))
+      } catch {
+        state = {}
+      }
+      const messages = Array.isArray(state.messages) ? state.messages : []
+      const lastUser = [...messages].reverse().find(message => message?.role === 'user')
+      const stat = fs.existsSync(statePath) ? fs.statSync(statePath) : null
+      return {
+        id: sessionId,
+        title: compactText(lastUser?.content || sessionId),
+        status: 'idle',
+        model: null,
+        last_user_message: compactText(lastUser?.content || ''),
+        last_report_path: null,
+        created_at: stat ? Math.floor(stat.birthtimeMs / 1000) : 0,
+        updated_at: Number(state.updated_at || (stat ? Math.floor(stat.mtimeMs / 1000) : 0)),
+        _workspace_fallback: true,
+      }
+    })
+}
+
 router.get('/sessions', async (req, res) => {
   try {
-    const sessions = await Promise.all(listAnalysisSessions().map(async (session) => {
+    const indexedSessions = listAnalysisSessions()
+    const fallbackSessions = fallbackSessionsFromWorkspace(indexedSessions)
+    const sessions = await Promise.all([...indexedSessions, ...fallbackSessions].map(async (session) => {
       try {
         const state = await proxyJson('/workspace/state', {}, { session_id: session.id })
         return {
@@ -128,6 +169,7 @@ router.get('/sessions', async (req, res) => {
         }
       }
     }))
+    sessions.sort((left, right) => Number(right.updated_at || 0) - Number(left.updated_at || 0))
     res.json({ sessions })
   } catch (err) {
     console.error('[Analysis API] List sessions error:', err)

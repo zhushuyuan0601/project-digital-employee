@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import csv
+import base64
+import html
 import io
 import json
 import os
+import re
 import shutil
 import sqlite3
 import time
@@ -38,6 +41,9 @@ MAX_UPLOAD_TOTAL_SIZE = int(os.getenv("ANALYSIS_MAX_UPLOAD_TOTAL_SIZE", str(200 
 PROFILE_SAMPLE_SIZE = 1000
 PROFILE_FIELD_LIMIT = 40
 PROFILE_SAMPLE_VALUE_LIMIT = 5
+TEXT_PREVIEW_LIMIT = int(os.getenv("ANALYSIS_TEXT_PREVIEW_LIMIT", str(200 * 1024)))
+DELIMITED_TEXT_MIN_TABS = 2
+CONTEXT_CELL_LIMIT = 240
 
 _PROFILE_CACHE: dict[str, dict[str, Any]] = {}
 
@@ -61,7 +67,7 @@ def resolve_session_path(session_id: str, rel_path: str) -> Path:
 
 def classify_file(path: Path) -> str:
     ext = path.suffix.lower()
-    if ext in TABLE_EXTENSIONS or ext in SQLITE_EXTENSIONS:
+    if ext in TABLE_EXTENSIONS or ext in SQLITE_EXTENSIONS or is_delimited_text_file(path):
         return "table"
     if ext in IMAGE_EXTENSIONS:
         return "image"
@@ -79,6 +85,43 @@ def classify_artifact(path: Path) -> str:
     ):
         return "report"
     return "other"
+
+
+def is_delimited_text_file(path: Path) -> bool:
+    if path.suffix.lower() not in {".txt", ".log"}:
+        return False
+    try:
+        with path.open("r", encoding="utf-8", errors="replace") as handle:
+            checked = 0
+            tabbed = 0
+            for line in handle:
+                stripped = line.strip()
+                if not stripped:
+                    continue
+                checked += 1
+                if stripped.count("\t") >= DELIMITED_TEXT_MIN_TABS:
+                    tabbed += 1
+                if checked >= 8:
+                    break
+        return checked > 0 and tabbed / checked >= 0.6
+    except Exception:
+        return False
+
+
+def _delimited_text_headers(width: int) -> list[str]:
+    common = ["tag", "call_id", "caller_utterance", "ai_utterance", "dialogue", "date"]
+    if width <= len(common):
+        return common[:width]
+    return common + [f"field_{index + 1}" for index in range(len(common), width)]
+
+
+def _compact_cell(value: Any, limit: int = CONTEXT_CELL_LIMIT) -> str:
+    text = str(value if value is not None else "").replace("\n", " ").strip()
+    return text[:limit] + ("..." if len(text) > limit else "")
+
+
+def _compact_rows(rows: list[list[Any]], limit: int = CONTEXT_CELL_LIMIT) -> list[list[str]]:
+    return [[_compact_cell(cell, limit) for cell in row] for row in rows]
 
 
 def build_download_url(session_id: str, rel_path: str) -> str:
@@ -206,8 +249,194 @@ def download_file(session_id: str, rel_path: str) -> FileResponse:
 
 
 def _preview_text(path: Path) -> dict[str, Any]:
-    content = path.read_text(encoding="utf-8", errors="replace")
-    return {"kind": "text", "content": content}
+    truncated = path.stat().st_size > TEXT_PREVIEW_LIMIT
+    with path.open("r", encoding="utf-8", errors="replace") as handle:
+        content = handle.read(TEXT_PREVIEW_LIMIT + 1)
+    if len(content) > TEXT_PREVIEW_LIMIT:
+        content = content[:TEXT_PREVIEW_LIMIT]
+        truncated = True
+    return {"kind": "text", "content": content, "truncated": truncated, "size": path.stat().st_size}
+
+
+def _html_page(title: str, body: str, *, subtitle: str = "") -> str:
+    safe_title = html.escape(title)
+    safe_subtitle = html.escape(subtitle)
+    subtitle_markup = f"<p class=\"subtitle\">{safe_subtitle}</p>" if safe_subtitle else ""
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{safe_title}</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      --ink: #172033;
+      --muted: #667085;
+      --line: #d9e2ec;
+      --surface: #ffffff;
+      --accent: #2563eb;
+      --soft: #f6f8fb;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      background: #eef2f7;
+      color: var(--ink);
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      line-height: 1.68;
+    }}
+    main {{
+      width: min(1120px, calc(100vw - 32px));
+      margin: 32px auto;
+      padding: 32px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--surface);
+      box-shadow: 0 24px 80px rgba(15, 23, 42, 0.08);
+    }}
+    header {{ margin-bottom: 24px; border-bottom: 1px solid var(--line); padding-bottom: 18px; }}
+    h1 {{ margin: 0; font-size: clamp(24px, 4vw, 42px); line-height: 1.12; letter-spacing: 0; }}
+    h2 {{ margin-top: 28px; font-size: 22px; line-height: 1.28; }}
+    h3 {{ margin-top: 22px; font-size: 18px; }}
+    .subtitle {{ margin: 10px 0 0; color: var(--muted); font-size: 14px; }}
+    pre {{
+      overflow: auto;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #0f172a;
+      color: #e5e7eb;
+      line-height: 1.55;
+    }}
+    code {{ font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }}
+    table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
+    th, td {{ padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }}
+    th {{ position: sticky; top: 0; background: var(--soft); color: #344054; font-weight: 700; }}
+    .table-wrap {{ overflow: auto; max-height: 70vh; border: 1px solid var(--line); border-radius: 10px; }}
+    .metric-row {{ display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 18px; }}
+    .metric {{ padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }}
+    .metric strong {{ display: block; font-size: 20px; line-height: 1.1; }}
+    img {{ display: block; max-width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); }}
+    a {{ color: var(--accent); }}
+    @media (max-width: 720px) {{
+      main {{ width: min(100vw - 16px, 1120px); margin: 8px auto; padding: 18px; border-radius: 10px; }}
+      th, td {{ padding: 8px; }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>{safe_title}</h1>
+      {subtitle_markup}
+    </header>
+    {body}
+  </main>
+</body>
+</html>"""
+
+
+def _markdown_to_html(content: str) -> str:
+    lines = content.splitlines()
+    html_lines: list[str] = []
+    in_list = False
+    in_code = False
+    code_lines: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            if in_code:
+                html_lines.append(f"<pre><code>{html.escape(chr(10).join(code_lines))}</code></pre>")
+                code_lines = []
+                in_code = False
+            else:
+                in_code = True
+            continue
+        if in_code:
+            code_lines.append(line)
+            continue
+        if not stripped:
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            continue
+        heading = re.match(r"^(#{1,3})\s+(.+)$", stripped)
+        if heading:
+            if in_list:
+                html_lines.append("</ul>")
+                in_list = False
+            level = len(heading.group(1))
+            html_lines.append(f"<h{level}>{html.escape(heading.group(2))}</h{level}>")
+            continue
+        if stripped.startswith(("- ", "* ")):
+            if not in_list:
+                html_lines.append("<ul>")
+                in_list = True
+            html_lines.append(f"<li>{html.escape(stripped[2:])}</li>")
+            continue
+        if in_list:
+            html_lines.append("</ul>")
+            in_list = False
+        html_lines.append(f"<p>{html.escape(stripped)}</p>")
+    if in_code:
+        html_lines.append(f"<pre><code>{html.escape(chr(10).join(code_lines))}</code></pre>")
+    if in_list:
+        html_lines.append("</ul>")
+    return "\n".join(html_lines) or "<p>该文件暂无内容。</p>"
+
+
+def _preview_html_text(path: Path) -> dict[str, Any]:
+    preview = _preview_text(path)
+    content = str(preview.get("content") or "")
+    ext = path.suffix.lower()
+    if ext in {".md", ".markdown"}:
+        body = _markdown_to_html(content)
+    elif ext in {".json"}:
+        try:
+            formatted = json.dumps(json.loads(content), ensure_ascii=False, indent=2)
+        except Exception:
+            formatted = content
+        body = f"<pre><code>{html.escape(formatted)}</code></pre>"
+    else:
+        body = f"<pre><code>{html.escape(content)}</code></pre>"
+    notice = ""
+    if preview.get("truncated"):
+        notice = "<p class=\"subtitle\">文件较大，当前仅展示前 200KB 内容。请下载查看完整文件。</p>"
+    return {"kind": "html", "content": _html_page(path.name, notice + body, subtitle="HTML preview generated from workspace asset"), "truncated": preview.get("truncated", False), "size": preview.get("size")}
+
+
+def _preview_html_table(payload: dict[str, Any], title: str) -> dict[str, Any]:
+    columns = [str(column) for column in payload.get("columns") or []]
+    rows = payload.get("rows") or []
+    header = "".join(f"<th>{html.escape(column)}</th>" for column in columns)
+    body_rows = []
+    for row in rows:
+        cells = row if isinstance(row, list) else list(row or [])
+        body_rows.append("<tr>" + "".join(f"<td>{html.escape(str(cell))}</td>" for cell in cells) + "</tr>")
+    metrics = (
+        "<div class=\"metric-row\">"
+        f"<div class=\"metric\"><strong>{html.escape(str(payload.get('row_count', len(rows))))}</strong><span>总行数</span></div>"
+        f"<div class=\"metric\"><strong>{html.escape(str(len(columns)))}</strong><span>字段数</span></div>"
+        f"<div class=\"metric\"><strong>{html.escape(str(len(rows)))}</strong><span>当前预览行</span></div>"
+        "</div>"
+    )
+    table = f"<div class=\"table-wrap\"><table><thead><tr>{header}</tr></thead><tbody>{''.join(body_rows)}</tbody></table></div>"
+    return {"kind": "html", "content": _html_page(title, metrics + table, subtitle="HTML table preview generated from workspace asset")}
+
+
+def _preview_html_image(session_id: str, rel_path: str, path: Path) -> dict[str, Any]:
+    mime = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+        ".svg": "image/svg+xml",
+    }.get(path.suffix.lower(), "application/octet-stream")
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    body = f"<figure><img src=\"data:{mime};base64,{encoded}\" alt=\"{html.escape(path.name)}\" /></figure>"
+    return {"kind": "html", "content": _html_page(path.name, body, subtitle=f"Workspace path: {html.escape(rel_path)}")}
 
 
 def _preview_json(path: Path) -> dict[str, Any]:
@@ -259,6 +488,22 @@ def _preview_csv(path: Path, page: int, page_size: int) -> dict[str, Any]:
             if start <= row_index < end:
                 records.append(row)
     return _table_payload(headers, records, total_rows)
+
+
+def _preview_delimited_text(path: Path, page: int, page_size: int) -> dict[str, Any]:
+    start = max(page - 1, 0) * page_size
+    end = start + page_size
+    records: list[list[Any]] = []
+    total_rows = 0
+    max_width = 0
+    with path.open("r", encoding="utf-8", errors="replace", newline="") as handle:
+        reader = csv.reader(handle, delimiter="\t")
+        for total_rows, row in enumerate(reader, start=1):
+            max_width = max(max_width, len(row))
+            row_index = total_rows - 1
+            if start <= row_index < end:
+                records.append(row)
+    return _table_payload(_delimited_text_headers(max_width), records, total_rows)
 
 
 def _preview_excel(path: Path, page: int, page_size: int, sheet_name: str = "") -> dict[str, Any]:
@@ -325,6 +570,19 @@ def preview_file(session_id: str, rel_path: str, page: int = 1, page_size: int =
     if not path.exists() or not path.is_file():
         raise HTTPException(status_code=404, detail="Workspace file not found")
     ext = path.suffix.lower()
+    if rel_path.startswith("generated/") or classify_artifact(path) != "other":
+        if is_delimited_text_file(path):
+            return _preview_html_table(_preview_delimited_text(path, page, page_size), path.name)
+        if ext in TEXT_EXTENSIONS:
+            return _preview_html_text(path)
+        if ext in {".csv", ".tsv"}:
+            return _preview_html_table(_preview_csv(path, page, page_size), path.name)
+        if ext in {".xlsx", ".xls"}:
+            return _preview_html_table(_preview_excel(path, page, page_size, sheet_name=sheet_name), path.name)
+        if ext in SQLITE_EXTENSIONS:
+            return _preview_html_table(_preview_sqlite(path, page, page_size, table_name=table_name), path.name)
+        if ext in IMAGE_EXTENSIONS:
+            return _preview_html_image(session_id, rel_path, path)
     if ext in {".json"}:
         return _preview_json(path)
     if ext in {".yaml", ".yml"}:
@@ -332,6 +590,8 @@ def preview_file(session_id: str, rel_path: str, page: int = 1, page_size: int =
     if ext in {".xml"}:
         return _preview_xml(path)
     if ext in TEXT_EXTENSIONS:
+        if is_delimited_text_file(path):
+            return _preview_delimited_text(path, page, page_size)
         return _preview_text(path)
     if ext in {".csv", ".tsv"}:
         return _preview_csv(path, page, page_size)
@@ -457,6 +717,19 @@ def _profile_csv(path: Path) -> dict[str, Any]:
     return _profile_table(headers, records, row_count=total_rows, sampled_rows=len(records))
 
 
+def _profile_delimited_text(path: Path) -> dict[str, Any]:
+    records: list[list[Any]] = []
+    total_rows = 0
+    max_width = 0
+    with path.open("r", encoding="utf-8", errors="replace", newline="") as handle:
+        reader = csv.reader(handle, delimiter="\t")
+        for total_rows, row in enumerate(reader, start=1):
+            max_width = max(max_width, len(row))
+            if len(records) < PROFILE_SAMPLE_SIZE:
+                records.append(row)
+    return _profile_table(_delimited_text_headers(max_width), records, row_count=total_rows, sampled_rows=len(records))
+
+
 def _profile_excel(path: Path, sheet_name: str = "") -> dict[str, Any]:
     if openpyxl is None:
         return {"kind": "unsupported", "content": "openpyxl is not installed; Excel profile is unavailable."}
@@ -515,7 +788,9 @@ def profile_file(session_id: str, rel_path: str, table_name: str = "", sheet_nam
     if cached:
         return cached
     ext = path.suffix.lower()
-    if ext in {".csv", ".tsv"}:
+    if is_delimited_text_file(path):
+        payload = _profile_delimited_text(path)
+    elif ext in {".csv", ".tsv"}:
         payload = _profile_csv(path)
     elif ext in {".xlsx", ".xls"}:
         payload = _profile_excel(path, sheet_name=sheet_name)
@@ -549,7 +824,7 @@ def _peek_csv(path: Path, max_rows: int = 5) -> dict[str, Any] | None:
             rows: list[list[str]] = []
             for _, row in zip(range(max_rows), reader):
                 rows.append(row)
-        return {"columns": headers, "sample_rows": rows, "total_rows": None}
+        return {"columns": headers, "sample_rows": _compact_rows(rows), "total_rows": None}
     except Exception:
         return None
 
@@ -571,7 +846,7 @@ def _peek_excel(path: Path, max_rows: int = 5) -> dict[str, Any] | None:
             return None
         return {
             "columns": collected[0],
-            "sample_rows": collected[1:],
+            "sample_rows": _compact_rows(collected[1:]),
             "sheet_names": sheet_names,
             "total_rows": None,
         }
@@ -598,7 +873,7 @@ def _peek_sqlite(path: Path, max_rows: int = 5) -> dict[str, Any] | None:
         connection.close()
         return {
             "columns": headers,
-            "sample_rows": rows,
+            "sample_rows": _compact_rows(rows),
             "tables": tables,
             "total_rows": total,
         }
@@ -615,7 +890,7 @@ def _compact_profile(profile: dict[str, Any], field_limit: int = PROFILE_FIELD_L
             "type": field.get("type"),
             "missing_rate": field.get("missing_rate"),
             "unique_count": field.get("unique_count"),
-            "samples": field.get("samples", [])[:PROFILE_SAMPLE_VALUE_LIMIT],
+            "samples": [_compact_cell(sample) for sample in field.get("samples", [])[:PROFILE_SAMPLE_VALUE_LIMIT]],
         }
         if field.get("stats"):
             compact_field["stats"] = field.get("stats")
@@ -659,23 +934,27 @@ def workspace_data_overview(session_id: str) -> dict[str, Any]:
     field_sets: dict[str, set[str]] = {}
     for path in source_paths:
         rel = path.relative_to(root).as_posix()
+        file_size = path.stat().st_size
         item: dict[str, Any] = {
             "name": path.name,
             "path": rel,
-            "size": path.stat().st_size,
+            "size": file_size,
             "category": classify_file(path),
         }
         if classify_file(path) == "table":
-            try:
-                profile = profile_file(session_id, rel)
-                item["profile"] = _compact_profile(profile, field_limit=24)
-                fields = _field_names(profile)
-                field_sets[rel] = fields
-                item["date_fields"] = _field_candidates(profile, "日期")
-                item["numeric_fields"] = _field_candidates(profile, "数值")
-                item["categorical_fields"] = _field_candidates(profile, "分类")
-            except Exception as exc:
-                item["profile_error"] = str(exc)
+            if file_size <= 10 * 1024 * 1024 or path.suffix.lower() in {".csv", ".tsv", ".xlsx", ".xls", ".sqlite", ".db"}:
+                try:
+                    profile = profile_file(session_id, rel)
+                    item["profile"] = _compact_profile(profile, field_limit=24)
+                    fields = _field_names(profile)
+                    field_sets[rel] = fields
+                    item["date_fields"] = _field_candidates(profile, "日期")
+                    item["numeric_fields"] = _field_candidates(profile, "数值")
+                    item["categorical_fields"] = _field_candidates(profile, "分类")
+                except Exception as exc:
+                    item["profile_error"] = str(exc)
+            else:
+                item["profile_deferred"] = True
         datasets.append(item)
     relations: list[dict[str, Any]] = []
     paths = list(field_sets.keys())
@@ -705,7 +984,14 @@ def collect_file_info(session_id: str) -> str:
         info: dict[str, Any] = {"name": path.name, "path": rel, "size": f"{size_kb:.1f}KB"}
         ext = path.suffix.lower()
         peek: dict[str, Any] | None = None
-        if ext in {".csv", ".tsv"}:
+        if is_delimited_text_file(path):
+            preview = _preview_delimited_text(path, page=1, page_size=5)
+            peek = {
+                "columns": preview.get("columns", []),
+                "sample_rows": _compact_rows(preview.get("rows", [])),
+                "total_rows": preview.get("row_count"),
+            }
+        elif ext in {".csv", ".tsv"}:
             peek = _peek_csv(path)
         elif ext in {".xlsx", ".xls"}:
             peek = _peek_excel(path)
