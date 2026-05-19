@@ -17,7 +17,7 @@ const DEV_USERS: Record<string, { password: string; displayName: string; role: U
   readonly: { password: 'readonly123', displayName: '审计只读用户', role: 'readonly' },
 }
 
-const DEFAULT_USERS = import.meta.env.DEV ? DEV_USERS : {} as typeof DEV_USERS
+const DEFAULT_USERS = DEV_USERS
 
 function readStoredUser() {
   if (typeof localStorage === 'undefined') return null

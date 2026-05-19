@@ -2,9 +2,6 @@
   <router-view v-if="isBlankLayout" />
 
   <div v-else class="app-shell">
-    <div class="app-shell__glow app-shell__glow--left"></div>
-    <div class="app-shell__glow app-shell__glow--right"></div>
-
     <div :class="['app-frame', { 'app-frame--sidebar-collapsed': sidebarCollapsed }]">
       <TheSidebar
         :collapsed="sidebarCollapsed"
@@ -12,6 +9,18 @@
       />
 
       <main class="app-stage">
+        <header class="desktop-toolbar">
+          <div class="toolbar-title">
+            <span class="toolbar-kicker">Digital Employee</span>
+            <h1>{{ currentRouteTitle }}</h1>
+            <p>{{ currentRouteMeta }}</p>
+          </div>
+          <div class="toolbar-context">
+            <span class="toolbar-context__item">{{ currentRoleLabel }}</span>
+            <span class="toolbar-context__item">v1.0.0</span>
+          </div>
+        </header>
+
         <div v-if="showTaskActivity" class="global-task-activity">
           <button type="button" class="activity-main" @click="openActiveTask">
             <span class="activity-pulse"></span>
@@ -39,7 +48,9 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import TheSidebar from '@/components/TheSidebar.vue'
+import { navigationSections } from '@/config/navigation'
 import { useAppInit } from '@/composables/useAppInit'
+import { useAuthStore } from '@/stores/auth'
 import { useTasksStore } from '@/stores/tasks'
 import type { TaskStatus } from '@/types/task'
 
@@ -47,6 +58,7 @@ const route = useRoute()
 const router = useRouter()
 const { initializeApp } = useAppInit()
 const tasksStore = useTasksStore()
+const authStore = useAuthStore()
 const isBlankLayout = computed(() => route.meta.layout === 'blank')
 const sidebarCollapsed = ref(false)
 let taskActivityTimer: ReturnType<typeof setInterval> | null = null
@@ -75,6 +87,14 @@ const visibleActiveTasks = computed(() =>
     })
 )
 const primaryActiveTask = computed(() => visibleActiveTasks.value[0] || null)
+const flatNavigationItems = computed(() => navigationSections.flatMap(section => section.items))
+const currentNavigationItem = computed(() =>
+  flatNavigationItems.value.find(item => route.path === item.to) ||
+  flatNavigationItems.value.find(item => route.path.startsWith(`${item.to}/`))
+)
+const currentRouteTitle = computed(() => currentNavigationItem.value?.label || String(route.name || '工作台'))
+const currentRouteMeta = computed(() => currentNavigationItem.value?.meta || '数字员工本地桌面运行环境')
+const currentRoleLabel = computed(() => authStore.user?.displayName || '未登录')
 const showTaskActivity = computed(() =>
   !isBlankLayout.value &&
   route.name !== 'task-center-2' &&
@@ -138,61 +158,103 @@ watch(sidebarCollapsed, (value) => {
 .app-shell {
   position: relative;
   min-height: 100vh;
-  padding: 12px;
-  overflow: visible;
-}
-
-.app-shell__glow {
-  position: absolute;
-  inset: auto;
-  width: 34rem;
-  height: 34rem;
-  border-radius: 50%;
-  filter: blur(48px);
-  pointer-events: none;
-  opacity: 0.5;
-}
-
-.app-shell__glow--left {
-  top: -12rem;
-  left: -8rem;
+  padding: 0;
+  overflow: hidden;
   background:
-    radial-gradient(circle, color-mix(in oklab, var(--color-primary) 24%, transparent) 0%, transparent 70%);
-}
-
-.app-shell__glow--right {
-  right: -10rem;
-  bottom: -16rem;
-  background:
-    radial-gradient(circle, color-mix(in oklab, var(--color-secondary) 28%, transparent) 0%, transparent 72%);
+    linear-gradient(180deg, color-mix(in oklab, var(--bg-base) 92%, black 8%), var(--bg-base));
 }
 
 .app-frame {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: 308px minmax(0, 1fr);
   align-items: start;
   gap: 0;
-  min-height: calc(100vh - 24px);
+  min-height: 100vh;
   transition: grid-template-columns 0.22s ease;
 }
 
 .app-frame--sidebar-collapsed {
-  grid-template-columns: 72px minmax(0, 1fr);
+  grid-template-columns: 76px minmax(0, 1fr);
 }
 
 .app-stage {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  height: calc(100vh - 24px);
+  height: 100vh;
   padding: 0;
   border: none;
   border-radius: 0;
   background: var(--bg-base);
-  background-image: radial-gradient(circle at top right, rgba(88, 166, 255, 0.03), transparent 40%);
   box-shadow: none;
+}
+
+.desktop-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  min-height: 72px;
+  padding: 12px 22px;
+  border-bottom: 1px solid var(--border-subtle);
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--bg-panel) 96%, white 4%), var(--bg-panel-header));
+}
+
+.toolbar-title {
+  min-width: 0;
+}
+
+.toolbar-kicker {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.toolbar-title h1 {
+  margin: 0;
+  color: var(--text-primary);
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.toolbar-title p {
+  margin: 4px 0 0;
+  max-width: 56rem;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolbar-context {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-context__item {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .global-task-activity {
@@ -200,13 +262,13 @@ watch(sidebarCollapsed, (value) => {
   grid-template-columns: minmax(0, 1fr) 132px auto;
   align-items: center;
   gap: 12px;
-  min-height: 54px;
+  min-height: 46px;
   margin: 0 0 1px;
-  padding: 9px 14px;
+  padding: 7px 18px;
   border-bottom: 1px solid var(--border-subtle);
   background:
-    linear-gradient(90deg, color-mix(in oklab, var(--color-primary) 10%, var(--bg-panel)), var(--bg-panel));
-  box-shadow: 0 10px 28px rgba(18, 28, 45, 0.08);
+    linear-gradient(90deg, color-mix(in oklab, var(--color-success) 7%, var(--bg-surface)), var(--bg-surface));
+  box-shadow: none;
 }
 
 .activity-main {
@@ -305,7 +367,8 @@ watch(sidebarCollapsed, (value) => {
   min-width: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  background: inherit;
+  background:
+    linear-gradient(180deg, var(--bg-base), color-mix(in oklab, var(--bg-base) 94%, black 6%));
   padding: 0;
 }
 
@@ -331,7 +394,13 @@ watch(sidebarCollapsed, (value) => {
 
   .app-stage {
     height: auto;
-    min-height: auto;
+    min-height: 100vh;
+  }
+
+  .desktop-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 8;
   }
 
   .global-task-activity {
@@ -344,20 +413,21 @@ watch(sidebarCollapsed, (value) => {
 }
 
 @media (max-width: 820px) {
-  .app-shell {
-    padding: 8px;
-  }
-
   .app-frame {
     gap: 0;
+  }
+
+  .desktop-toolbar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .toolbar-context {
+    justify-content: flex-start;
   }
 }
 
 @media (max-width: 620px) {
-  .app-shell {
-    padding: 4px;
-  }
-
   .app-stage {
     padding: 0;
   }

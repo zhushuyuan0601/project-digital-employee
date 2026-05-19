@@ -1,7 +1,7 @@
 import express from 'express'
-import { spawn } from 'child_process'
-import { existsSync, statSync } from 'fs'
-import { resolve } from 'path'
+import { spawn, spawnSync } from 'child_process'
+import { existsSync, readdirSync, statSync } from 'fs'
+import { dirname, join, resolve } from 'path'
 import { getClaudeRuntimeConfig } from '../claude-runtime/config.js'
 import { PROJECT_ROOT, envString } from '../config/defaults.js'
 import { asyncRoute, sendError } from '../utils/http.js'
@@ -13,6 +13,64 @@ const MAX_SESSION_EVENTS = 3000
 const MAX_CONTEXT_CHARS = 28000
 const SESSION_TTL_MS = 1000 * 60 * 60 * 4
 let commandCache = null
+
+function extractCommandPath(stdout) {
+  return String(stdout || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.startsWith('/')) || ''
+}
+
+function findLocalExecutable(engine) {
+  const home = process.env.HOME || ''
+  if (!home) return ''
+
+  const candidates = [
+    join(home, '.openclaw', 'node_modules', engine, 'bin', engine),
+    join(home, '.bun', 'bin', engine),
+    join(home, '.cargo', 'bin', engine),
+    `/opt/homebrew/bin/${engine}`,
+    `/usr/local/bin/${engine}`,
+  ]
+
+  const nvmNodeRoot = join(home, '.nvm', 'versions', 'node')
+  if (existsSync(nvmNodeRoot)) {
+    for (const version of readdirSync(nvmNodeRoot).sort().reverse()) {
+      candidates.unshift(join(nvmNodeRoot, version, 'bin', engine))
+    }
+  }
+
+  return candidates.find((candidate) => existsSync(candidate)) || ''
+}
+
+function resolveExecutable(engine) {
+  const envKey = engine === 'claude' ? 'TERMINAL_CLAUDE_BIN' : 'TERMINAL_CODEX_BIN'
+  const explicit = String(process.env[envKey] || '').trim()
+  if (explicit) return explicit
+
+  const direct = spawnSync('/bin/sh', ['-lc', `command -v ${engine}`], {
+    encoding: 'utf8',
+    env: process.env,
+  })
+  const directPath = extractCommandPath(direct.stdout)
+  if (directPath) return directPath
+
+  const userShell = process.env.SHELL || '/bin/zsh'
+  const shell = existsSync(userShell) ? userShell : '/bin/zsh'
+  const login = spawnSync(shell, ['-lic', `command -v ${engine}`], {
+    encoding: 'utf8',
+    env: process.env,
+  })
+  return extractCommandPath(login.stdout) || findLocalExecutable(engine) || engine
+}
+
+function envForExecutable(executable) {
+  if (!executable.startsWith('/')) return process.env
+  return {
+    ...process.env,
+    PATH: `${dirname(executable)}:${process.env.PATH || ''}`,
+  }
+}
 
 function nowIso() {
   return new Date().toISOString()
@@ -37,6 +95,7 @@ function terminalAllowedRoots() {
     .map((item) => item.trim())
     .filter(Boolean)
   return [
+    process.env.HOME,
     PROJECT_ROOT,
     config.cwd,
     config.workspaceRoot,
@@ -208,9 +267,10 @@ function builtinInteractiveCommands(engine) {
 
 function cliHelp(engine) {
   return new Promise((resolve) => {
-    const child = spawn(engine, ['--help'], {
+    const executable = resolveExecutable(engine)
+    const child = spawn(executable, ['--help'], {
       cwd: PROJECT_ROOT,
-      env: process.env,
+      env: envForExecutable(executable),
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     let stdout = ''
@@ -445,9 +505,10 @@ function runTurn(session, prompt) {
   session.messages.push({ role: 'user', content: userPrompt, createdAt: nowIso() })
   appendEvent(session, { type: 'prompt', stream: 'stdin', turnId, text: userPrompt })
 
-  const child = spawn(session.engine, argsForSession(session), {
+  const executable = resolveExecutable(session.engine)
+  const child = spawn(executable, argsForSession(session), {
     cwd: session.cwd,
-    env: process.env,
+    env: envForExecutable(executable),
     stdio: ['pipe', 'pipe', 'pipe'],
   })
   session.child = child
@@ -459,7 +520,7 @@ function runTurn(session, prompt) {
     type: 'turn:start',
     stream: 'system',
     turnId,
-    text: `$ ${session.engine} ${argsForSession(session).join(' ')}`,
+    text: `$ ${executable} ${argsForSession(session).join(' ')}`,
   })
 
   child.stdin.end(runtimePrompt)
@@ -544,9 +605,10 @@ function runNativeCommand(session, commandLine) {
   appendEvent(session, { type: 'prompt', stream: 'stdin', turnId, text: commandLine })
   appendEvent(session, { type: 'turn:start', stream: 'system', turnId, text: `$ ${engine} ${args.join(' ')}`.trim() })
 
-  const child = spawn(engine, args, {
+  const executable = resolveExecutable(engine)
+  const child = spawn(executable, args, {
     cwd: session.cwd,
-    env: process.env,
+    env: envForExecutable(executable),
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   session.child = child
@@ -583,7 +645,7 @@ router.get('/terminal/capabilities', (_req, res) => {
   res.json({
     success: true,
     allowedCommands: [...allowedEngines],
-    defaultCwd: config.cwd || PROJECT_ROOT,
+    defaultCwd: process.env.HOME || config.cwd || PROJECT_ROOT,
     allowedRoots: terminalAllowedRoots(),
     activeSessions: [...terminalSessions.values()].map(serializeSession),
   })

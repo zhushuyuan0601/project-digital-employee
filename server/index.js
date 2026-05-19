@@ -9,6 +9,7 @@ import cors from 'cors'
 import { promises as fs, existsSync, readdirSync, statSync, readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join, resolve } from 'path'
+import path from 'path'
 import skillsRouter from './routes/skills.js'
 import agentsRouter from './routes/agents.js'
 import taskRouter from './routes/tasks.js'
@@ -1233,6 +1234,17 @@ app.get('/api/audit/logs', (req, res) => {
     }),
   })
 })
+
+const staticDir = process.env.APP_STATIC_DIR ? resolve(process.env.APP_STATIC_DIR) : ''
+if (staticDir && existsSync(staticDir)) {
+  app.use(express.static(staticDir))
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api/')) return next()
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next()
+    res.sendFile(path.join(staticDir, 'index.html'))
+  })
+}
+
 app.use(errorHandler)
 
 // 启动服务器

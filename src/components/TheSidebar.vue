@@ -1,15 +1,45 @@
 <template>
   <aside :class="['app-sidebar', { 'app-sidebar--collapsed': collapsed }]">
-    <div class="brand-panel">
-      <div class="brand-mark">
-        <div class="brand-mark__orb">U</div>
-        <div class="brand-copy">
-          <strong>Digital Employee</strong>
-          <span>数字员工运营平台</span>
-        </div>
+    <div class="sidebar-rail">
+      <div class="brand-mark__orb">U</div>
+
+      <div class="rail-nav">
+        <template v-for="section in filteredNavigationSections" :key="section.label">
+          <router-link
+            v-for="item in section.items"
+            :key="item.to"
+            :to="item.to"
+            custom
+            v-slot="{ navigate, isActive }"
+          >
+            <button
+              type="button"
+              :class="['rail-link', { 'is-active': isActive }]"
+              :title="`${item.label}：${item.meta}`"
+              :aria-label="item.label"
+              @click="navigate"
+            >
+              <component :is="item.icon" />
+            </button>
+          </router-link>
+        </template>
+      </div>
+
+      <div class="rail-actions">
         <button
           type="button"
-          class="sidebar-collapse"
+          class="rail-link"
+          :title="themeLabel"
+          :aria-label="themeLabel"
+          @click="toggleTheme"
+        >
+          <Sunny v-if="isLight" />
+          <MoonNight v-else />
+        </button>
+        <span class="rail-status" :class="`rail-status--${connectionStatus}`" :title="statusText"></span>
+        <button
+          type="button"
+          class="rail-link"
           :title="collapsed ? '展开菜单' : '收起菜单'"
           :aria-label="collapsed ? '展开菜单' : '收起菜单'"
           @click="emit('toggle-collapse')"
@@ -20,80 +50,60 @@
       </div>
     </div>
 
-    <div class="nav-scroll">
-      <section
-        v-for="section in filteredNavigationSections"
-        :key="section.label"
-        class="nav-section"
-      >
-        <p class="nav-section__label">{{ section.label }}</p>
-
-        <router-link
-          v-for="item in section.items"
-          :key="item.to"
-          :to="item.to"
-          custom
-          v-slot="{ navigate, isActive }"
-        >
-          <button
-            type="button"
-            :class="['nav-link', { 'is-active': isActive }]"
-            :title="collapsed ? `${item.label}：${item.meta}` : undefined"
-            @click="navigate"
-          >
-            <span class="nav-link__icon">
-              <component :is="item.icon" />
-            </span>
-            <span class="nav-link__body">
-              <span class="nav-link__title">{{ item.label }}</span>
-              <span class="nav-link__meta">{{ item.meta }}</span>
-            </span>
-            <span class="nav-link__arrow">
-              <ArrowRight />
-            </span>
-          </button>
-        </router-link>
-      </section>
-    </div>
-
-    <div class="sidebar-footer">
-      <div class="sidebar-user">
-        <strong>{{ userLabel }}</strong>
-        <span>{{ roleLabel }}</span>
-      </div>
-
-      <div class="sidebar-status">
-        <div class="status-chip" :class="`status-chip--${connectionStatus}`">
-          <span class="status-chip__dot"></span>
-          <span>{{ statusText }}</span>
+    <div class="sidebar-panel">
+      <div class="brand-panel">
+        <div class="brand-copy">
+          <strong>数字员工运营平台</strong>
+          <span>Desktop Operations Console</span>
         </div>
-        <span class="sidebar-build">Build v1.0.0</span>
       </div>
 
-      <button
-        type="button"
-        class="theme-toggle"
-        :title="collapsed ? themeLabel : undefined"
-        @click="toggleTheme"
-      >
-        <span class="theme-toggle__icon">
-          <Sunny v-if="isLight" />
-          <MoonNight v-else />
-        </span>
-        <span class="theme-toggle__text">
-          <strong>{{ themeLabel }}</strong>
-          <span>点击切换界面模式</span>
-        </span>
-      </button>
+      <div class="nav-scroll">
+        <section
+          v-for="section in filteredNavigationSections"
+          :key="section.label"
+          class="nav-section"
+        >
+          <p class="nav-section__label">{{ section.label }}</p>
 
-      <button
-        type="button"
-        class="logout-btn"
-        :title="collapsed ? '退出登录' : undefined"
-        @click="logout"
-      >
-        退出登录
-      </button>
+          <router-link
+            v-for="item in section.items"
+            :key="item.to"
+            :to="item.to"
+            custom
+            v-slot="{ navigate, isActive }"
+          >
+            <button
+              type="button"
+              :class="['nav-link', { 'is-active': isActive }]"
+              @click="navigate"
+            >
+              <span class="nav-link__body">
+                <span class="nav-link__title">{{ item.label }}</span>
+                <span class="nav-link__meta">{{ item.meta }}</span>
+              </span>
+              <span class="nav-link__arrow">
+                <ArrowRight />
+              </span>
+            </button>
+          </router-link>
+        </section>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user">
+          <strong>{{ userLabel }}</strong>
+          <span>{{ roleLabel }}</span>
+        </div>
+
+        <div class="sidebar-status">
+          <div class="status-chip" :class="`status-chip--${connectionStatus}`">
+            <span class="status-chip__dot"></span>
+            <span>{{ statusText }}</span>
+          </div>
+          <button type="button" class="logout-btn" @click="logout">退出</button>
+        </div>
+      </div>
     </div>
   </aside>
 </template>
@@ -172,49 +182,128 @@ function logout() {
 <style scoped>
 .app-sidebar {
   position: sticky;
-  top: 12px;
-  display: flex;
-  flex-direction: column;
-  min-height: calc(100vh - 24px);
-  padding: 20px 16px 16px;
+  top: 0;
+  display: grid;
+  grid-template-columns: 76px minmax(0, 232px);
+  height: 100vh;
+  min-height: 100vh;
+  padding: 0;
   border-right: 1px solid var(--border-default);
   border-radius: 0;
   background: var(--bg-panel);
   box-shadow: none;
   width: 100%;
   min-width: 0;
-  transition: padding 0.22s ease;
+  transition: grid-template-columns 0.22s ease;
 }
 
 .app-sidebar--collapsed {
-  padding: 16px 10px;
-  align-items: stretch;
+  grid-template-columns: 76px 0;
 }
 
-.brand-panel {
-  display: grid;
-  gap: 12px;
-  padding: 4px 8px 18px;
-}
-
-.brand-mark {
+.sidebar-rail {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
   min-width: 0;
+  padding: 18px 10px 14px;
+  border-right: 1px solid var(--border-subtle);
+  background:
+    linear-gradient(180deg, #151d26, #101720);
+}
+
+.sidebar-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--bg-panel);
 }
 
 .brand-mark__orb {
   display: grid;
   place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 10px;
-  background: linear-gradient(135deg, var(--color-primary), #a371f7);
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-cyan));
   color: white;
   font-family: var(--font-display);
-  font-size: 1.1rem;
+  font-size: 18px;
   font-weight: 800;
+}
+
+.rail-nav {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  margin-top: 22px;
+}
+
+.rail-actions {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: auto;
+}
+
+.rail-link {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 42px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: #8f9baa;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.rail-link:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e7edf5;
+}
+
+.rail-link.is-active {
+  border-color: rgba(106, 167, 255, 0.46);
+  background: rgba(106, 167, 255, 0.14);
+  color: #8ec0ff;
+}
+
+.rail-link :deep(svg) {
+  width: 18px;
+  height: 18px;
+}
+
+.rail-status {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.rail-status--connected {
+  background: var(--color-success);
+  box-shadow: 0 0 0 7px color-mix(in oklab, var(--color-success) 13%, transparent);
+}
+
+.rail-status--connecting {
+  background: var(--color-warning);
+  box-shadow: 0 0 0 7px color-mix(in oklab, var(--color-warning) 14%, transparent);
+}
+
+.rail-status--disconnected {
+  background: var(--color-error);
+  box-shadow: 0 0 0 7px color-mix(in oklab, var(--color-error) 12%, transparent);
+}
+
+.brand-panel {
+  display: grid;
+  gap: 12px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .brand-copy {
@@ -226,7 +315,7 @@ function logout() {
 
 .brand-copy strong {
   font-family: var(--font-display);
-  font-size: 1.12rem;
+  font-size: 15px;
   font-weight: 700;
   line-height: 1.15;
   color: var(--text-primary);
@@ -234,61 +323,41 @@ function logout() {
 
 .brand-copy span {
   color: var(--text-secondary);
-  font-size: 0.82rem;
+  font-family: var(--font-mono);
+  font-size: 10px;
   line-height: 1.35;
-}
-
-.sidebar-collapse {
-  margin-left: auto;
-  display: inline-grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-card) 88%, transparent);
-  color: var(--text-secondary);
-  transition: all 0.18s ease;
-}
-
-.sidebar-collapse:hover {
-  border-color: rgba(var(--color-primary-rgb), 0.42);
-  color: var(--color-primary);
-  background: rgba(var(--color-primary-rgb), 0.1);
-}
-
-.sidebar-collapse :deep(svg) {
-  width: 1rem;
-  height: 1rem;
+  text-transform: uppercase;
 }
 
 .nav-scroll {
   flex: 1;
   min-height: 0;
-  padding-right: 4px;
+  padding: 16px 12px;
   overflow: auto;
 }
 
 .nav-section + .nav-section {
-  margin-top: 20px;
+  margin-top: 18px;
 }
 
 .nav-section__label {
-  margin: 0 0 10px;
-  padding-left: 10px;
+  margin: 0 0 8px;
+  padding-left: 8px;
   color: var(--text-secondary);
-  font-size: var(--text-xs);
-  letter-spacing: 0.12em;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
 .nav-link {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   width: 100%;
-  padding: 10px 12px;
+  min-height: 48px;
+  padding: 8px 10px;
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
@@ -298,7 +367,7 @@ function logout() {
 }
 
 .nav-link + .nav-link {
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
 .nav-link:hover {
@@ -307,13 +376,12 @@ function logout() {
 }
 
 .nav-link.is-active {
-  background: rgba(88, 166, 255, 0.1);
-  border-color: rgba(var(--color-primary-rgb), 0.35);
+  background: color-mix(in oklab, var(--color-primary) 10%, var(--bg-card));
+  border-color: color-mix(in oklab, var(--color-primary) 35%, var(--border-default));
   color: var(--color-primary);
   box-shadow: none;
 }
 
-.nav-link__icon,
 .nav-link__arrow {
   display: inline-flex;
   align-items: center;
@@ -321,22 +389,9 @@ function logout() {
   flex-shrink: 0;
 }
 
-.nav-link__icon {
-  width: 2rem;
-  height: 2rem;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-secondary);
-}
-
-.nav-link.is-active .nav-link__icon {
-  color: var(--color-primary);
-}
-
-.nav-link__icon :deep(svg),
 .nav-link__arrow :deep(svg) {
-  width: 1.08rem;
-  height: 1.08rem;
+  width: 13px;
+  height: 13px;
 }
 
 .nav-link__body {
@@ -348,13 +403,14 @@ function logout() {
 
 .nav-link__title {
   color: var(--text-primary);
-  font-size: var(--text-sm);
+  font-size: 13px;
   font-weight: 600;
 }
 
 .nav-link__meta {
   color: var(--text-tertiary);
-  font-size: 0.75rem;
+  font-size: 11px;
+  line-height: 1.25;
 }
 
 .nav-link__arrow {
@@ -370,30 +426,32 @@ function logout() {
 }
 
 .sidebar-footer {
-  padding: 18px 8px 4px;
+  padding: 12px;
   border-top: 1px solid var(--border-subtle);
 }
 
 .sidebar-user {
   display: grid;
   gap: 2px;
-  padding: 10px 12px;
-  margin-bottom: 12px;
-  border: 1px solid var(--border-default);
-  border-radius: 10px;
-  background: var(--bg-card);
+  padding: 0 2px 10px;
+  margin-bottom: 8px;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: transparent;
 }
 
 .sidebar-user strong {
   color: var(--text-primary);
-  font-size: 0.92rem;
+  font-size: 13px;
 }
 
 .sidebar-user span {
   color: var(--text-secondary);
-  font-size: 0.76rem;
+  font-family: var(--font-mono);
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
 }
 
 .sidebar-status {
@@ -401,18 +459,19 @@ function logout() {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 0;
 }
 
 .status-chip {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: color-mix(in oklab, var(--bg-surface) 80%, var(--color-primary-bg) 20%);
+  padding: 7px 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: var(--bg-card);
   color: var(--text-secondary);
-  font-size: var(--text-xs);
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -438,70 +497,15 @@ function logout() {
   box-shadow: 0 0 0 6px color-mix(in oklab, var(--color-error) 12%, transparent);
 }
 
-.sidebar-build {
-  color: var(--text-muted);
-  font-size: 0.72rem;
-}
-
-.theme-toggle {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border-default);
-  border-radius: 8px;
-  background: var(--bg-card);
-  color: inherit;
-  transition: all 0.2s ease;
-}
-
-.theme-toggle:hover {
-  border-color: var(--color-primary);
-  box-shadow: none;
-}
-
-.theme-toggle__icon {
-  display: grid;
-  place-items: center;
-  width: 2.6rem;
-  height: 2.6rem;
-  border-radius: 1rem;
-  background: color-mix(in oklab, var(--color-primary-bg) 74%, var(--bg-surface) 26%);
-  color: var(--color-primary);
-}
-
-.theme-toggle__icon :deep(svg) {
-  width: 1.1rem;
-  height: 1.1rem;
-}
-
-.theme-toggle__text {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-}
-
-.theme-toggle__text strong {
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  font-weight: 600;
-}
-
-.theme-toggle__text span {
-  color: var(--text-tertiary);
-  font-size: 0.76rem;
-}
-
 .logout-btn {
-  width: 100%;
-  margin-top: 12px;
-  padding: 10px 12px;
-  border-radius: 8px;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 7px;
   border: 1px solid var(--border-default);
   background: transparent;
   color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
   transition: all 0.2s ease;
 }
 
@@ -510,157 +514,34 @@ function logout() {
   border-color: color-mix(in oklab, var(--color-error) 45%, var(--border-default));
 }
 
-.app-sidebar--collapsed .brand-panel {
-  padding: 0 0 16px;
-}
-
-.app-sidebar--collapsed .brand-mark {
-  justify-content: center;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.app-sidebar--collapsed .brand-mark__orb {
-  width: 2.4rem;
-  height: 2.4rem;
-}
-
-.app-sidebar--collapsed .brand-copy,
-.app-sidebar--collapsed .nav-section__label,
-.app-sidebar--collapsed .nav-link__body,
-.app-sidebar--collapsed .nav-link__arrow,
-.app-sidebar--collapsed .sidebar-user,
-.app-sidebar--collapsed .sidebar-build,
-.app-sidebar--collapsed .theme-toggle__text,
-.app-sidebar--collapsed .logout-btn {
-  display: none;
-}
-
-.app-sidebar--collapsed .sidebar-collapse {
-  margin-left: 0;
-}
-
-.app-sidebar--collapsed .nav-scroll {
-  padding-right: 0;
-  overflow-x: hidden;
-}
-
-.app-sidebar--collapsed .nav-section + .nav-section {
-  margin-top: 12px;
-}
-
-.app-sidebar--collapsed .nav-link {
-  display: flex;
-  justify-content: center;
-  padding: 10px 0;
-}
-
-.app-sidebar--collapsed .nav-link__icon {
-  width: 2.25rem;
-  height: 2.25rem;
-}
-
-.app-sidebar--collapsed .sidebar-footer {
-  display: grid;
-  gap: 10px;
-  padding: 14px 0 0;
-}
-
-.app-sidebar--collapsed .sidebar-status {
-  justify-content: center;
-  margin-bottom: 0;
-}
-
-.app-sidebar--collapsed .status-chip {
-  width: 2.5rem;
-  height: 2.5rem;
-  justify-content: center;
-  padding: 0;
-}
-
-.app-sidebar--collapsed .status-chip span:last-child {
-  display: none;
-}
-
-.app-sidebar--collapsed .theme-toggle {
-  justify-content: center;
-  padding: 0;
-  width: 2.5rem;
-  height: 2.5rem;
-  margin: 0 auto;
-}
-
-.app-sidebar--collapsed .theme-toggle__icon {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 8px;
-}
-
 @media (max-width: 1180px) {
   .app-sidebar {
     position: static;
+    grid-template-columns: 76px minmax(0, 1fr);
+    height: auto;
     min-height: auto;
     max-height: none;
-    gap: 18px;
     border-right: none;
     border-bottom: 1px solid var(--border-default);
   }
 
-  .app-sidebar--collapsed {
-    padding: 12px;
-  }
-
-  .app-sidebar--collapsed .brand-mark {
-    justify-content: flex-start;
-    flex-direction: row;
-  }
-
-  .app-sidebar--collapsed .brand-copy,
-  .app-sidebar--collapsed .nav-section__label,
-  .app-sidebar--collapsed .nav-link__body,
-  .app-sidebar--collapsed .nav-link__arrow,
-  .app-sidebar--collapsed .sidebar-user,
-  .app-sidebar--collapsed .theme-toggle__text,
-  .app-sidebar--collapsed .logout-btn {
-    display: none;
-  }
-
-  .app-sidebar--collapsed .nav-section {
-    display: flex;
-    flex-wrap: wrap;
-  }
-
-  .app-sidebar--collapsed .nav-link {
-    width: auto;
-    padding: 8px;
-  }
-
-  .nav-scroll {
-    overflow: visible;
-  }
-
-  .nav-section {
-    display: grid;
-    gap: 8px;
+  .sidebar-rail {
+    min-height: 100vh;
   }
 }
 
 @media (max-width: 620px) {
-  .app-sidebar {
-    padding: 12px;
+  .app-sidebar,
+  .app-sidebar--collapsed {
+    grid-template-columns: 64px 0;
   }
 
-  .brand-panel,
-  .sidebar-footer {
-    padding-left: 0;
-    padding-right: 0;
+  .sidebar-rail {
+    padding-left: 8px;
+    padding-right: 8px;
   }
 
-  .nav-link {
-    padding: 11px;
-  }
-
-  .nav-link__meta {
+  .sidebar-panel {
     display: none;
   }
 }

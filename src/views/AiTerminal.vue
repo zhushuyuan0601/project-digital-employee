@@ -49,6 +49,23 @@
           </div>
         </div>
 
+        <div class="top-actions">
+          <button type="button" class="new-inline-btn" :disabled="!activeTuiSession" @click="restartTui">
+            重连 TUI
+          </button>
+          <span :class="['status-badge', statusText]">{{ statusText }}</span>
+          <button type="button" class="new-inline-btn new-inline-btn--primary" @click="() => createNewTuiSession()">
+            <el-icon><Plus /></el-icon>
+            新建会话
+          </button>
+          <button type="button" class="icon-action" :disabled="!activeTuiSession || activeTuiSession.status !== 'running'" @click="killActiveTuiSession">
+            <el-icon><Close /></el-icon>
+          </button>
+          <button type="button" class="icon-action" :disabled="!activeTuiSession" @click="deleteActiveTuiSession">
+            <el-icon><Delete /></el-icon>
+          </button>
+        </div>
+
         <div class="terminal-controls">
           <label class="control-field control-field--engine">
             <span>引擎</span>
@@ -75,23 +92,6 @@
             />
           </label>
         </div>
-
-        <div class="top-actions">
-          <button type="button" class="new-inline-btn" @click="restartTui">
-            重连 TUI
-          </button>
-          <span :class="['status-badge', statusText]">{{ statusText }}</span>
-          <button type="button" class="new-inline-btn" @click="() => createNewTuiSession()">
-            <el-icon><Plus /></el-icon>
-            新建会话
-          </button>
-          <button type="button" class="icon-action" :disabled="!activeTuiSession || activeTuiSession.status !== 'running'" @click="killActiveTuiSession">
-            <el-icon><Close /></el-icon>
-          </button>
-          <button type="button" class="icon-action" :disabled="!activeTuiSession" @click="deleteActiveTuiSession">
-            <el-icon><Delete /></el-icon>
-          </button>
-        </div>
       </header>
 
       <section class="tui-area">
@@ -100,7 +100,18 @@
           <strong>{{ activeTuiSession?.engine || engineDraft }} TUI</strong>
           <small>{{ activeTuiSession?.cwd || cwdDraft }}</small>
         </div>
-        <div ref="tuiRef" class="tui-screen"></div>
+        <div v-if="!activeTuiSession" class="tui-empty-state">
+          <div class="empty-terminal-icon">
+            <el-icon><Monitor /></el-icon>
+          </div>
+          <h2>选择工作目录后新建会话</h2>
+          <p>默认目录是当前用户目录。这里不会自动启动 Codex 或 Claude，避免误把应用运行目录作为项目目录。</p>
+          <button type="button" class="new-inline-btn" @click="() => createNewTuiSession()">
+            <el-icon><Plus /></el-icon>
+            新建会话
+          </button>
+        </div>
+        <div v-show="activeTuiSession" ref="tuiRef" class="tui-screen"></div>
       </section>
       <section v-if="false" ref="screenRef" class="chat-area">
         <div v-if="displayItems.length === 0" class="empty-chat">
@@ -444,11 +455,7 @@ async function createTuiAttachTicket(): Promise<{ sessionId: string; ticket: str
     if (!isMissingTuiSessionError(err)) throw err
     tuiSessions.value = tuiSessions.value.filter((session) => session.id !== sessionId)
     activeTuiSession.value = null
-    const replacementSession = await createNewTuiSession(false)
-    if (!replacementSession) throw err
-    sessionId = replacementSession.id
-    const ticket = await terminalApi.createTuiTicket(sessionId)
-    return { sessionId, ticket: ticket.ticket }
+    throw new Error('TUI 会话已不存在，请重新新建会话')
   }
 }
 
@@ -456,10 +463,7 @@ async function connectTui() {
   closeTui()
   await nextTick()
   if (!tuiRef.value) return
-  if (!activeTuiSession.value) {
-    await createNewTuiSession(false)
-    if (!activeTuiSession.value) return
-  }
+  if (!activeTuiSession.value) return
 
   const terminal = new Terminal({
     cursorBlink: true,
@@ -692,7 +696,12 @@ async function ensureSession() {
 }
 
 function handleEngineChange() {
-  if (terminalMode.value === 'tui') return
+  if (terminalMode.value === 'tui') {
+    if (!activeTuiSession.value) return
+    ElMessage.warning('当前 TUI 会话已创建，切换引擎请先新建会话')
+    engineDraft.value = activeTuiSession.value.engine
+    return
+  }
   if (activeSession.value && activeSession.value.engine !== engineDraft.value) {
     activeSession.value = null
     events.value = []
@@ -701,7 +710,12 @@ function handleEngineChange() {
 }
 
 function handleWorkspaceInput() {
-  if (terminalMode.value === 'tui') return
+  if (terminalMode.value === 'tui') {
+    if (!activeTuiSession.value) return
+    activeTuiSession.value = null
+    closeTui()
+    return
+  }
   if (activeSession.value && activeSession.value.cwd !== cwdDraft.value) {
     activeSession.value = null
     events.value = []
@@ -909,8 +923,6 @@ onMounted(async () => {
       engineDraft.value = tuiSessions.value[0].engine
       cwdDraft.value = tuiSessions.value[0].cwd
       await connectTui()
-    } else {
-      await createNewTuiSession(true)
     }
     window.addEventListener('resize', resizeTui)
   } catch (err) {
@@ -1138,17 +1150,21 @@ onUnmounted(() => {
   top: 0;
   z-index: 10;
   display: grid;
-  grid-template-columns: minmax(190px, 240px) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(220px, 1fr) minmax(max-content, auto);
+  grid-template-areas:
+    "brand actions"
+    "controls controls";
   align-items: center;
-  gap: 16px;
-  min-height: 86px;
-  padding: 12px 32px;
+  gap: 12px 18px;
+  min-height: 112px;
+  padding: 14px 28px 16px;
   border-bottom: 1px solid var(--chat-border);
   background: rgba(10, 10, 10, 0.86);
   backdrop-filter: blur(10px);
 }
 
 .terminal-brand {
+  grid-area: brand;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1191,9 +1207,10 @@ onUnmounted(() => {
 }
 
 .terminal-controls {
+  grid-area: controls;
   display: grid;
-  grid-template-columns: 132px minmax(240px, 1fr);
-  gap: 10px;
+  grid-template-columns: 172px minmax(0, 1fr);
+  gap: 12px;
   align-items: center;
   min-width: 0;
 }
@@ -1231,14 +1248,18 @@ onUnmounted(() => {
 }
 
 .top-actions {
+  grid-area: actions;
   display: flex;
-  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
   align-items: center;
-  min-width: 0;
+  min-width: max-content;
 }
 
 .new-inline-btn,
 .icon-action {
+  flex: 0 0 auto;
   height: 36px;
   border: 0;
   border-radius: 8px;
@@ -1254,6 +1275,16 @@ onUnmounted(() => {
   color: var(--chat-text);
   background: var(--chat-element);
   white-space: nowrap;
+}
+
+.new-inline-btn--primary {
+  background: rgba(96, 165, 250, 0.16);
+  color: #bfdbfe;
+}
+
+.new-inline-btn:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
 }
 
 .icon-action {
@@ -1355,6 +1386,52 @@ onUnmounted(() => {
   border: 1px solid var(--chat-border);
   border-radius: 10px;
   background: #050505;
+}
+
+.tui-empty-state {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 14px;
+  min-height: 0;
+  padding: 32px;
+  border: 1px dashed var(--chat-border);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.01)),
+    #070707;
+  color: var(--chat-muted);
+  text-align: center;
+}
+
+.empty-terminal-icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  border-radius: 12px;
+  background: rgba(96, 165, 250, 0.1);
+  color: #93c5fd;
+}
+
+.empty-terminal-icon :deep(svg) {
+  width: 22px;
+  height: 22px;
+}
+
+.tui-empty-state h2 {
+  margin: 0;
+  color: var(--chat-text);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.tui-empty-state p {
+  max-width: 560px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .tui-screen :deep(.xterm) {
@@ -1717,15 +1794,19 @@ onUnmounted(() => {
   }
 
   .top-nav {
-    grid-template-columns: 1fr auto;
-    align-items: start;
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "brand"
+      "controls"
+      "actions";
+    align-items: stretch;
     padding-left: 20px;
     padding-right: 20px;
   }
 
-  .terminal-controls {
-    grid-column: 1 / -1;
-    grid-row: 2;
+  .top-actions {
+    justify-content: flex-start;
+    min-width: 0;
   }
 
   .input-container {
@@ -1763,18 +1844,30 @@ onUnmounted(() => {
 
   .top-nav {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "brand"
+      "controls"
+      "actions";
     gap: 12px;
     padding: 12px 14px;
   }
 
   .terminal-controls {
     grid-template-columns: 1fr;
-    grid-column: auto;
-    grid-row: auto;
   }
 
   .top-actions {
-    justify-content: space-between;
+    justify-content: flex-start;
+    gap: 8px;
+  }
+
+  .new-inline-btn,
+  .icon-action {
+    height: 34px;
+  }
+
+  .new-inline-btn {
+    padding: 0 10px;
   }
 
   .message-container {

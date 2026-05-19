@@ -1,7 +1,7 @@
 import { WebSocketServer } from 'ws'
 import { randomUUID } from 'crypto'
-import { existsSync, statSync } from 'fs'
-import { dirname, resolve } from 'path'
+import { existsSync, readdirSync, statSync } from 'fs'
+import { dirname, join, resolve } from 'path'
 import express from 'express'
 import { spawn, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
@@ -32,6 +32,7 @@ function terminalAllowedRoots() {
     .map((item) => item.trim())
     .filter(Boolean)
   return [
+    process.env.HOME,
     PROJECT_ROOT,
     config.cwd,
     config.workspaceRoot,
@@ -76,16 +77,62 @@ function tuiArgsForEngine(engine, cwd) {
   ]
 }
 
+function extractCommandPath(stdout) {
+  return String(stdout || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line.startsWith('/')) || ''
+}
+
+function findLocalExecutable(engine) {
+  const home = process.env.HOME || ''
+  if (!home) return ''
+
+  const candidates = [
+    join(home, '.openclaw', 'node_modules', engine, 'bin', engine),
+    join(home, '.bun', 'bin', engine),
+    join(home, '.cargo', 'bin', engine),
+    `/opt/homebrew/bin/${engine}`,
+    `/usr/local/bin/${engine}`,
+  ]
+
+  const nvmNodeRoot = join(home, '.nvm', 'versions', 'node')
+  if (existsSync(nvmNodeRoot)) {
+    for (const version of readdirSync(nvmNodeRoot).sort().reverse()) {
+      candidates.unshift(join(nvmNodeRoot, version, 'bin', engine))
+    }
+  }
+
+  return candidates.find((candidate) => existsSync(candidate)) || ''
+}
+
 function executableForEngine(engine) {
   const envKey = engine === 'claude' ? 'TERMINAL_CLAUDE_BIN' : 'TERMINAL_CODEX_BIN'
   const explicit = String(process.env[envKey] || '').trim()
   if (explicit) return explicit
-  const resolved = spawnSync('command', ['-v', engine], {
-    shell: true,
+
+  const direct = spawnSync('/bin/sh', ['-lc', `command -v ${engine}`], {
     encoding: 'utf8',
     env: process.env,
   })
-  return String(resolved.stdout || '').trim() || engine
+  const directPath = extractCommandPath(direct.stdout)
+  if (directPath) return directPath
+
+  const userShell = process.env.SHELL || '/bin/zsh'
+  const shell = existsSync(userShell) ? userShell : '/bin/zsh'
+  const login = spawnSync(shell, ['-lic', `command -v ${engine}`], {
+    encoding: 'utf8',
+    env: process.env,
+  })
+  return extractCommandPath(login.stdout) || findLocalExecutable(engine) || engine
+}
+
+function envForExecutable(executable) {
+  if (!executable.startsWith('/')) return process.env
+  return {
+    ...process.env,
+    PATH: `${dirname(executable)}:${process.env.PATH || ''}`,
+  }
 }
 
 function safeJsonParse(value) {
@@ -156,6 +203,7 @@ function createTuiSession({ engine, cwd, title, cols = 120, rows = 36 }) {
   const safeRows = Math.max(12, Math.min(80, Number(rows) || 36))
   const id = `tui-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const executable = executableForEngine(normalizedEngine)
+  const executableEnv = envForExecutable(executable)
   const bridgePath = resolve(__dirname, 'scripts/pty-bridge.py')
   const pythonBin = process.env.PYTHON_BIN || 'python3'
   const child = spawn(pythonBin, [
@@ -171,7 +219,7 @@ function createTuiSession({ engine, cwd, title, cols = 120, rows = 36 }) {
   ], {
     cwd: resolvedCwd,
     env: {
-      ...process.env,
+      ...executableEnv,
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
       FORCE_COLOR: '1',
