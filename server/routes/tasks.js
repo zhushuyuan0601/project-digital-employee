@@ -882,7 +882,7 @@ router.get('/tasks/:id/events/stream', (req, res) => {
         message: event.message,
         payload: event.payload_json,
         created_at: event.created_at,
-        eventId: event.id,
+        dbEventId: event.id,
         replay: true,
       })}\n\n`)
     }

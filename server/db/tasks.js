@@ -1,9 +1,191 @@
 import { getDatabase } from './index.js'
 import { getAgentDefinition, runtimeAgentMap } from '../claude-runtime/agent-registry.js'
+import { emitRuntimeEvent } from '../claude-runtime/event-bus.js'
 
 export const TASK_STATUSES = ['draft', 'planning', 'clarifying', 'dispatching', 'running', 'reviewing', 'completed', 'failed', 'cancelled']
 export const SUBTASK_STATUSES = ['pending', 'ready', 'queued', 'assigned', 'running', 'waiting_user', 'blocked', 'completed', 'failed', 'skipped']
 export const OUTPUT_STATUSES = ['pending_review', 'accepted', 'rejected']
+
+const NOTIFICATION_EVENT_TYPE = 'task.notification'
+const NOTIFICATION_DEDUPE_WINDOW_SECONDS = 30
+const NOTIFICATION_RULES = {
+  'coordinator.clarification_required': {
+    level: 'attention',
+    priority: 'high',
+    title: '任务需要补充信息',
+    action: 'answer_clarification',
+    toast: true,
+    desktop: false,
+  },
+  'plan.generated': {
+    level: 'attention',
+    priority: 'high',
+    title: '协作计划待确认',
+    action: 'review_plan',
+    toast: true,
+    desktop: false,
+  },
+  'plan.invalid': {
+    level: 'error',
+    priority: 'critical',
+    title: '任务规划失败',
+    action: 'open_task',
+    toast: true,
+    desktop: true,
+  },
+  'plan.request_failed': {
+    level: 'error',
+    priority: 'critical',
+    title: '任务规划请求失败',
+    action: 'open_task',
+    toast: true,
+    desktop: true,
+  },
+  'summary.request_failed': {
+    level: 'error',
+    priority: 'critical',
+    title: '最终汇总请求失败',
+    action: 'open_task',
+    toast: true,
+    desktop: true,
+  },
+  'runtime.dispatch.error': {
+    level: 'error',
+    priority: 'critical',
+    title: 'Runtime 派发失败',
+    action: 'open_task',
+    toast: true,
+    desktop: true,
+  },
+  'workflow.node.ready': {
+    level: 'progress',
+    priority: 'normal',
+    title: '流程节点已入队',
+    action: 'open_task',
+    toast: false,
+    desktop: false,
+  },
+  'workflow.dependency.unlocked': {
+    level: 'progress',
+    priority: 'normal',
+    title: '流程依赖已解锁',
+    action: 'open_task',
+    toast: false,
+    desktop: false,
+  },
+  'runtime.job.recovered': {
+    level: 'warning',
+    priority: 'high',
+    title: '运行任务已自动恢复',
+    action: 'open_task',
+    toast: true,
+    desktop: false,
+  },
+  'session.resume_failed': {
+    level: 'warning',
+    priority: 'normal',
+    title: '会话续接已自动降级',
+    action: 'open_task',
+    toast: false,
+    desktop: false,
+  },
+  'verification.failed': {
+    level: 'error',
+    priority: 'critical',
+    title: '执行验收失败',
+    action: 'open_task',
+    toast: true,
+    desktop: true,
+  },
+  'agent.retry_queued': {
+    level: 'warning',
+    priority: 'normal',
+    title: '执行失败，已自动重试',
+    action: 'open_task',
+    toast: false,
+    desktop: false,
+  },
+  'verification.retry_queued': {
+    level: 'warning',
+    priority: 'normal',
+    title: '验收失败，已自动重试',
+    action: 'open_task',
+    toast: false,
+    desktop: false,
+  },
+  'agent.error': {
+    level: 'error',
+    priority: 'critical',
+    title: '任务执行失败',
+    action: 'open_task',
+    toast: true,
+    desktop: true,
+  },
+  'agent.orphaned': {
+    level: 'error',
+    priority: 'critical',
+    title: '运行记录异常终止',
+    action: 'open_task',
+    toast: true,
+    desktop: true,
+  },
+  'agent.cancelled': {
+    level: 'warning',
+    priority: 'high',
+    title: '任务运行已取消',
+    action: 'open_task',
+    toast: true,
+    desktop: false,
+  },
+  'workflow.node.completed': {
+    level: 'success',
+    priority: 'normal',
+    title: '流程节点已完成',
+    action: 'open_task',
+    toast: false,
+    desktop: false,
+  },
+  'workflow.completed': {
+    level: 'success',
+    priority: 'high',
+    title: '流程已完成',
+    action: 'review_outputs',
+    toast: true,
+    desktop: false,
+  },
+  'summary.request.queued': {
+    level: 'attention',
+    priority: 'high',
+    title: '最终汇总已入队',
+    action: 'open_task',
+    toast: true,
+    desktop: false,
+  },
+  'outputs.bound': {
+    level: 'success',
+    priority: 'normal',
+    title: '成果已生成',
+    action: 'review_outputs',
+    toast: false,
+    desktop: false,
+  },
+  'code.assets.bound': {
+    level: 'success',
+    priority: 'normal',
+    title: '代码产出已绑定',
+    action: 'review_outputs',
+    toast: false,
+    desktop: false,
+  },
+  'task.completed': {
+    level: 'success',
+    priority: 'high',
+    title: '任务已完成',
+    action: 'review_outputs',
+    toast: true,
+    desktop: true,
+  },
+}
 
 function nowSeconds() {
   return Math.floor(Date.now() / 1000)
@@ -94,6 +276,125 @@ function normalizeVerificationResult(row) {
     ...row,
     details_json: parseJson(row.details_json),
   }
+}
+
+function compactString(value, limit = 240) {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, limit)
+}
+
+function notificationRuleFor(type) {
+  return NOTIFICATION_RULES[type] || null
+}
+
+function notificationDedupeKey({ taskId, subtaskId, type, rule }) {
+  return [
+    taskId,
+    subtaskId || 'task',
+    type,
+    rule.action || 'open_task',
+    rule.level || 'info',
+  ].join(':')
+}
+
+function shouldSkipNotification(db, taskEvent) {
+  const payload = taskEvent.payload_json || {}
+  const dedupeKey = payload.notification?.dedupeKey
+  if (!dedupeKey) return false
+
+  const duplicate = db.prepare(`
+    SELECT id
+    FROM task_events
+    WHERE task_id = ?
+      AND type = ?
+      AND json_extract(payload_json, '$.notification.dedupeKey') = ?
+      AND created_at >= unixepoch() - ?
+    ORDER BY id DESC
+    LIMIT 1
+  `).get(taskEvent.task_id, NOTIFICATION_EVENT_TYPE, dedupeKey, NOTIFICATION_DEDUPE_WINDOW_SECONDS)
+
+  return Boolean(duplicate)
+}
+
+function buildNotificationEvent(sourceEvent) {
+  const rule = notificationRuleFor(sourceEvent.type)
+  if (!rule) return null
+
+  const title = rule.title
+  const message = compactString(sourceEvent.message)
+  const notification = {
+    version: 1,
+    sourceType: sourceEvent.type,
+    sourceEventId: sourceEvent.id,
+    level: rule.level,
+    priority: rule.priority,
+    title,
+    message,
+    taskId: sourceEvent.task_id,
+    subtaskId: sourceEvent.subtask_id || null,
+    agentId: sourceEvent.agent_id || null,
+    action: rule.action,
+    toast: Boolean(rule.toast),
+    desktop: Boolean(rule.desktop),
+    dedupeKey: notificationDedupeKey({
+      taskId: sourceEvent.task_id,
+      subtaskId: sourceEvent.subtask_id,
+      type: sourceEvent.type,
+      rule,
+    }),
+    createdAt: sourceEvent.created_at,
+  }
+
+  return {
+    task_id: sourceEvent.task_id,
+    subtask_id: sourceEvent.subtask_id,
+    agent_id: sourceEvent.agent_id,
+    type: NOTIFICATION_EVENT_TYPE,
+    message: `${title}：${message || sourceEvent.type}`,
+    payload_json: {
+      notification,
+      source: {
+        type: sourceEvent.type,
+        eventId: sourceEvent.id,
+      },
+    },
+  }
+}
+
+function insertTaskEventRow(db, { taskId, subtaskId = null, agentId = null, type, message, payload = null }) {
+  const result = db.prepare(`
+    INSERT INTO task_events (task_id, subtask_id, agent_id, type, message, payload_json, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, unixepoch())
+  `).run(taskId, subtaskId, agentId, type, message, payload ? JSON.stringify(payload) : null)
+
+  return normalizeEvent(db.prepare('SELECT * FROM task_events WHERE id = ?').get(result.lastInsertRowid))
+}
+
+function broadcastTaskEvent(event) {
+  if (!event) return
+  emitRuntimeEvent({
+    type: event.type,
+    taskId: event.task_id,
+    subtaskId: event.subtask_id,
+    agentId: event.agent_id,
+    message: event.message,
+    payload: event.payload_json,
+    created_at: event.created_at,
+    dbEventId: event.id,
+  })
+}
+
+function maybeCreateNotificationEvent(db, sourceEvent) {
+  const notificationEvent = buildNotificationEvent(sourceEvent)
+  if (!notificationEvent || shouldSkipNotification(db, notificationEvent)) return null
+
+  return insertTaskEventRow(db, {
+    taskId: notificationEvent.task_id,
+    subtaskId: notificationEvent.subtask_id,
+    agentId: notificationEvent.agent_id,
+    type: notificationEvent.type,
+    message: notificationEvent.message,
+    payload: notificationEvent.payload_json,
+  })
 }
 
 export function initializeTaskSchema() {
@@ -391,11 +692,11 @@ export function updateTask(taskId, updates) {
 
 export function addTaskEvent({ taskId, subtaskId = null, agentId = null, type, message, payload = null }) {
   const db = getDatabase()
-  db.prepare(`
-    INSERT INTO task_events (task_id, subtask_id, agent_id, type, message, payload_json, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, unixepoch())
-  `).run(taskId, subtaskId, agentId, type, message, payload ? JSON.stringify(payload) : null)
+  const event = insertTaskEventRow(db, { taskId, subtaskId, agentId, type, message, payload })
+  const notificationEvent = type === NOTIFICATION_EVENT_TYPE ? null : maybeCreateNotificationEvent(db, event)
   db.prepare('UPDATE tasks SET updated_at = unixepoch() WHERE id = ?').run(taskId)
+  broadcastTaskEvent(notificationEvent)
+  return event
 }
 
 export function listTaskEvents(taskId, { limit = null, beforeId = null } = {}) {

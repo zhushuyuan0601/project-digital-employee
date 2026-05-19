@@ -124,6 +124,8 @@ export interface TaskOutput {
 
 export interface TaskEvent {
   id: number | string
+  dbEventId?: number | null
+  runtimeEventId?: number | string | null
   task_id: string
   subtask_id?: string | null
   agent_id?: string | null
@@ -131,6 +133,28 @@ export interface TaskEvent {
   message: string
   payload_json?: Record<string, unknown> | null
   created_at: number
+}
+
+export type TaskNotificationLevel = 'progress' | 'attention' | 'success' | 'warning' | 'error'
+export type TaskNotificationPriority = 'normal' | 'high' | 'critical'
+export type TaskNotificationAction = 'open_task' | 'review_plan' | 'answer_clarification' | 'review_outputs'
+
+export interface TaskNotificationPayload {
+  version: 1
+  sourceType: string
+  sourceEventId?: number | string
+  level: TaskNotificationLevel
+  priority: TaskNotificationPriority
+  title: string
+  message: string
+  taskId: string
+  subtaskId?: string | null
+  agentId?: string | null
+  action: TaskNotificationAction
+  toast: boolean
+  desktop: boolean
+  dedupeKey: string
+  createdAt: number
 }
 
 export interface Subtask {

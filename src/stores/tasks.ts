@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { taskApi } from '@/api/tasks'
+import { useTaskNotificationsStore } from '@/stores/taskNotifications'
 import type { CreateTaskRequest, Task, TaskEvent, TaskOutput } from '@/types/task'
 
 const DEFAULT_EVENT_LIMIT = 400
@@ -18,8 +19,12 @@ type RuntimeEventPayload = {
   subtaskId?: string
   agentId?: string
   message?: string
+  payload?: Record<string, unknown> | null
   created_at?: number
   timestamp?: number
+  eventId?: number | string
+  dbEventId?: number | string
+  runtimeEventId?: number | string
   runId?: string
   kind?: string
   toolName?: string
@@ -43,8 +48,15 @@ function eventTimestamp(event: TaskEvent) {
   return Number(event.created_at || 0)
 }
 
+function numericDbEventId(event: TaskEvent) {
+  const id = Number(event.dbEventId ?? event.id)
+  return Number.isFinite(id) && id > 0 ? id : null
+}
+
 function runtimeEventPayload(event: RuntimeEventPayload) {
-  const payload: Record<string, unknown> = {}
+  const payload: Record<string, unknown> = {
+    ...((event.payload && typeof event.payload === 'object') ? event.payload : {}),
+  }
   if (event.runId) payload.runId = event.runId
   if (event.kind) payload.kind = event.kind
   if (event.toolName) payload.toolName = event.toolName
@@ -58,7 +70,8 @@ function runtimeEventPayload(event: RuntimeEventPayload) {
 function trimAndSortEvents(events: TaskEvent[], limit = DEFAULT_EVENT_LIMIT) {
   const deduped = new Map<string, TaskEvent>()
   for (const event of events) {
-    deduped.set(String(event.id), event)
+    const dbEventId = numericDbEventId(event)
+    deduped.set(dbEventId != null ? `db-${dbEventId}` : String(event.id), event)
   }
 
   return [...deduped.values()]
@@ -78,6 +91,7 @@ function computeTaskProgress(task: Task) {
 }
 
 export const useTasksStore = defineStore('tasks', () => {
+  const taskNotificationsStore = useTaskNotificationsStore()
   const tasks = ref<Task[]>([])
   const selectedTaskId = ref<string>('')
   const selectedTask = ref<Task | null>(null)
@@ -112,9 +126,11 @@ export const useTasksStore = defineStore('tasks', () => {
   }
 
   function cacheTaskEvents(taskId: string, events: TaskEvent[], limit = DEFAULT_EVENT_LIMIT) {
+    const nextEvents = trimAndSortEvents(events, limit)
+    taskNotificationsStore.ingestEvents(nextEvents)
     taskEvents.value = {
       ...taskEvents.value,
-      [taskId]: trimAndSortEvents(events, limit),
+      [taskId]: nextEvents,
     }
     syncSelectedTask(taskId)
     return taskEvents.value[taskId]
@@ -490,9 +506,16 @@ export const useTasksStore = defineStore('tasks', () => {
 
   function ingestRuntimeEvent(event: RuntimeEventPayload) {
     if (!event.taskId) return null
+    const parsedDbEventId = event.dbEventId != null ? Number(event.dbEventId) : null
+    const dbEventId = parsedDbEventId != null && Number.isFinite(parsedDbEventId) && parsedDbEventId > 0
+      ? parsedDbEventId
+      : null
+    const runtimeEventId = event.runtimeEventId ?? event.eventId ?? null
 
     appendTaskEvent(event.taskId, {
-      id: `live-${event.type}-${event.subtaskId || 'task'}-${event.timestamp || Date.now()}`,
+      id: dbEventId || `live-${runtimeEventId || event.type}-${event.subtaskId || 'task'}-${event.timestamp || Date.now()}`,
+      dbEventId,
+      runtimeEventId,
       task_id: event.taskId,
       subtask_id: event.subtaskId || null,
       agent_id: event.agentId || null,

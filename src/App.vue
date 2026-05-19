@@ -16,6 +16,7 @@
             <p>{{ currentRouteMeta }}</p>
           </div>
           <div class="toolbar-context">
+            <TaskNotificationCenter @open="openTaskNotification" />
             <span class="toolbar-context__item">{{ currentRoleLabel }}</span>
             <span class="toolbar-context__item">v1.0.0</span>
           </div>
@@ -48,20 +49,26 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import TheSidebar from '@/components/TheSidebar.vue'
+import TaskNotificationCenter from '@/components/task-center/TaskNotificationCenter.vue'
 import { navigationSections } from '@/config/navigation'
 import { useAppInit } from '@/composables/useAppInit'
 import { useAuthStore } from '@/stores/auth'
 import { useTasksStore } from '@/stores/tasks'
+import { useTaskNotificationsStore, type TaskNotificationItem } from '@/stores/taskNotifications'
 import type { TaskStatus } from '@/types/task'
+import { ElMessage } from 'element-plus'
 
 const route = useRoute()
 const router = useRouter()
 const { initializeApp } = useAppInit()
 const tasksStore = useTasksStore()
+const taskNotificationsStore = useTaskNotificationsStore()
 const authStore = useAuthStore()
 const isBlankLayout = computed(() => route.meta.layout === 'blank')
 const sidebarCollapsed = ref(false)
 let taskActivityTimer: ReturnType<typeof setInterval> | null = null
+const processedNotificationIds = new Set<string>()
+let notificationsBootstrapped = false
 
 const activeTaskStatuses = new Set<TaskStatus>(['planning', 'clarifying', 'dispatching', 'running', 'reviewing'])
 const statusLabels: Record<TaskStatus, string> = {
@@ -125,7 +132,9 @@ function toggleSidebar() {
 
 function refreshTaskActivity() {
   if (!tasksStore.loading) {
-    tasksStore.fetchTasks().catch(() => {})
+    tasksStore.fetchTasks()
+      .then(() => syncRecentTaskNotifications())
+      .catch(() => {})
   }
 }
 
@@ -134,6 +143,124 @@ function openActiveTask() {
   router.push({
     path: '/task-center-2',
     query: task ? { task: task.id } : undefined,
+  })
+}
+
+function notificationToastType(level: TaskNotificationItem['level']) {
+  if (level === 'error') return 'error'
+  if (level === 'warning' || level === 'attention') return 'warning'
+  if (level === 'success') return 'success'
+  return 'info'
+}
+
+function targetFromNotification(notification: TaskNotificationItem) {
+  if (notification.action === 'review_plan' || notification.action === 'answer_clarification') return 'plan'
+  if (notification.action === 'review_outputs') return 'review'
+  return notification.level === 'error' ? 'execution' : undefined
+}
+
+async function syncRecentTaskNotifications() {
+  const candidates = tasksStore.tasks
+    .filter(task => ['planning', 'clarifying', 'dispatching', 'running', 'reviewing', 'completed', 'failed', 'cancelled'].includes(task.status))
+    .sort((a, b) => Number(b.updated_at || 0) - Number(a.updated_at || 0))
+    .slice(0, 8)
+
+  await Promise.all(candidates.map(task =>
+    tasksStore.fetchTaskEvents(task.id, { limit: 80 }).catch(() => [])
+  ))
+  if (!notificationsBootstrapped) {
+    bootstrapTaskNotifications()
+    return
+  }
+  showPendingToasts()
+}
+
+function bootstrapTaskNotifications() {
+  for (const notification of taskNotificationsStore.visibleNotifications) {
+    processedNotificationIds.add(notification.id)
+  }
+  notificationsBootstrapped = true
+}
+
+function showPendingToasts() {
+  if (!notificationsBootstrapped) return
+  const pending = taskNotificationsStore.visibleNotifications
+    .filter(notification => !processedNotificationIds.has(notification.id))
+    .sort((a, b) => {
+      const timeDiff = a.createdAt - b.createdAt
+      if (timeDiff !== 0) return timeDiff
+      const aId = Number(a.dbEventId ?? a.eventId)
+      const bId = Number(b.dbEventId ?? b.eventId)
+      if (Number.isFinite(aId) && Number.isFinite(bId) && aId !== bId) return aId - bId
+      return String(a.eventId).localeCompare(String(b.eventId))
+    })
+
+  for (const notification of pending) {
+    processedNotificationIds.add(notification.id)
+    if (!taskNotificationsStore.shouldToast(notification)) continue
+    ElMessage({
+      type: notificationToastType(notification.level),
+      message: `${notification.title}：${notification.message}`,
+      duration: notification.priority === 'critical' ? 5200 : 3600,
+      showClose: true,
+    })
+    showDesktopNotification(notification)
+    taskNotificationsStore.markToasted(notification.id)
+  }
+}
+
+function desktopNotificationBody(notification: TaskNotificationItem) {
+  if (notification.priority === 'critical') return '任务需要立即查看，请回到应用处理。'
+  if (notification.level === 'error') return '任务执行遇到异常，请回到应用查看详情。'
+  if (notification.level === 'success') return '任务状态已更新，请回到应用查看成果。'
+  if (notification.level === 'attention' || notification.level === 'warning') return '任务需要处理，请回到应用查看。'
+  return '任务执行状态已更新。'
+}
+
+function showDesktopNotification(notification: TaskNotificationItem) {
+  if (
+    !notification.desktop ||
+    !taskNotificationsStore.preferences.desktop ||
+    typeof window === 'undefined' ||
+    !('Notification' in window)
+  ) {
+    return
+  }
+
+  const createNotification = () => {
+    const desktopNotification = new Notification(notification.title, {
+      body: desktopNotificationBody(notification),
+      silent: true,
+    })
+    desktopNotification.onclick = () => {
+      window.focus()
+      openTaskNotification(notification)
+      desktopNotification.close()
+    }
+  }
+
+  if (Notification.permission === 'granted') {
+    createNotification()
+    return
+  }
+
+  if (Notification.permission === 'default') {
+    Notification.requestPermission()
+      .then((permission) => {
+        if (permission === 'granted') createNotification()
+      })
+      .catch(() => {})
+  }
+}
+
+function openTaskNotification(notification: TaskNotificationItem) {
+  const target = targetFromNotification(notification)
+  router.push({
+    path: '/task-center-2',
+    query: {
+      task: notification.taskId,
+      ...(target ? { target } : {}),
+    },
   })
 }
 
@@ -152,6 +279,11 @@ watch(sidebarCollapsed, (value) => {
   if (typeof localStorage === 'undefined') return
   localStorage.setItem('app_sidebar_collapsed', String(value))
 })
+
+watch(
+  () => taskNotificationsStore.visibleNotifications[0]?.id,
+  () => showPendingToasts()
+)
 </script>
 
 <style scoped>

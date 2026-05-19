@@ -3512,8 +3512,8 @@ function openTaskEventStream(taskId: string) {
 function connectTaskEventStream(taskId: string) {
   closeCurrentTaskEventSource()
   const latestDbEventId = selectedTaskEvents.value.reduce<number | null>((latest, event) => {
-    const id = Number(event.id)
-    if (!Number.isFinite(id)) return latest
+    const id = Number(event.dbEventId ?? event.id)
+    if (!Number.isFinite(id) || id <= 0 || String(event.id).startsWith('live-')) return latest
     return latest == null || id > latest ? id : latest
   }, null)
   taskEventSource = new EventSource(taskApi.buildTaskEventStreamUrl(taskId, {
@@ -3562,6 +3562,9 @@ onMounted(async () => {
   if (typeof route.query.task === 'string') {
     await selectTask(route.query.task)
   }
+  if (typeof route.query.target === 'string') {
+    openRouteTarget(route.query.target)
+  }
   scrollEventListToBottom()
   clockTimer = setInterval(() => {
     currentTimeMs.value = Date.now()
@@ -3575,6 +3578,12 @@ onMounted(async () => {
     }
   }, TASK_POLL_INTERVAL_MS)
 })
+
+function openRouteTarget(target: string) {
+  const allowedTargets = new Set<WorkflowTarget>(['plan', 'execution', 'review', 'failed-node'])
+  if (!allowedTargets.has(target as WorkflowTarget)) return
+  scrollToWorkflowTarget(target as WorkflowTarget)
+}
 
 onUnmounted(() => {
   closeTaskEventStream()
@@ -3659,6 +3668,19 @@ watch(
   ],
   () => {
     if (memberLogsDrawer.value) scrollMemberChatToBottom()
+  },
+  { flush: 'post' }
+)
+
+watch(
+  () => [route.query.task, route.query.target],
+  async ([taskId, target]) => {
+    if (typeof taskId === 'string' && taskId && taskId !== selectedTask.value?.id) {
+      await selectTask(taskId)
+    }
+    if (typeof target === 'string') {
+      openRouteTarget(target)
+    }
   },
   { flush: 'post' }
 )
